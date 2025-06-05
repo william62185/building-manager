@@ -1,0 +1,12 @@
+{
+    "primary": "#1a73e8",
+    "primary_dark": "#1557b0",
+    "secondary": "#34a853",
+    "danger": "#ea4335",
+    "warning": "#fbbc05",
+    "success": "#0f9d58",
+    "background": "#ffffff",
+    "surface": "#f8f9fa",
+    "text": "#202124",
+    "text_secondary": "#5f6368"
+} 

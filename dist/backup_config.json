@@ -1,0 +1,7 @@
+{
+  "auto_backup": true,
+  "backup_folder": "Respaldos",
+  "max_backups": 10,
+  "include_pdfs": true,
+  "backup_on_exit": true
+}
