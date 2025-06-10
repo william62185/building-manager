@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Building Manager - Sistema de Administración de Edificios
-Aplicación principal de entrada
+Building Manager Pro - Lanzador principal
+Sistema profesional de gestión de edificios
 """
 
 import sys
-import os
+from pathlib import Path
 
-# Agregar el directorio app al path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+# Agregar el directorio de la app al path
+sys.path.insert(0, str(Path(__file__).parent / "app"))
 
 from app.main import main
 

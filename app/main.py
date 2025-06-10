@@ -1,64 +1,51 @@
 """
-Punto de entrada principal de la aplicación
+Aplicación principal Building Manager Pro
+Sistema profesional de gestión de edificios
 """
 
 import tkinter as tk
-import logging
 import sys
 import os
 from pathlib import Path
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('building_manager.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Agregar el directorio de la aplicación al path
+app_dir = Path(__file__).parent
+sys.path.insert(0, str(app_dir))
 
-logger = logging.getLogger(__name__)
+from ui.views.main_window import MainWindow
+from config.settings import Settings
 
-def setup_environment():
-    """Configura el entorno de la aplicación"""
-    # Crear directorios necesarios
-    directories = [
-        'data',
-        'files',
-        'files/tenants',
-        'files/documents',
-        'files/exports',
-        'logs'
-    ]
+class BuildingManagerApp:
+    """Aplicación principal profesional"""
     
-    for directory in directories:
-        Path(directory).mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        self.settings = Settings()
+        self.main_window = None
+        
+    def run(self):
+        """Ejecuta la aplicación"""
+        try:
+            # Crear y mostrar la ventana principal
+            self.main_window = MainWindow()
+            self.main_window.run()
+            
+        except Exception as e:
+            self._handle_error(e)
     
-    logger.info("Entorno configurado correctamente")
+    def _handle_error(self, error: Exception):
+        """Maneja errores de la aplicación"""
+        import tkinter.messagebox as messagebox
+        
+        error_msg = f"Error en la aplicación:\n{str(error)}"
+        messagebox.showerror("Error", error_msg)
+        
+        # Log del error (en un futuro implementar logging)
+        print(f"ERROR: {error}")
 
 def main():
-    """Función principal de la aplicación"""
-    try:
-        logger.info("Iniciando Building Manager v1.0.0")
-        
-        # Configurar entorno
-        setup_environment()
-        
-        # Importar y crear ventana principal
-        from ui.main_window import MainWindow
-        
-        # Crear aplicación
-        app = MainWindow()
-        
-        logger.info("Aplicación iniciada exitosamente")
-        
-        # Ejecutar loop principal
-        app.run()
-        
-    except Exception as e:
-        logger.error(f"Error al iniciar la aplicación: {e}")
-        raise
+    """Función principal de entrada"""
+    app = BuildingManagerApp()
+    app.run()
 
 if __name__ == "__main__":
     main() 
