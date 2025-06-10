@@ -462,7 +462,6 @@ class MainWindow:
             title="Pagos Pendientes",
             value="$2,450",
             icon=Icons.PAYMENT_PENDING,
-            trend="-$300",
             color_theme="warning"
         )
         metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
@@ -473,7 +472,6 @@ class MainWindow:
             title="Ingresos del Mes",
             value="$15,200",
             icon=Icons.PAYMENT_RECEIVED,
-            trend="+8.5%",
             color_theme="success"
         )
         metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
@@ -484,10 +482,20 @@ class MainWindow:
             title="Gastos del Mes", 
             value="$3,100",
             icon=Icons.EXPENSES,
-            trend="+$200",
             color_theme="error"
         )
-        metric4.pack(side="left", fill="both", expand=True)
+        metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
+        
+        # Métrica 5: Saldo Neto del Mes
+        net_balance = self._calculate_net_balance()
+        metric5 = ModernMetricCard(
+            metrics_row,
+            title="Saldo Neto del Mes",
+            value=net_balance["value"],
+            icon="💼",  # Icono de maletín para balance
+            color_theme=net_balance["theme"]
+        )
+        metric5.pack(side="left", fill="both", expand=True)
         
         # Separador elegante
         ModernSeparator(self.views_container)
@@ -718,6 +726,26 @@ class MainWindow:
             "al_dia": 8,
             "pendiente": 2,
             "moroso": 2
+        }
+    
+    def _calculate_net_balance(self):
+        """Calcula el saldo neto del mes (ingresos - gastos)"""
+        # Datos estáticos por ahora - se puede conectar con el servicio más tarde
+        ingresos = 15200  # $15,200
+        gastos = 3100     # $3,100
+        saldo_neto = ingresos - gastos
+        
+        # Formatear el valor
+        if saldo_neto >= 0:
+            value = f"${saldo_neto:,}"
+            theme = "success"  # Verde para positivo
+        else:
+            value = f"-${abs(saldo_neto):,}"
+            theme = "error"    # Rojo para negativo
+        
+        return {
+            "value": value,
+            "theme": theme
         }
     
     def run(self):
