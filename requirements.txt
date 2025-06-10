@@ -1,6 +1,0 @@
-tkcalendar==1.6.1
-pandas==2.1.4
-matplotlib==3.8.2
-reportlab==4.0.8
-pygame==2.5.2
-ttkbootstrap==1.10.1 
