@@ -7,7 +7,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from typing import Dict, Any, Optional, Callable
 import re
-from datetime import datetime
+import calendar
+from datetime import datetime, date
 from ..components.theme_manager import theme_manager, Spacing
 from ..components.icons import Icons
 from ..components.modern_widgets import (
@@ -15,6 +16,317 @@ from ..components.modern_widgets import (
     ModernBadge, ModernSeparator
 )
 from app.services.tenant_service import tenant_service
+
+class DatePickerWidget(tk.Frame):
+    """Widget personalizado para selección de fechas con calendario"""
+    
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **theme_manager.get_style("frame"))
+        
+        self.selected_date = None
+        self.calendar_window = None
+        
+        # Crear el widget principal
+        self._create_widget()
+    
+    def _create_widget(self):
+        """Crea el widget de selección de fecha"""
+        # Campo de entrada para mostrar la fecha seleccionada
+        self.date_entry = tk.Entry(self, **theme_manager.get_style("entry"))
+        self.date_entry.pack(side="left", fill="x", expand=True)
+        
+        # Botón para abrir el calendario
+        self.calendar_btn = tk.Button(
+            self,
+            text="📅",
+            font=("Segoe UI", 10),
+            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
+            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bd=1,
+            relief="solid",
+            width=3,
+            cursor="hand2",
+            command=self._show_calendar
+        )
+        self.calendar_btn.pack(side="right", padx=(4, 0))
+    
+    def _show_calendar(self):
+        """Muestra el calendario en una ventana emergente"""
+        if self.calendar_window:
+            self.calendar_window.destroy()
+        
+        # Crear ventana del calendario más compacta
+        self.calendar_window = tk.Toplevel(self)
+        self.calendar_window.title("Seleccionar Fecha")
+        self.calendar_window.geometry("280x240")  # Tamaño más compacto
+        self.calendar_window.resizable(False, False)
+        
+        # Posicionar la ventana justo debajo del botón del calendario
+        self.calendar_window.transient(self.winfo_toplevel())
+        self.calendar_window.grab_set()
+        
+        # Calcular posición relativa al botón del calendario
+        self.update_idletasks()  # Asegurar que todo esté renderizado
+        
+        # Obtener posición absoluta del botón del calendario
+        btn_x = self.calendar_btn.winfo_rootx()
+        btn_y = self.calendar_btn.winfo_rooty()
+        btn_height = self.calendar_btn.winfo_height()
+        
+        # Posicionar el calendario debajo del botón, ajustando hacia la izquierda
+        calendar_x = btn_x - 220  # Ajustado para el nuevo ancho más pequeño
+        calendar_y = btn_y + btn_height + 5  # 5px de margen debajo del botón
+        
+        # Asegurar que no se salga de la pantalla
+        screen_width = self.calendar_window.winfo_screenwidth()
+        screen_height = self.calendar_window.winfo_screenheight()
+        
+        # Ajustar si se sale por la derecha
+        if calendar_x + 280 > screen_width:
+            calendar_x = screen_width - 280 - 10
+        
+        # Ajustar si se sale por la izquierda
+        if calendar_x < 10:
+            calendar_x = 10
+        
+        # Ajustar si se sale por abajo
+        if calendar_y + 240 > screen_height:
+            calendar_y = btn_y - 240 - 5  # Mostrar arriba del botón
+        
+        # Aplicar la posición calculada
+        self.calendar_window.geometry(f"280x240+{calendar_x}+{calendar_y}")
+        
+        # Obtener fecha actual o fecha seleccionada
+        try:
+            if self.date_entry.get():
+                selected = datetime.strptime(self.date_entry.get(), "%d/%m/%Y")
+                year, month = selected.year, selected.month
+            else:
+                today = date.today()
+                year, month = today.year, today.month
+        except:
+            today = date.today()
+            year, month = today.year, today.month
+        
+        # Crear el calendario
+        calendar_frame = tk.Frame(self.calendar_window, **theme_manager.get_style("frame"))
+        calendar_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        
+        # Header con navegación más compacto
+        header_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
+        header_frame.pack(fill="x", pady=(0, 8))
+        
+        # Botón anterior
+        prev_btn = tk.Button(
+            header_frame,
+            text="◀",
+            font=("Segoe UI", 10),
+            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
+            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bd=1,
+            relief="solid",
+            width=2,
+            height=1,
+            cursor="hand2",
+            command=self._prev_month
+        )
+        prev_btn.pack(side="left")
+        
+        # Label del mes (sin conflicto de font)
+        self.month_label = tk.Label(
+            header_frame,
+            text=f"{calendar.month_name[month]} {year}",
+            font=("Segoe UI", 11, "bold"),
+            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
+            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        )
+        self.month_label.pack(side="left", fill="x", expand=True)
+        
+        # Botón siguiente
+        next_btn = tk.Button(
+            header_frame,
+            text="▶",
+            font=("Segoe UI", 10),
+            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
+            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bd=1,
+            relief="solid",
+            width=2,
+            height=1,
+            cursor="hand2",
+            command=self._next_month
+        )
+        next_btn.pack(side="right")
+        
+        # Frame para el grid del calendario (compacto)
+        self.cal_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
+        self.cal_frame.pack(fill="both", expand=True, pady=(0, 8))
+        
+        # Variables para el calendario - IMPORTANTE: inicializar aquí
+        self.current_month = month
+        self.current_year = year
+        
+        # Crear el calendario inicial
+        self._create_calendar()
+        
+        # Botones de acción en la parte inferior más compactos
+        buttons_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
+        buttons_frame.pack(fill="x")
+        
+        # Botón "Hoy"
+        today_btn = tk.Button(
+            buttons_frame,
+            text="Hoy",
+            font=("Segoe UI", 9),
+            bg=theme_manager.themes[theme_manager.current_theme]["btn_primary_bg"],
+            fg="white",
+            bd=0,
+            relief="solid",
+            width=6,
+            height=1,
+            cursor="hand2",
+            command=self._select_today
+        )
+        today_btn.pack(side="left")
+        
+        # Botón "Cerrar"
+        close_btn = tk.Button(
+            buttons_frame,
+            text="Cerrar",
+            font=("Segoe UI", 9),
+            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
+            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bd=1,
+            relief="solid",
+            width=6,
+            height=1,
+            cursor="hand2",
+            command=self._close_calendar
+        )
+        close_btn.pack(side="right")
+    
+    def _create_calendar(self):
+        """Crea el grid del calendario"""
+        # Limpiar frame actual
+        for widget in self.cal_frame.winfo_children():
+            widget.destroy()
+        
+        # Actualizar label del mes
+        self.month_label.configure(text=f"{calendar.month_name[self.current_month]} {self.current_year}")
+        
+        # Configurar el grid para que se expanda uniformemente pero compacto
+        for i in range(7):  # 7 columnas (días de la semana)
+            self.cal_frame.grid_columnconfigure(i, weight=1, uniform="day")
+        
+        # Días de la semana más compactos
+        days = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+        for i, day in enumerate(days):
+            label = tk.Label(
+                self.cal_frame,
+                text=day,
+                font=("Segoe UI", 8, "bold"),
+                bg=theme_manager.themes[theme_manager.current_theme]["bg_secondary"],
+                fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
+                width=3,
+                height=1
+            )
+            label.grid(row=0, column=i, padx=1, pady=1, sticky="nsew")
+        
+        # Obtener el calendario del mes
+        cal = calendar.monthcalendar(self.current_year, self.current_month)
+        
+        # Configurar filas del grid más compactas
+        for week_num in range(1, len(cal) + 1):
+            self.cal_frame.grid_rowconfigure(week_num, weight=1, uniform="week")
+        
+        # Crear botones para cada día más pequeños
+        for week_num, week in enumerate(cal, 1):
+            for day_num, day in enumerate(week):
+                if day == 0:
+                    # Día vacío
+                    label = tk.Label(
+                        self.cal_frame, 
+                        text="", 
+                        width=3, 
+                        height=1,
+                        bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"]
+                    )
+                    label.grid(row=week_num, column=day_num, padx=1, pady=1, sticky="nsew")
+                else:
+                    # Botón del día más compacto
+                    btn = tk.Button(
+                        self.cal_frame,
+                        text=str(day),
+                        font=("Segoe UI", 8),
+                        bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
+                        fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
+                        bd=1,
+                        relief="solid",
+                        width=3,
+                        height=1,
+                        cursor="hand2",
+                        command=lambda d=day: self._select_date(d)
+                    )
+                    btn.grid(row=week_num, column=day_num, padx=1, pady=1, sticky="nsew")
+                    
+                    # Resaltar día actual
+                    today = date.today()
+                    if (day == today.day and 
+                        self.current_month == today.month and 
+                        self.current_year == today.year):
+                        btn.configure(
+                            bg=theme_manager.themes[theme_manager.current_theme]["btn_primary_bg"],
+                            fg="white",
+                            font=("Segoe UI", 8, "bold")
+                        )
+    
+    def _prev_month(self):
+        """Cambia al mes anterior"""
+        self.current_month -= 1
+        if self.current_month < 1:
+            self.current_month = 12
+            self.current_year -= 1
+        self._create_calendar()
+    
+    def _next_month(self):
+        """Cambia al mes siguiente"""
+        self.current_month += 1
+        if self.current_month > 12:
+            self.current_month = 1
+            self.current_year += 1
+        self._create_calendar()
+    
+    def _select_date(self, day):
+        """Selecciona una fecha específica"""
+        selected_date = date(self.current_year, self.current_month, day)
+        self.date_entry.delete(0, tk.END)
+        self.date_entry.insert(0, selected_date.strftime("%d/%m/%Y"))
+        self.selected_date = selected_date
+        self._close_calendar()
+    
+    def _select_today(self):
+        """Selecciona la fecha de hoy"""
+        today = date.today()
+        self.date_entry.delete(0, tk.END)
+        self.date_entry.insert(0, today.strftime("%d/%m/%Y"))
+        self.selected_date = today
+        self._close_calendar()
+    
+    def _close_calendar(self):
+        """Cierra la ventana del calendario"""
+        if self.calendar_window:
+            self.calendar_window.destroy()
+            self.calendar_window = None
+    
+    def get(self):
+        """Obtiene el valor de la fecha"""
+        return self.date_entry.get()
+    
+    def set(self, value):
+        """Establece el valor de la fecha"""
+        self.date_entry.delete(0, tk.END)
+        if value:
+            self.date_entry.insert(0, str(value))
 
 class TenantFormView(tk.Frame):
     """Formulario profesional para inquilinos"""
@@ -54,40 +366,135 @@ class TenantFormView(tk.Frame):
             event.widget.config(fg=theme_manager.themes[theme_manager.current_theme]["text_secondary"])
     
     def _create_inline_field(self, parent, label_text, field_name, placeholder_text="", field_type="entry", values=None, width=20):
-        """Crea un campo inline con label al lado izquierdo"""
+        """Crea un campo inline con label al lado izquierdo - con ancho fijo para alineación"""
         row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
         row_frame.pack(fill="x", pady=(0, 2))
         
-        # Label
-        label_style = theme_manager.get_style("label_body").copy()
-        label_style.update({
-            "width": width,
-            "anchor": "w"
-        })
+        # Label con fuente uniforme y más pequeña
         label = tk.Label(
             row_frame,
             text=label_text,
-            **label_style
+            width=20,  # Ancho del label
+            anchor="w",
+            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
+            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
+            font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
         )
         label.pack(side="left", padx=(0, Spacing.SM))
         
-        # Campo
+        # Campo con ancho uniforme para terminar en línea de alineación
         if field_type == "combobox":
             field = ttk.Combobox(
                 row_frame,
                 values=values or [],
-                state="readonly"
+                state="readonly",
+                width=50  # Ajustado para alineación perfecta con textboxes
             )
             if values:
                 field.set(values[0])
         else:
-            field = tk.Entry(row_frame, **theme_manager.get_style("entry"))
+            field = tk.Entry(
+                row_frame, 
+                width=35,  # Ancho uniforme para alineación final
+                **theme_manager.get_style("entry")
+            )
         
-        field.pack(side="left", fill="x", expand=True)
+        field.pack(side="left")  # Sin expand para mantener ancho fijo
         self.form_fields[field_name] = field
         
         return row_frame
+    
+    def _create_dual_inline_field(self, parent, left_label, left_field, left_type="entry", left_values=None, 
+                                 right_label="", right_field="", right_type="entry", right_values=None):
+        """Crea dos campos inline en la misma fila con alineación exacta según líneas rojas"""
+        row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
+        row_frame.pack(fill="x", pady=(0, 2))
         
+        # Campo izquierdo - ancho uniforme para terminar en línea de alineación
+        left_label_widget = tk.Label(
+            row_frame,
+            text=left_label,
+            width=20,  # Ancho del label
+            anchor="w",
+            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
+            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
+            font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
+        )
+        left_label_widget.pack(side="left", padx=(0, Spacing.SM))
+        
+        if left_type == "combobox":
+            left_widget = ttk.Combobox(
+                row_frame,
+                values=left_values or [],
+                state="readonly",
+                width=50  # Ajustado para alineación perfecta con textboxes
+            )
+            if left_values:
+                left_widget.set(left_values[0])
+        elif left_type == "datepicker":
+            left_widget = DatePickerWidget(row_frame)
+            # Para datepicker configurar el ancho exacto del frame contenedor
+            left_widget.pack_configure(ipadx=0)  # Sin padding interno
+            # Configurar el Entry interno del DatePicker para que tenga 35 caracteres
+            left_widget.date_entry.configure(width=32)  # Mismo ancho que fecha fin de contrato
+            # Ajustar el botón del calendario para que sea igual de pequeño que el otro
+            left_widget.calendar_btn.configure(width=2)
+        else:
+            left_widget = tk.Entry(
+                row_frame,
+                width=35,  # Mismo ancho que "Nombre Completo" - confirmado
+                **theme_manager.get_style("entry")
+            )
+        
+        left_widget.pack(side="left")
+        self.form_fields[left_field] = left_widget
+        
+        # Espaciado entre columnas para posicionar columna derecha
+        spacer = tk.Frame(row_frame, width=40, **theme_manager.get_style("frame"))
+        spacer.pack(side="left")
+        spacer.pack_propagate(False)
+        
+        # Campo derecho - solo si se especifica
+        if right_field:
+            if right_type == "combobox":
+                right_widget = ttk.Combobox(
+                    row_frame,
+                    values=right_values or [],
+                    state="readonly",
+                    width=50  # Ajustado para alineación perfecta con textboxes
+                )
+                if right_values:
+                    right_widget.set(right_values[0])
+            elif right_type == "datepicker":
+                right_widget = DatePickerWidget(row_frame)
+                # Para datepicker configurar el ancho exacto del campo de entrada
+                right_widget.date_entry.configure(width=32)  # Restaurado al tamaño anterior
+                # También ajustar el botón del calendario para que sea más compacto
+                right_widget.calendar_btn.configure(width=2)
+            else:
+                right_widget = tk.Entry(
+                    row_frame,
+                    width=35,  # Mismo tamaño que columna izquierda
+                    **theme_manager.get_style("entry")
+                )
+            
+            right_widget.pack(side="right")  # Alineado a la derecha
+            self.form_fields[right_field] = right_widget
+            
+            # Label derecho después del textbox
+            right_label_widget = tk.Label(
+                row_frame,
+                text=right_label,
+                width=20,  # Ancho del label derecho aumentado para mostrar texto completo
+                anchor="w",
+                bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
+                fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
+                font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
+            )
+            right_label_widget.pack(side="right", padx=(0, Spacing.SM))
+        
+        return row_frame
+    
     def _create_layout(self):
         """Crea el layout principal del formulario"""
         # Header con navegación - sin padding
@@ -168,83 +575,23 @@ class TenantFormView(tk.Frame):
         )
         title_label.pack(anchor="w", pady=(0, 1))
         
-        # Nombre completo - layout inline
-        self._create_inline_field(parent, "Nombre Completo *", "nombre", "", width=18)
+        # Nombre completo - layout inline con ancho estándar
+        self._create_inline_field(parent, "Nombre Completo *", "nombre", "")
         
-        # Fila de documentos
-        doc_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        doc_row.pack(fill="x", pady=(0, 2))
-        
-        # Tipo de documento (50% del ancho)
-        doc_type_frame = tk.Frame(doc_row, **theme_manager.get_style("frame"))
-        doc_type_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        type_label = tk.Label(
-            doc_type_frame,
-            text="Tipo de Documento *",
-            width=18,
-            anchor="w",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        # Fila de documentos - usando la nueva función dual
+        self._create_dual_inline_field(
+            parent,
+            "Tipo de Documento *", "tipo_documento", "combobox", 
+            ["Cédula de Ciudadanía", "Cédula de Extranjería", "Pasaporte"],
+            "Número de Documento *", "numero_documento"
         )
-        type_label.pack(side="left", padx=(0, Spacing.SM))
         
-        self.form_fields['tipo_documento'] = ttk.Combobox(
-            doc_type_frame,
-            values=["Cédula de Ciudadanía", "Cédula de Extranjería", "Pasaporte"],
-            state="readonly"
+        # Fila de contacto - usando la nueva función dual
+        self._create_dual_inline_field(
+            parent,
+            "Teléfono *", "telefono", "entry", None,
+            "Email", "email"
         )
-        self.form_fields['tipo_documento'].pack(side="left", fill="x", expand=True)
-        self.form_fields['tipo_documento'].set("Cédula de Ciudadanía")
-        
-        # Número de documento (50% del ancho)
-        doc_num_frame = tk.Frame(doc_row, **theme_manager.get_style("frame"))
-        doc_num_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        num_label = tk.Label(
-            doc_num_frame,
-            text="Número de Documento *",
-            width=18,
-            anchor="w",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        num_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['numero_documento'] = tk.Entry(doc_num_frame, **theme_manager.get_style("entry"))
-        self.form_fields['numero_documento'].pack(side="left", fill="x", expand=True)
-        
-        # Fila de contacto
-        contact_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        contact_row.pack(fill="x", pady=(0, 2))
-        
-        # Teléfono (50% del ancho)
-        phone_frame = tk.Frame(contact_row, **theme_manager.get_style("frame"))
-        phone_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        phone_label = tk.Label(
-            phone_frame,
-            text="Teléfono *",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        phone_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['telefono'] = tk.Entry(phone_frame, **theme_manager.get_style("entry"))
-        self.form_fields['telefono'].pack(side="left", fill="x", expand=True)
-        
-        # Email (50% del ancho)
-        email_frame = tk.Frame(contact_row, **theme_manager.get_style("frame"))
-        email_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        email_label = tk.Label(
-            email_frame,
-            text="Email",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        email_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['email'] = tk.Entry(email_frame, **theme_manager.get_style("entry"))
-        self.form_fields['email'].pack(side="left", fill="x", expand=True)
     
     def _create_housing_info_section(self, parent):
         """Crea la sección de información de vivienda"""
@@ -259,106 +606,27 @@ class TenantFormView(tk.Frame):
         )
         title_label.pack(anchor="w", pady=(0, 1))
         
-        # Fila 1: Apartamento y valor arriendo - layout inline
-        apt_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        apt_row.pack(fill="x", pady=(0, 2))
-        
-        # Apartamento (50% del ancho)
-        apt_frame = tk.Frame(apt_row, **theme_manager.get_style("frame"))
-        apt_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        apt_label = tk.Label(
-            apt_frame,
-            text="Número de Apartamento *",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        # Fila 1: Apartamento y valor arriendo - usando función dual
+        self._create_dual_inline_field(
+            parent,
+            "Número de Apartamento *", "apartamento", "entry", None,
+            "Valor Arriendo *", "valor_arriendo"
         )
-        apt_label.pack(side="left", padx=(0, Spacing.SM))
         
-        self.form_fields['apartamento'] = tk.Entry(apt_frame, **theme_manager.get_style("entry"))
-        self.form_fields['apartamento'].pack(side="left", fill="x", expand=True)
-        
-        # Valor arriendo (50% del ancho)
-        rent_frame = tk.Frame(apt_row, **theme_manager.get_style("frame"))
-        rent_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        rent_label = tk.Label(
-            rent_frame,
-            text="Valor Arriendo *",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        # Fila 2: Fechas - usando función dual con datepicker
+        self._create_dual_inline_field(
+            parent,
+            "Fecha de Ingreso *", "fecha_ingreso", "datepicker", None,
+            "Fecha Fin Contrato", "fecha_fin_contrato", "datepicker"
         )
-        rent_label.pack(side="left", padx=(0, Spacing.SM))
         
-        self.form_fields['valor_arriendo'] = tk.Entry(rent_frame, **theme_manager.get_style("entry"))
-        self.form_fields['valor_arriendo'].pack(side="left", fill="x", expand=True)
-        
-        # Fila 2: Fechas - layout inline
-        dates_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        dates_row.pack(fill="x", pady=(0, 2))
-        
-        # Fecha de ingreso (50% del ancho)
-        start_frame = tk.Frame(dates_row, **theme_manager.get_style("frame"))
-        start_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        start_label = tk.Label(
-            start_frame,
-            text="Fecha de Ingreso *",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        # Fila 3: Estado y depósito - usando función dual
+        self._create_dual_inline_field(
+            parent,
+            "Estado de Pago *", "estado_pago", "combobox", 
+            ["al_dia", "pendiente", "moroso"],
+            "Depósito", "deposito"
         )
-        start_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['fecha_ingreso'] = tk.Entry(start_frame, **theme_manager.get_style("entry"))
-        self.form_fields['fecha_ingreso'].pack(side="left", fill="x", expand=True)
-        
-        # Fecha fin contrato (50% del ancho)
-        end_frame = tk.Frame(dates_row, **theme_manager.get_style("frame"))
-        end_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        end_label = tk.Label(
-            end_frame,
-            text="Fecha Fin Contrato",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        end_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['fecha_fin_contrato'] = tk.Entry(end_frame, **theme_manager.get_style("entry"))
-        self.form_fields['fecha_fin_contrato'].pack(side="left", fill="x", expand=True)
-        
-        # Fila 3: Estado y depósito - layout inline
-        status_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        status_row.pack(fill="x", pady=(0, 2))
-        
-        # Estado de pago (50% del ancho)
-        status_frame = tk.Frame(status_row, **theme_manager.get_style("frame"))
-        status_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        status_label = tk.Label(
-            status_frame,
-            text="Estado de Pago *",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        status_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['estado_pago'] = ttk.Combobox(
-            status_frame,
-            values=["al_dia", "pendiente", "moroso"],
-            state="readonly"
-        )
-        self.form_fields['estado_pago'].pack(side="left", fill="x", expand=True)
-        self.form_fields['estado_pago'].set("al_dia")
-        
-        # Depósito (50% del ancho)
-        deposit_frame = tk.Frame(status_row, **theme_manager.get_style("frame"))
-        deposit_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        deposit_label = tk.Label(
-            deposit_frame,
-            text="Depósito",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        deposit_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['deposito'] = tk.Entry(deposit_frame, **theme_manager.get_style("entry"))
-        self.form_fields['deposito'].pack(side="left", fill="x", expand=True)
     
     def _create_emergency_contact_section(self, parent):
         """Crea la sección de contacto de emergencia - layout inline compacto"""
@@ -373,44 +641,16 @@ class TenantFormView(tk.Frame):
         )
         title_label.pack(anchor="w", pady=(0, 1))
         
-        # Fila 1: Nombre y parentesco - layout inline
-        contact_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        contact_row.pack(fill="x", pady=(0, 2))
-        
-        # Nombre contacto (50% del ancho)
-        name_frame = tk.Frame(contact_row, **theme_manager.get_style("frame"))
-        name_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        name_label = tk.Label(
-            name_frame,
-            text="Nombre Completo",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
+        # Fila 1: Nombre y parentesco - usando función dual
+        self._create_dual_inline_field(
+            parent,
+            "Nombre Completo", "contacto_emergencia_nombre", "entry", None,
+            "Parentesco", "contacto_emergencia_parentesco", "combobox",
+            ["Padre", "Madre", "Hermano/a", "Hijo/a", "Cónyuge", "Amigo/a", "Otro"]
         )
-        name_label.pack(side="left", padx=(0, Spacing.SM))
         
-        self.form_fields['contacto_emergencia_nombre'] = tk.Entry(name_frame, **theme_manager.get_style("entry"))
-        self.form_fields['contacto_emergencia_nombre'].pack(side="left", fill="x", expand=True)
-        
-        # Parentesco (50% del ancho)
-        relation_frame = tk.Frame(contact_row, **theme_manager.get_style("frame"))
-        relation_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        relation_label = tk.Label(
-            relation_frame,
-            text="Parentesco",
-            width=18, anchor="w", bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"], fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        relation_label.pack(side="left", padx=(0, Spacing.SM))
-        
-        self.form_fields['contacto_emergencia_parentesco'] = ttk.Combobox(
-            relation_frame,
-            values=["Padre", "Madre", "Hermano/a", "Hijo/a", "Cónyuge", "Amigo/a", "Otro"],
-            state="readonly"
-        )
-        self.form_fields['contacto_emergencia_parentesco'].pack(side="left", fill="x", expand=True)
-        
-        # Teléfono contacto - layout inline (ancho completo)
-        self._create_inline_field(parent, "Teléfono", "contacto_emergencia_telefono", "", width=18)
+        # Teléfono contacto - layout inline (ancho completo) con ancho estándar
+        self._create_inline_field(parent, "Teléfono", "contacto_emergencia_telefono", "")
     
     def _create_documents_section(self, parent):
         """Crea la sección de documentos - diseño horizontal compacto"""
