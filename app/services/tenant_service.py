@@ -148,14 +148,14 @@ class TenantService:
         """Obtiene estadísticas de inquilinos"""
         total = len(self.tenants)
         al_dia = len([t for t in self.tenants if t.get("estado_pago") == "al_dia"])
-        pendiente = len([t for t in self.tenants if t.get("estado_pago") == "pendiente"])
         moroso = len([t for t in self.tenants if t.get("estado_pago") == "moroso"])
+        inactivo = len([t for t in self.tenants if t.get("estado_pago") == "inactivo"])
         
         return {
             "total": total,
             "al_dia": al_dia,
-            "pendiente": pendiente,
-            "moroso": moroso
+            "moroso": moroso,
+            "inactivo": inactivo
         }
 
 # Instancia global del servicio

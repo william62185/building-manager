@@ -331,10 +331,11 @@ class DatePickerWidget(tk.Frame):
 class TenantFormView(tk.Frame):
     """Formulario profesional para inquilinos"""
     
-    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None):
+    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None, on_save_success: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         self.on_back = on_back
+        self.on_save_success = on_save_success
         self.tenant_data = tenant_data or {}
         self.is_edit_mode = bool(tenant_data)
         self.validation_errors = {}
@@ -624,7 +625,7 @@ class TenantFormView(tk.Frame):
         self._create_dual_inline_field(
             parent,
             "Estado de Pago *", "estado_pago", "combobox", 
-            ["al_dia", "pendiente", "moroso"],
+            ["al_dia", "moroso", "inactivo"],
             "Depósito", "deposito"
         )
     
@@ -964,6 +965,10 @@ class TenantFormView(tk.Frame):
                     "Éxito",
                     f"Inquilino {action} correctamente.\n\nNombre: {tenant_data['nombre']}\nApartamento: {tenant_data['apartamento']}"
                 )
+                
+                # Actualizar dashboard si hay callback
+                if self.on_save_success:
+                    self.on_save_success()
                 
                 # Volver a la lista
                 self._on_back_clicked()

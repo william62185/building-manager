@@ -5,7 +5,7 @@ Diseño moderno con navegación elegante
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Dict, Any
+from typing import Dict, Any, Callable
 from ..components.theme_manager import theme_manager, Spacing
 from ..components.icons import Icons
 from ..components.modern_widgets import ModernButton, ModernCard, ModernSeparator, ModernMetricCard, DetailedMetricCard
@@ -178,6 +178,12 @@ class MainWindow:
                 "text": "Gastos",
                 "icon": Icons.EXPENSES,
                 "command": lambda: self._navigate_to("expenses"),
+                "active": False
+            },
+            {
+                "text": "Administración",
+                "icon": "🔧",
+                "command": lambda: self._navigate_to("administration"),
                 "active": False
             },
             {
@@ -366,6 +372,9 @@ class MainWindow:
     
     def _navigate_to(self, view_name: str):
         """Navega a una vista específica"""
+        # Guardar la vista actual
+        self._current_view = view_name
+        
         # Actualizar estado de botones de navegación
         self._update_nav_buttons(view_name)
         
@@ -375,6 +384,7 @@ class MainWindow:
             "tenants": "Gestión de Inquilinos",
             "payments": "Control de Pagos",
             "expenses": "Gestión de Gastos",
+            "administration": "Administración",
             "reports": "Reportes y Análisis",
             "settings": "Configuración"
         }
@@ -418,6 +428,8 @@ class MainWindow:
             self._create_placeholder_view("Módulo de Pagos", "Gestión de pagos y facturación")
         elif view_name == "expenses":
             self._create_placeholder_view("Módulo de Gastos", "Control de gastos y contabilidad")
+        elif view_name == "administration":
+            self._create_administration_view()
         elif view_name == "reports":
             self._create_placeholder_view("Módulo de Reportes", "Análisis y reportes del edificio")
         elif view_name == "settings":
@@ -509,10 +521,103 @@ class MainWindow:
         
         tenants_view = TenantsView(
             self.views_container,
-            on_navigate=self._navigate_to
+            on_navigate=self._navigate_to,
+            on_data_change=self.refresh_dashboard  # Callback para actualizar dashboard
         )
         tenants_view.pack(fill="both", expand=True)
     
+    def _create_administration_view(self):
+        """Crea la vista de administración"""
+        # Grid de acciones administrativas
+        self._create_administration_actions_grid()
+    
+    def _create_administration_view(self):
+        """Crea la vista de administración"""
+        # Grid de acciones administrativas
+        admin_frame = tk.Frame(self.views_container, **theme_manager.get_style("frame"))
+        admin_frame.pack(fill="both", expand=True)
+        
+        # Título de la sección
+        title_label = tk.Label(
+            admin_frame,
+            text="Herramientas de Administración",
+            **theme_manager.get_style("label_title")
+        )
+        title_label.configure(font=("Segoe UI", 18, "bold"))
+        title_label.pack(anchor="w", pady=(0, Spacing.LG))
+        
+        # Contenedor del grid con distribución uniforme
+        grid_container = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
+        grid_container.pack(fill="both", expand=True)
+        
+        # Primera fila de cards
+        row1 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
+        row1.pack(fill="both", expand=True, pady=(0, Spacing.MD))
+        
+        # Card 1: Desactivar Inquilino
+        self._create_admin_action_card(
+            row1,
+            "⚠️",
+            "Desactivar Inquilino",
+            "Dar de baja y registrar salida",
+            "#dc2626",  # Rojo para indicar acción importante
+            lambda: self._show_deactivate_tenant_form()
+        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+        
+        # Card 2: Gestión de Apartamentos (futuro)
+        self._create_admin_action_card(
+            row1,
+            "🏢",
+            "Gestión de Apartamentos",
+            "Administrar apartamentos del edificio",
+            "#6366f1",  # Azul
+            lambda: self._show_placeholder_dialog("Gestión de Apartamentos", "Funcionalidad en desarrollo")
+        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+        
+        # Card 3: Backup de Datos (futuro)
+        self._create_admin_action_card(
+            row1,
+            "💾",
+            "Backup de Datos",
+            "Respaldar información del sistema",
+            "#059669",  # Verde
+            lambda: self._show_placeholder_dialog("Backup de Datos", "Funcionalidad en desarrollo")
+        ).pack(side="left", fill="both", expand=True)
+        
+        # Segunda fila de cards
+        row2 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
+        row2.pack(fill="both", expand=True)
+        
+        # Card 4: Logs del Sistema (futuro)
+        self._create_admin_action_card(
+            row2,
+            "📋",
+            "Logs del Sistema",
+            "Ver actividad y auditoría",
+            "#7c3aed",  # Púrpura
+            lambda: self._show_placeholder_dialog("Logs del Sistema", "Funcionalidad en desarrollo")
+        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+        
+        # Card 5: Notificaciones (futuro)
+        self._create_admin_action_card(
+            row2,
+            "📧",
+            "Gestión de Notificaciones",
+            "Configurar alertas y recordatorios",
+            "#ea580c",  # Naranja
+            lambda: self._show_placeholder_dialog("Gestión de Notificaciones", "Funcionalidad en desarrollo")
+        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+        
+        # Card 6: Usuarios (futuro)
+        self._create_admin_action_card(
+            row2,
+            "👥",
+            "Gestión de Usuarios",
+            "Administrar accesos al sistema",
+            "#d97706",  # Amarillo
+            lambda: self._show_placeholder_dialog("Gestión de Usuarios", "Funcionalidad en desarrollo")
+        ).pack(side="left", fill="both", expand=True)
+
     def _create_placeholder_view(self, title: str, subtitle: str):
         """Crea una vista placeholder"""
         card = ModernCard(
@@ -545,168 +650,106 @@ class MainWindow:
         title_label.configure(font=("Segoe UI", 18, "bold"))
         title_label.pack(anchor="w", pady=(0, Spacing.LG))
         
-        # Contenedor del grid con distribución uniforme
+        # Contenedor del grid con distribución uniforme usando grid geometry
         grid_container = tk.Frame(main_container, **theme_manager.get_style("frame"))
         grid_container.pack(fill="both", expand=True)
         
-        # Primera fila de cards
-        row1 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row1.pack(fill="both", expand=True, pady=(0, Spacing.MD))
+        # Configurar el grid para distribución uniforme
+        for i in range(3):  # 3 columnas
+            grid_container.grid_columnconfigure(i, weight=1, uniform="col")
+        for i in range(2):  # 2 filas
+            grid_container.grid_rowconfigure(i, weight=1, uniform="row")
         
-        # Card 1: Nuevo Inquilino
-        self._create_admin_action_card(
-            row1,
-            "👤",
-            "Nuevo Inquilino",
-            "Registrar nuevo inquilino en el sistema",
-            "#2563eb",  # Azul principal
-            lambda: self._navigate_to("tenants")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+        # Datos de las cards con mejor organización
+        cards_data = [
+            # Primera fila
+            {
+                "icon": "👤", "title": "Nuevo Inquilino", 
+                "desc": "Registrar nuevo inquilino en el sistema",
+                "color": "#2563eb", "action": lambda: self._show_new_tenant_form(),
+                "row": 0, "col": 0
+            },
+            {
+                "icon": "💰", "title": "Registrar Pago", 
+                "desc": "Registrar pago recibido de inquilino",
+                "color": "#059669", "action": lambda: self._navigate_to("payments"),
+                "row": 0, "col": 1
+            },
+            {
+                "icon": "💸", "title": "Registrar Gasto", 
+                "desc": "Anotar gastos del edificio",
+                "color": "#dc2626", "action": lambda: self._navigate_to("expenses"),
+                "row": 0, "col": 2
+            },
+            # Segunda fila
+            {
+                "icon": "🔍", "title": "Buscar Inquilino", 
+                "desc": "Búsqueda rápida por nombre",
+                "color": "#7c3aed", "action": lambda: self._show_search_dialog(),
+                "row": 1, "col": 0
+            },
+            {
+                "icon": "📊", "title": "Generar Reporte", 
+                "desc": "Reportes de inquilinos y finanzas",
+                "color": "#ea580c", "action": lambda: self._navigate_to("reports"),
+                "row": 1, "col": 1
+            },
+            {
+                "icon": "⏰", "title": "Pagos Pendientes", 
+                "desc": "Lista de pagos por cobrar",
+                "color": "#d97706", "action": lambda: self._show_pending_payments(),
+                "row": 1, "col": 2
+            }
+        ]
         
-        # Card 2: Registrar Pago
-        self._create_admin_action_card(
-            row1,
-            "💰",
-            "Registrar Pago",
-            "Registrar pago recibido de inquilino",
-            "#059669",  # Verde éxito
-            lambda: self._navigate_to("payments")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 3: Registrar Gasto
-        self._create_admin_action_card(
-            row1,
-            "💸",
-            "Registrar Gasto",
-            "Anotar gastos del edificio",
-            "#dc2626",  # Rojo gastos
-            lambda: self._navigate_to("expenses")
-        ).pack(side="left", fill="both", expand=True)
-        
-        # Segunda fila de cards
-        row2 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row2.pack(fill="both", expand=True)
-        
-        # Card 4: Buscar Inquilino
-        self._create_admin_action_card(
-            row2,
-            "🔍",
-            "Buscar Inquilino",
-            "Búsqueda rápida por nombre",
-            "#7c3aed",  # Púrpura búsqueda
-            lambda: self._show_search_dialog()
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 5: Generar Reporte
-        self._create_admin_action_card(
-            row2,
-            "📊",
-            "Generar Reporte",
-            "Reportes de inquilinos y finanzas",
-            "#ea580c",  # Naranja reportes
-            lambda: self._navigate_to("reports")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 6: Pagos Pendientes
-        self._create_admin_action_card(
-            row2,
-            "⏰",
-            "Pagos Pendientes",
-            "Lista de pagos por cobrar",
-            "#d97706",  # Amarillo advertencia
-            lambda: self._show_pending_payments()
-        ).pack(side="left", fill="both", expand=True)
+        # Crear las cards usando grid con dimensiones uniformes
+        for card_info in cards_data:
+            card = self._create_admin_action_card(
+                grid_container,
+                card_info["icon"],
+                card_info["title"],
+                card_info["desc"],
+                card_info["color"],
+                card_info["action"]
+            )
+            
+            # Calcular padding para espaciado uniforme
+            padx_left = Spacing.XS if card_info["col"] > 0 else 0
+            padx_right = Spacing.XS if card_info["col"] < 2 else 0
+            pady_top = Spacing.XS if card_info["row"] > 0 else 0
+            pady_bottom = Spacing.XS if card_info["row"] < 1 else 0
+            
+            card.grid(
+                row=card_info["row"], 
+                column=card_info["col"],
+                sticky="nsew",
+                padx=(padx_left, padx_right),
+                pady=(pady_top, pady_bottom)
+            )
     
-    def _create_admin_action_card(self, parent, icon, title, description, color, command):
-        """Crea una card de acción para el administrador"""
-        # Frame principal de la card que se adapta al espacio disponible
-        card_frame = tk.Frame(
-            parent,
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            relief="solid",
-            bd=1,
-            highlightbackground=theme_manager.themes[theme_manager.current_theme]["border_light"],
-            highlightthickness=1
+
+    
+    def _show_new_tenant_form(self):
+        """Muestra directamente el formulario de nuevo inquilino"""
+        # Actualizar estado de botones de navegación para inquilinos
+        self._update_nav_buttons("tenants")
+        
+        # Actualizar título
+        self.page_title.configure(text="Nuevo Inquilino")
+        
+        # Limpiar contenido actual
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        
+        # Crear el formulario de nuevo inquilino directamente
+        from .tenant_form_view import TenantFormView
+        
+        form_view = TenantFormView(
+            self.views_container,
+            on_back=lambda: self._navigate_to("tenants"),
+            on_save_success=self.refresh_dashboard  # Callback para actualizar dashboard
         )
-        
-        # Contenido de la card centrado verticalmente
-        content_frame = tk.Frame(card_frame, bg=card_frame["bg"])
-        content_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
-        
-        # Frame interno para centrar contenido verticalmente
-        inner_frame = tk.Frame(content_frame, bg=card_frame["bg"])
-        inner_frame.place(relx=0.5, rely=0.5, anchor="center")
-        
-        # Icono optimizado
-        icon_label = tk.Label(
-            inner_frame,
-            text=icon,
-            font=("Segoe UI", 26),
-            bg=card_frame["bg"],
-            fg=color
-        )
-        icon_label.pack(pady=(0, 3))
-        
-        # Título más legible
-        title_label = tk.Label(
-            inner_frame,
-            text=title,
-            font=("Segoe UI", 12, "bold"),
-            bg=card_frame["bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
-        )
-        title_label.pack(pady=(0, 1))
-        
-        # Descripción completamente visible
-        desc_label = tk.Label(
-            inner_frame,
-            text=description,
-            font=("Segoe UI", 9),
-            bg=card_frame["bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_secondary"],
-            wraplength=260,
-            justify="center"
-        )
-        desc_label.pack()
-        
-        # Efectos hover y click mejorados
-        def on_enter(event):
-            card_frame.configure(
-                bg=color, 
-                bd=2, 
-                highlightbackground=color,
-                relief="solid"
-            )
-            content_frame.configure(bg=color)
-            inner_frame.configure(bg=color)
-            for widget in [icon_label, title_label, desc_label]:
-                widget.configure(bg=color, fg="white")
-        
-        def on_leave(event):
-            original_bg = theme_manager.themes[theme_manager.current_theme]["bg_primary"]
-            card_frame.configure(
-                bg=original_bg, 
-                bd=1,
-                highlightbackground=theme_manager.themes[theme_manager.current_theme]["border_light"],
-                relief="solid"
-            )
-            content_frame.configure(bg=original_bg)
-            inner_frame.configure(bg=original_bg)
-            icon_label.configure(bg=original_bg, fg=color)
-            title_label.configure(bg=original_bg, fg=theme_manager.themes[theme_manager.current_theme]["text_primary"])
-            desc_label.configure(bg=original_bg, fg=theme_manager.themes[theme_manager.current_theme]["text_secondary"])
-        
-        def on_click(event):
-            command()
-        
-        # Bind eventos a todos los widgets
-        for widget in [card_frame, content_frame, inner_frame, icon_label, title_label, desc_label]:
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.bind("<Button-1>", on_click)
-            widget.configure(cursor="hand2")
-        
-        return card_frame
+        form_view.pack(fill="both", expand=True)
     
     def _show_search_dialog(self):
         """Muestra diálogo de búsqueda de inquilinos"""
@@ -717,16 +760,125 @@ class MainWindow:
         """Muestra vista de pagos pendientes"""
         # Por ahora navegar a pagos, luego se puede implementar una vista específica
         self._navigate_to("payments")
+
+    def _show_deactivate_tenant_form(self):
+        """Muestra el formulario para desactivar un inquilino"""
+        from .deactivate_tenant_view import DeactivateTenantView
+        
+        # Limpiar contenido actual
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        
+        # Crear el formulario de desactivación
+        deactivate_view = DeactivateTenantView(
+            self.views_container,
+            on_back=lambda: self._navigate_to("administration"),
+            on_success=self._on_tenant_deactivated
+        )
+        deactivate_view.pack(fill="both", expand=True)
+
+    def _show_placeholder_dialog(self, title: str, message: str):
+        """Muestra un diálogo placeholder para funcionalidades futuras"""
+        from tkinter import messagebox
+        messagebox.showinfo(title, f"{message}\n\nEsta funcionalidad será implementada próximamente.")
+
+    def _on_tenant_deactivated(self):
+        """Callback cuando se desactiva un inquilino exitosamente"""
+        # Actualizar dashboard si hay callback
+        self.refresh_dashboard()
+        # Volver a administración
+        self._navigate_to("administration")
+
+    def _create_admin_action_card(self, parent, icon: str, title: str, description: str, 
+                                  color: str, action: Callable):
+        """Crea una card de acción administrativa"""
+        # Card container
+        card_frame = tk.Frame(
+            parent,
+            **theme_manager.get_style("card")
+        )
+        
+        # Hover effect
+        def on_enter(event):
+            card_frame.configure(relief="raised", bd=2)
+        
+        def on_leave(event):
+            card_frame.configure(relief="flat", bd=1)
+        
+        def on_click(event):
+            action()
+        
+        card_frame.bind("<Enter>", on_enter)
+        card_frame.bind("<Leave>", on_leave)
+        card_frame.bind("<Button-1>", on_click)
+        
+        # Configurar cursor
+        card_frame.configure(cursor="hand2")
+        
+        # Contenido de la card
+        content_frame = tk.Frame(card_frame, **theme_manager.get_style("frame"))
+        content_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
+        
+        # Header con icono
+        header_frame = tk.Frame(content_frame, **theme_manager.get_style("frame"))
+        header_frame.pack(fill="x", pady=(0, Spacing.MD))
+        
+        # Icono
+        icon_label = tk.Label(
+            header_frame,
+            text=icon,
+            font=("Segoe UI", 24),
+            fg=color,
+            **theme_manager.get_style("frame")
+        )
+        icon_label.pack(side="left")
+        
+        # Título
+        title_label = tk.Label(
+            content_frame,
+            text=title,
+            **theme_manager.get_style("label_subtitle")
+        )
+        title_label.configure(font=("Segoe UI", 12, "bold"))
+        title_label.pack(anchor="w", pady=(0, Spacing.XS))
+        
+        # Descripción
+        desc_label = tk.Label(
+            content_frame,
+            text=description,
+            **theme_manager.get_style("label_body")
+        )
+        desc_label.configure(
+            font=("Segoe UI", 9),
+            wraplength=200,
+            justify="left"
+        )
+        desc_label.pack(anchor="w")
+        
+        # Propagar clics a todos los widgets hijos
+        for widget in [content_frame, header_frame, icon_label, title_label, desc_label]:
+            widget.bind("<Button-1>", on_click)
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.configure(cursor="hand2")
+        
+        return card_frame
     
     def _get_tenant_statistics(self):
         """Obtiene estadísticas de inquilinos"""
-        # Datos estáticos por ahora - se puede conectar con el servicio más tarde
-        return {
-            "total": 12,
-            "al_dia": 8,
-            "pendiente": 2,
-            "moroso": 2
-        }
+        from app.services.tenant_service import tenant_service
+        return tenant_service.get_statistics()
+    
+    def refresh_dashboard(self):
+        """Refresca las estadísticas del dashboard"""
+        # Solo refrescar si estamos en el dashboard
+        current_view = getattr(self, '_current_view', None)
+        if current_view == "dashboard":
+            # Limpiar contenido actual
+            for widget in self.views_container.winfo_children():
+                widget.destroy()
+            # Recrear la vista del dashboard
+            self._create_dashboard_view()
     
     def _calculate_net_balance(self):
         """Calcula el saldo neto del mes (ingresos - gastos)"""

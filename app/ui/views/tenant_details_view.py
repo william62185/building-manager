@@ -89,14 +89,14 @@ class TenantDetailsView(tk.Frame):
         # Badge de estado
         status_colors = {
             "al_dia": "success",
-            "pendiente": "warning", 
-            "moroso": "danger"
+            "moroso": "danger",
+            "inactivo": "neutral"
         }
         
         status_texts = {
             "al_dia": "Al día",
-            "pendiente": "Pendiente",
-            "moroso": "Moroso"
+            "moroso": "Moroso",
+            "inactivo": "Inactivo"
         }
         
         status = self.tenant_data.get("estado_pago", "al_dia")
