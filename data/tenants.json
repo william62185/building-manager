@@ -15,7 +15,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.272733",
-    "updated_at": "2025-06-08T23:22:42.272757"
+    "updated_at": "2025-06-08T23:22:42.272757",
+    "deposito_devuelto": 0
   },
   {
     "id": 2,
@@ -33,7 +34,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.274530",
-    "updated_at": "2025-06-08T23:22:42.274553"
+    "updated_at": "2025-06-08T23:22:42.274553",
+    "deposito_devuelto": 0
   },
   {
     "id": 3,
@@ -51,7 +53,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.275822",
-    "updated_at": "2025-06-08T23:22:42.275851"
+    "updated_at": "2025-06-08T23:22:42.275851",
+    "deposito_devuelto": 0
   },
   {
     "id": 4,
@@ -69,7 +72,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.277035",
-    "updated_at": "2025-06-08T23:22:42.277046"
+    "updated_at": "2025-06-08T23:22:42.277046",
+    "deposito_devuelto": 0
   },
   {
     "id": 5,
@@ -87,7 +91,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.278156",
-    "updated_at": "2025-06-08T23:22:42.278167"
+    "updated_at": "2025-06-08T23:22:42.278167",
+    "deposito_devuelto": 0
   },
   {
     "id": 6,
@@ -105,7 +110,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.279287",
-    "updated_at": "2025-06-08T23:22:42.279298"
+    "updated_at": "2025-06-08T23:22:42.279298",
+    "deposito_devuelto": 0
   },
   {
     "id": 7,
@@ -123,7 +129,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.280418",
-    "updated_at": "2025-06-08T23:22:42.280429"
+    "updated_at": "2025-06-08T23:22:42.280429",
+    "deposito_devuelto": 0
   },
   {
     "id": 8,
@@ -141,7 +148,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.281549",
-    "updated_at": "2025-06-08T23:22:42.281560"
+    "updated_at": "2025-06-08T23:22:42.281560",
+    "deposito_devuelto": 0
   },
   {
     "id": 9,
@@ -159,7 +167,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.282680",
-    "updated_at": "2025-06-08T23:22:42.282691"
+    "updated_at": "2025-06-08T23:22:42.282691",
+    "deposito_devuelto": 0
   },
   {
     "id": 10,
@@ -177,7 +186,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.283811",
-    "updated_at": "2025-06-08T23:22:42.283822"
+    "updated_at": "2025-06-08T23:22:42.283822",
+    "deposito_devuelto": 0
   },
   {
     "id": 11,
@@ -195,7 +205,8 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.284942",
-    "updated_at": "2025-06-08T23:22:42.284953"
+    "updated_at": "2025-06-08T23:22:42.284953",
+    "deposito_devuelto": 0
   },
   {
     "id": 12,
@@ -213,6 +224,7 @@
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.286073",
-    "updated_at": "2025-06-08T23:22:42.286084"
+    "updated_at": "2025-06-08T23:22:42.286084",
+    "deposito_devuelto": 0
   }
 ]
