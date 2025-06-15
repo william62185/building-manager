@@ -6,16 +6,16 @@
     "telefono": "+57 300 123 4567",
     "email": "william@email.com",
     "apartamento": "101",
-    "valor_arriendo": 1200000.0,
-    "fecha_ingreso": "01/01/2024",
+    "valor_arriendo": 1250000.0,
+    "fecha_ingreso": "20/05/2024",
     "estado_pago": "al_dia",
     "direccion": "",
-    "contacto_emergencia_nombre": "María Muñoz",
-    "contacto_emergencia_telefono": "+57 300 987 6543",
+    "contacto_emergencia_nombre": "Pedro Pérez",
+    "contacto_emergencia_telefono": "+57 305 543 2109",
     "archivos": {},
     "has_documents": false,
-    "created_at": "2025-06-08T23:22:42.272733",
-    "updated_at": "2025-06-08T23:22:42.272757",
+    "created_at": "2025-06-08T23:22:42.274530",
+    "updated_at": "2025-06-08T23:22:42.274553",
     "deposito_devuelto": 0
   },
   {
@@ -33,8 +33,8 @@
     "contacto_emergencia_telefono": "+57 302 876 5432",
     "archivos": {},
     "has_documents": false,
-    "created_at": "2025-06-08T23:22:42.274530",
-    "updated_at": "2025-06-08T23:22:42.274553",
+    "created_at": "2025-06-08T23:22:42.272733",
+    "updated_at": "2025-06-08T23:22:42.272757",
     "deposito_devuelto": 0
   },
   {
@@ -46,29 +46,10 @@
     "apartamento": "103",
     "valor_arriendo": 1100000.0,
     "fecha_ingreso": "10/03/2024",
-    "estado_pago": "moroso",
+    "estado_pago": "al_dia",
     "direccion": "",
     "contacto_emergencia_nombre": "Ana Rodríguez",
     "contacto_emergencia_telefono": "+57 303 765 4321",
-    "archivos": {},
-    "has_documents": false,
-    "created_at": "2025-06-08T23:22:42.275822",
-    "updated_at": "2025-06-08T23:22:42.275851",
-    "deposito_devuelto": 0
-  },
-  {
-    "id": 4,
-    "nombre": "Ana López",
-    "numero_documento": "55667788",
-    "telefono": "+57 303 456 7890",
-    "email": "ana@email.com",
-    "apartamento": "201",
-    "valor_arriendo": 1400000.0,
-    "fecha_ingreso": "05/04/2024",
-    "estado_pago": "al_dia",
-    "direccion": "",
-    "contacto_emergencia_nombre": "Luis López",
-    "contacto_emergencia_telefono": "+57 304 654 3210",
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.277035",
@@ -76,18 +57,18 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 5,
+    "id": 4,
     "nombre": "Lorena",
     "numero_documento": "99887766",
     "telefono": "+57 304 567 8901",
     "email": "inquilino@email.com",
-    "apartamento": "101",
-    "valor_arriendo": 1250000.0,
-    "fecha_ingreso": "20/05/2024",
+    "apartamento": "201",
+    "valor_arriendo": 1400000.0,
+    "fecha_ingreso": "15/04/2024",
     "estado_pago": "al_dia",
     "direccion": "",
-    "contacto_emergencia_nombre": "Pedro Pérez",
-    "contacto_emergencia_telefono": "+57 305 543 2109",
+    "contacto_emergencia_nombre": "Luis López",
+    "contacto_emergencia_telefono": "+57 304 654 3210",
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.278156",
@@ -95,7 +76,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 6,
+    "id": 5,
     "nombre": "Orfa",
     "numero_documento": "44556677",
     "telefono": "+57 305 678 9012",
@@ -114,7 +95,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 7,
+    "id": 6,
     "nombre": "Zuly Alvarez",
     "numero_documento": "33445566",
     "telefono": "+57 306 789 0123",
@@ -133,26 +114,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 8,
-    "nombre": "Diego Martínez",
-    "numero_documento": "22334455",
-    "telefono": "+57 307 890 1234",
-    "email": "diego@email.com",
-    "apartamento": "202",
-    "valor_arriendo": 1380000.0,
-    "fecha_ingreso": "12/08/2024",
-    "estado_pago": "al_dia",
-    "direccion": "",
-    "contacto_emergencia_nombre": "Elena Martínez",
-    "contacto_emergencia_telefono": "+57 308 210 9876",
-    "archivos": {},
-    "has_documents": false,
-    "created_at": "2025-06-08T23:22:42.281549",
-    "updated_at": "2025-06-08T23:22:42.281560",
-    "deposito_devuelto": 0
-  },
-  {
-    "id": 9,
+    "id": 7,
     "nombre": "Patricia Gómez",
     "numero_documento": "11223399",
     "telefono": "+57 308 901 2345",
@@ -171,7 +133,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 10,
+    "id": 8,
     "nombre": "Roberto Castro",
     "numero_documento": "99112233",
     "telefono": "+57 309 012 3456",
@@ -190,7 +152,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 11,
+    "id": 9,
     "nombre": "Valentina Torres",
     "numero_documento": "88991122",
     "telefono": "+57 310 123 4567",
@@ -209,7 +171,7 @@
     "deposito_devuelto": 0
   },
   {
-    "id": 12,
+    "id": 10,
     "nombre": "Sebastián Ruiz",
     "numero_documento": "77889911",
     "telefono": "+57 311 234 5678",
