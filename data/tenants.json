@@ -188,5 +188,26 @@
     "created_at": "2025-06-08T23:22:42.286073",
     "updated_at": "2025-06-08T23:22:42.286084",
     "deposito_devuelto": 0
+  },
+  {
+    "id": 11,
+    "nombre": "Yenny ferth",
+    "numero_documento": "5555555",
+    "telefono": "555555",
+    "email": "yenny@gmail.com",
+    "apartamento": "505",
+    "valor_arriendo": 600000.0,
+    "fecha_ingreso": "16/6/2025",
+    "estado_pago": "al_dia",
+    "direccion": "",
+    "contacto_emergencia_nombre": "",
+    "contacto_emergencia_telefono": "",
+    "archivos": {
+      "id": "C:/Users/Will/Downloads/Rental Agreement.pdf",
+      "contract": "C:/Users/Will/Downloads/ApprovalInPrincipleLetter_SP_NewRenewalChangeDesignation_0485121A_20250430_135353.pdf"
+    },
+    "has_documents": true,
+    "created_at": "2025-06-16T15:12:51.118623",
+    "updated_at": "2025-06-16T15:12:51.118633"
   }
 ]
