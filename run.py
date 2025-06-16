@@ -10,7 +10,7 @@ from pathlib import Path
 # Agregar el directorio de la app al path
 sys.path.insert(0, str(Path(__file__).parent / "app"))
 
-from app.main import main
+from manager.app.main import main
 
 if __name__ == "__main__":
     main() 

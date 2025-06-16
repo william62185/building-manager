@@ -19,4 +19,7 @@ reportlab
 openpyxl
 
 # Fechas y tiempo
-python-dateutil 
+python-dateutil
+
+# Seleccionador de fechas
+tkcalendar 
