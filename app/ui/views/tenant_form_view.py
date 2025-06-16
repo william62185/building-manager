@@ -15,7 +15,7 @@ from ..components.modern_widgets import (
     ModernButton, ModernCard, ModernEntry, 
     ModernBadge, ModernSeparator
 )
-from app.services.tenant_service import tenant_service
+from manager.app.services.tenant_service import tenant_service
 
 class DatePickerWidget(tk.Frame):
     """Widget personalizado para selección de fechas con calendario"""
@@ -876,8 +876,8 @@ class TenantFormView(tk.Frame):
             'nombre': 'Nombre completo',
             'numero_documento': 'Número de documento',
             'telefono': 'Teléfono',
-            'apartamento': 'Número de apartamento',
-            'valor_arriendo': 'Valor arriendo',
+            'apartamento': 'Apartamento',
+            'valor_arriendo': 'Valor del arriendo',
             'fecha_ingreso': 'Fecha de ingreso'
         }
         
@@ -942,12 +942,49 @@ class TenantFormView(tk.Frame):
     
     def _save_tenant(self):
         """Guarda o actualiza el inquilino"""
-        if not self._validate_form():
+        # Validar campos requeridos
+        required_fields = {
+            'nombre': 'Nombre completo',
+            'numero_documento': 'Número de documento',
+            'telefono': 'Teléfono',
+            'apartamento': 'Apartamento',
+            'valor_arriendo': 'Valor del arriendo',
+            'fecha_ingreso': 'Fecha de ingreso'
+        }
+        
+        self.validation_errors = {}
+        for field, label in required_fields.items():
+            if field in self.form_fields:
+                value = self.form_fields[field].get().strip()
+                if not value:
+                    self.validation_errors[field] = f"{label} es requerido"
+        
+        # Validar formato de fecha
+        if 'fecha_ingreso' in self.form_fields and 'fecha_ingreso' not in self.validation_errors:
+            date_str = self.form_fields['fecha_ingreso'].get().strip()
+            if not self._validate_date(date_str):
+                self.validation_errors['fecha_ingreso'] = "Formato de fecha inválido (DD/MM/AAAA)"
+        
+        # Validar valor de arriendo
+        if 'valor_arriendo' in self.form_fields and 'valor_arriendo' not in self.validation_errors:
+            try:
+                valor = float(self.form_fields['valor_arriendo'].get().strip().replace(',', ''))
+                if valor <= 0:
+                    self.validation_errors['valor_arriendo'] = "El valor del arriendo debe ser mayor a 0"
+            except ValueError:
+                self.validation_errors['valor_arriendo'] = "El valor del arriendo debe ser numérico"
+        
+        if self.validation_errors:
             self._show_validation_errors()
             return
         
         # Recopilar datos del formulario
         tenant_data = self._collect_form_data()
+        
+        # Asegurar campos por defecto
+        tenant_data.setdefault('estado_pago', 'al_dia')
+        tenant_data.setdefault('archivos', {})
+        tenant_data.setdefault('has_documents', False)
         
         try:
             if self.is_edit_mode:

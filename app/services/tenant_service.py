@@ -12,7 +12,7 @@ class TenantService:
     """Servicio para gestión de inquilinos"""
     
     def __init__(self):
-        self.data_file = "data/tenants.json"
+        self.data_file = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/tenants.json'))
         self._ensure_data_directory()
         self._load_data()
     
@@ -51,67 +51,61 @@ class TenantService:
     
     def create_tenant(self, tenant_data: Dict[str, Any]) -> Dict[str, Any]:
         """Crea un nuevo inquilino"""
-        # Generar nuevo ID
-        new_id = max([t.get("id", 0) for t in self.tenants], default=0) + 1
-        
-        # Preparar archivos
-        archivos = tenant_data.get("archivos", {})
-        
-        # Preparar datos del inquilino
-        tenant = {
-            "id": new_id,
-            "nombre": tenant_data.get("nombre", "").strip(),
-            "numero_documento": tenant_data.get("numero_documento", "").strip(),
-            "telefono": tenant_data.get("telefono", "").strip(),
-            "email": tenant_data.get("email", "").strip(),
-            "apartamento": tenant_data.get("apartamento", "").strip(),
-            "valor_arriendo": float(tenant_data.get("valor_arriendo", 0)),
-            "fecha_ingreso": tenant_data.get("fecha_ingreso", "").strip(),
-            "estado_pago": tenant_data.get("estado_pago", "al_dia"),
-            "direccion": tenant_data.get("direccion", "").strip(),
-            "contacto_emergencia_nombre": tenant_data.get("contacto_emergencia_nombre", "").strip(),
-            "contacto_emergencia_telefono": tenant_data.get("contacto_emergencia_telefono", "").strip(),
-            "archivos": archivos,
-            "has_documents": bool(archivos.get("id") or archivos.get("contract")),
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        # Agregar a la lista
-        self.tenants.append(tenant)
-        self._save_data()
-        
-        return tenant.copy()
+        try:
+            # Generar nuevo ID
+            new_id = max([t.get("id", 0) for t in self.tenants], default=0) + 1
+            
+            # Preparar archivos
+            archivos = tenant_data.get("archivos", {})
+            
+            # Preparar datos del inquilino con valores por defecto
+            tenant = {
+                "id": new_id,
+                "nombre": tenant_data.get("nombre", "").strip(),
+                "numero_documento": tenant_data.get("numero_documento", "").strip(),
+                "telefono": tenant_data.get("telefono", "").strip(),
+                "email": tenant_data.get("email", "").strip(),
+                "apartamento": tenant_data.get("apartamento", "").strip(),
+                "valor_arriendo": float(tenant_data.get("valor_arriendo", 0)),
+                "fecha_ingreso": tenant_data.get("fecha_ingreso", "").strip(),
+                "estado_pago": tenant_data.get("estado_pago", "al_dia"),
+                "direccion": tenant_data.get("direccion", "").strip(),
+                "contacto_emergencia_nombre": tenant_data.get("contacto_emergencia_nombre", "").strip(),
+                "contacto_emergencia_telefono": tenant_data.get("contacto_emergencia_telefono", "").strip(),
+                "archivos": archivos,
+                "has_documents": bool(archivos.get("id") or archivos.get("contract")),
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+                "deposito_devuelto": 0  # Valor por defecto
+            }
+            
+            # Agregar a la lista
+            self.tenants.append(tenant)
+            
+            # Guardar cambios
+            self._save_data()
+            
+            return tenant.copy()
+            
+        except Exception as e:
+            print(f"Error al crear inquilino: {str(e)}")
+            return None
     
     def update_tenant(self, tenant_id: int, tenant_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Actualiza un inquilino existente"""
-        for i, tenant in enumerate(self.tenants):
-            if tenant.get("id") == tenant_id:
-                # Preparar archivos
-                archivos = tenant_data.get("archivos", tenant.get("archivos", {}))
-                
-                # Actualizar campos
-                self.tenants[i].update({
-                    "nombre": tenant_data.get("nombre", tenant.get("nombre", "")).strip(),
-                    "numero_documento": tenant_data.get("numero_documento", tenant.get("numero_documento", "")).strip(),
-                    "telefono": tenant_data.get("telefono", tenant.get("telefono", "")).strip(),
-                    "email": tenant_data.get("email", tenant.get("email", "")).strip(),
-                    "apartamento": tenant_data.get("apartamento", tenant.get("apartamento", "")).strip(),
-                    "valor_arriendo": float(tenant_data.get("valor_arriendo", tenant.get("valor_arriendo", 0))),
-                    "fecha_ingreso": tenant_data.get("fecha_ingreso", tenant.get("fecha_ingreso", "")).strip(),
-                    "estado_pago": tenant_data.get("estado_pago", tenant.get("estado_pago", "al_dia")),
-                    "direccion": tenant_data.get("direccion", tenant.get("direccion", "")).strip(),
-                    "contacto_emergencia_nombre": tenant_data.get("contacto_emergencia_nombre", tenant.get("contacto_emergencia_nombre", "")).strip(),
-                    "contacto_emergencia_telefono": tenant_data.get("contacto_emergencia_telefono", tenant.get("contacto_emergencia_telefono", "")).strip(),
-                    "archivos": archivos,
-                    "has_documents": bool(archivos.get("id") or archivos.get("contract")),
-                    "updated_at": datetime.now().isoformat()
-                })
-                
-                self._save_data()
-                return self.tenants[i].copy()
-        
-        return None
+        try:
+            for i, tenant in enumerate(self.tenants):
+                if tenant.get("id") == tenant_id:
+                    # Actualizar todos los campos del diccionario tenant_data
+                    for key, value in tenant_data.items():
+                        self.tenants[i][key] = value
+                    self.tenants[i]["updated_at"] = datetime.now().isoformat()
+                    self._save_data()
+                    return self.tenants[i].copy()
+            return None
+        except Exception as e:
+            print(f"Error al actualizar inquilino: {str(e)}")
+            return None
     
     def delete_tenant(self, tenant_id: int) -> bool:
         """Elimina un inquilino"""

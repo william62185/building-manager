@@ -148,6 +148,10 @@ class ThemeManager:
             "btn_secondary_hover": Colors.GRAY_50,
             "btn_secondary_border": Colors.GRAY_300,
             
+            "btn_pdf_bg": Colors.PRIMARY_900,
+            "btn_pdf_fg": Colors.WHITE,
+            "btn_pdf_hover": Colors.PRIMARY_700,
+            
             # INPUTS
             "input_bg": Colors.WHITE,
             "input_border": Colors.GRAY_300,
@@ -243,6 +247,19 @@ class ThemeManager:
                 "activeforeground": theme["btn_secondary_fg"]
             },
             
+            "button_pdf": {
+                "bg": theme["btn_pdf_bg"],
+                "fg": theme["btn_pdf_fg"],
+                "activebackground": theme["btn_pdf_hover"],
+                "activeforeground": theme["btn_pdf_fg"],
+                "relief": "flat",
+                "bd": 0,
+                "font": Typography.get_font("base", "bold"),
+                "padx": Spacing.LG,
+                "pady": Spacing.SM,
+                "cursor": "hand2"
+            },
+            
             "entry": {
                 "bg": theme["input_bg"],
                 "fg": theme["input_text"],
@@ -298,17 +315,14 @@ class ThemeManager:
         return styles.get(component, {})
     
     def apply_hover_effect(self, widget, hover_bg: str = None):
-        """Aplica efecto hover a un widget"""
-        theme = self.themes[self.current_theme]
+        """Aplica efecto hover a un widget respetando el color del estilo del botón"""
         original_bg = widget.cget("bg")
-        hover_color = hover_bg or theme["bg_secondary"]
-        
+        # Usar el color de activebackground si está definido
+        hover_color = widget.cget("activebackground") if widget.cget("activebackground") else (hover_bg or original_bg)
         def on_enter(e):
             widget.config(bg=hover_color)
-        
         def on_leave(e):
             widget.config(bg=original_bg)
-        
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
     

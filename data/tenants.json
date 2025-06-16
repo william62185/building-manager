@@ -103,15 +103,21 @@
     "apartamento": "106",
     "valor_arriendo": 1350000.0,
     "fecha_ingreso": "15/06/2024",
-    "estado_pago": "al_dia",
+    "estado_pago": "inactivo",
     "direccion": "",
     "contacto_emergencia_nombre": "Sofía Herrera",
     "contacto_emergencia_telefono": "+57 306 432 1098",
     "archivos": {},
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.279287",
-    "updated_at": "2025-06-08T23:22:42.279298",
-    "deposito_devuelto": 0
+    "updated_at": "2025-06-14T16:58:51.479399",
+    "deposito_devuelto": 500000.0,
+    "estado_final_pago": "al_dia",
+    "fecha_salida": "14/06/2025",
+    "motivo_salida": "Voluntario",
+    "dias_mora": 0,
+    "valor_mora": 0,
+    "notas_salida": ""
   },
   {
     "id": 7,
@@ -149,25 +155,6 @@
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.281549",
     "updated_at": "2025-06-08T23:22:42.281560",
-    "deposito_devuelto": 0
-  },
-  {
-    "id": 9,
-    "nombre": "Patricia Gómez",
-    "numero_documento": "11223399",
-    "telefono": "+57 308 901 2345",
-    "email": "patricia@email.com",
-    "apartamento": "203",
-    "valor_arriendo": 1420000.0,
-    "fecha_ingreso": "25/09/2024",
-    "estado_pago": "al_dia",
-    "direccion": "",
-    "contacto_emergencia_nombre": "Fernando Gómez",
-    "contacto_emergencia_telefono": "+57 309 109 8765",
-    "archivos": {},
-    "has_documents": false,
-    "created_at": "2025-06-08T23:22:42.282680",
-    "updated_at": "2025-06-08T23:22:42.282691",
     "deposito_devuelto": 0
   },
   {
@@ -225,6 +212,50 @@
     "has_documents": false,
     "created_at": "2025-06-08T23:22:42.286073",
     "updated_at": "2025-06-08T23:22:42.286084",
+    "deposito_devuelto": 0
+  },
+  {
+    "id": 13,
+    "nombre": "libardo florez",
+    "numero_documento": "63636363",
+    "telefono": "3333333",
+    "email": "",
+    "apartamento": "509",
+    "valor_arriendo": 600000.0,
+    "fecha_ingreso": "16/6/2025",
+    "estado_pago": "al_dia",
+    "direccion": "",
+    "contacto_emergencia_nombre": "",
+    "contacto_emergencia_telefono": "",
+    "archivos": {
+      "id": "C:/Users/Will/Downloads/Policy Insurance William Munoz.pdf",
+      "contract": "C:/Users/Will/Downloads/Attestation Form.pdf"
+    },
+    "has_documents": true,
+    "created_at": "2025-06-16T19:01:03.551630",
+    "updated_at": "2025-06-16T19:01:03.551658",
+    "deposito_devuelto": 0
+  },
+  {
+    "id": 14,
+    "nombre": "anjitha ftg",
+    "numero_documento": "22222222",
+    "telefono": "33333333",
+    "email": "",
+    "apartamento": "601",
+    "valor_arriendo": 500000.0,
+    "fecha_ingreso": "16/6/2025",
+    "estado_pago": "al_dia",
+    "direccion": "",
+    "contacto_emergencia_nombre": "",
+    "contacto_emergencia_telefono": "",
+    "archivos": {
+      "id": null,
+      "contract": null
+    },
+    "has_documents": false,
+    "created_at": "2025-06-16T19:48:13.920395",
+    "updated_at": "2025-06-16T19:48:13.920405",
     "deposito_devuelto": 0
   }
 ]

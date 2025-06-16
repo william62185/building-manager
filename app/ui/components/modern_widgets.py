@@ -13,12 +13,13 @@ class ModernButton(tk.Frame):
     """Botón moderno con iconos y estados elegantes"""
     
     def __init__(self, parent, text: str = "", icon: str = "", 
-                 style: str = "primary", command: Callable = None, **kwargs):
+                 style: str = "primary", command: Callable = None, small: bool = False, **kwargs):
         super().__init__(parent, **kwargs)
         
         self.command = command
         self.style = style
         self.is_disabled = False
+        self.small = small
         
         # Configurar el frame principal
         self.configure(**theme_manager.get_style("frame"))
@@ -29,6 +30,14 @@ class ModernButton(tk.Frame):
     def _create_button(self, text: str, icon: str):
         """Crea el botón con estilo moderno"""
         button_style = theme_manager.get_style(f"button_{self.style}")
+        
+        # Si es pequeño, reducir fuente y alto
+        if self.small:
+            button_style = button_style.copy()
+            button_style["font"] = ("Segoe UI", 9)
+            button_style["height"] = 1
+            button_style["padx"] = 6
+            button_style["pady"] = 2
         
         # Texto del botón con icono
         button_text = f"{icon} {text}" if icon else text
@@ -69,12 +78,12 @@ class ModernCard(tk.Frame):
             
         # Frame para contenido
         self.content_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        self.content_frame.pack(fill="both", expand=True, pady=(Spacing.XS, 0))
+        self.content_frame.pack(fill="both", expand=True, pady=(2, 0))
         
     def _create_header(self, title: str, subtitle: str):
         """Crea el header de la card"""
         header_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        header_frame.pack(fill="x", pady=(0, Spacing.MD))
+        header_frame.pack(fill="x", pady=(0, 2))
         
         if title:
             title_label = tk.Label(

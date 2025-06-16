@@ -6,9 +6,18 @@ Diseño moderno con navegación elegante
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Any, Callable
-from ..components.theme_manager import theme_manager, Spacing
-from ..components.icons import Icons
-from ..components.modern_widgets import ModernButton, ModernCard, ModernSeparator, ModernMetricCard, DetailedMetricCard
+from tkinter import messagebox
+from datetime import datetime
+import os
+from manager.app.ui.components.theme_manager import theme_manager, Spacing
+from manager.app.ui.components.icons import Icons
+from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator, ModernMetricCard, DetailedMetricCard
+from manager.app.services.tenant_service import TenantService
+from manager.app.services.payment_service import PaymentService
+from manager.app.services.expense_service import ExpenseService
+from .payments_view import PaymentsView
+from .tenants_view import TenantsView
+from .expenses_view import ExpensesView
 
 class MainWindow:
     """Ventana principal con diseño profesional"""
@@ -382,7 +391,7 @@ class MainWindow:
         titles = {
             "dashboard": "Dashboard",
             "tenants": "Gestión de Inquilinos",
-            "payments": "Control de Pagos",
+            "payments": "Gestión de Pagos",
             "expenses": "Gestión de Gastos",
             "administration": "Administración",
             "reports": "Reportes y Análisis",
@@ -425,9 +434,11 @@ class MainWindow:
         elif view_name == "tenants":
             self._create_tenants_view()
         elif view_name == "payments":
-            self._create_placeholder_view("Módulo de Pagos", "Gestión de pagos y facturación")
+            payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+            payments_view.pack(fill="both", expand=True)
         elif view_name == "expenses":
-            self._create_placeholder_view("Módulo de Gastos", "Control de gastos y contabilidad")
+            expenses_view = ExpensesView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+            expenses_view.pack(fill="both", expand=True)
         elif view_name == "administration":
             self._create_administration_view()
         elif view_name == "reports":
@@ -472,40 +483,48 @@ class MainWindow:
         metric2 = ModernMetricCard(
             metrics_row,
             title="Pagos Pendientes",
-            value="$2,450",
+            value=f"${int(2450):,}",
             icon=Icons.PAYMENT_PENDING,
             color_theme="warning"
         )
         metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
         
-        # Métrica 3: Ingresos del Mes
+        # Métrica 3: Ingresos del Mes (real)
+        ingresos_mes = self._get_payments_of_current_month()
         metric3 = ModernMetricCard(
             metrics_row,
             title="Ingresos del Mes",
-            value="$15,200",
+            value=f"${int(ingresos_mes):,}",
             icon=Icons.PAYMENT_RECEIVED,
             color_theme="success"
         )
         metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
         
-        # Métrica 4: Gastos del Mes
+        # Métrica 4: Gastos del Mes (ya está bien)
+        gastos_mes = self._get_expenses_of_current_month()
         metric4 = ModernMetricCard(
             metrics_row,
             title="Gastos del Mes", 
-            value="$3,100",
+            value=f"${int(gastos_mes):,}",
             icon=Icons.EXPENSES,
             color_theme="error"
         )
         metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
         
-        # Métrica 5: Saldo Neto del Mes
-        net_balance = self._calculate_net_balance()
+        # Métrica 5: Saldo Neto del Mes (ingresos reales - gastos reales)
+        saldo_neto = ingresos_mes - gastos_mes
+        if saldo_neto >= 0:
+            net_value = f"${int(saldo_neto):,}"
+            net_theme = "success"
+        else:
+            net_value = f"-${int(abs(saldo_neto)):,}"
+            net_theme = "error"
         metric5 = ModernMetricCard(
             metrics_row,
             title="Saldo Neto del Mes",
-            value=net_balance["value"],
-            icon="💼",  # Icono de maletín para balance
-            color_theme=net_balance["theme"]
+            value=net_value,
+            icon="💼",
+            color_theme=net_theme
         )
         metric5.pack(side="left", fill="both", expand=True)
         
@@ -517,12 +536,11 @@ class MainWindow:
     
     def _create_tenants_view(self):
         """Crea la vista de inquilinos"""
-        from .tenants_view import TenantsView
-        
         tenants_view = TenantsView(
             self.views_container,
             on_navigate=self._navigate_to,
-            on_data_change=self.refresh_dashboard  # Callback para actualizar dashboard
+            on_data_change=self.refresh_dashboard,  # Callback para actualizar dashboard
+            on_register_payment=self.navigate_to_payments
         )
         tenants_view.pack(fill="both", expand=True)
     
@@ -559,8 +577,7 @@ class MainWindow:
             row1,
             "⚠️",
             "Desactivar Inquilino",
-            "Dar de baja y registrar salida",
-            "#dc2626",  # Rojo para indicar acción importante
+            "#dc2626",
             lambda: self._show_deactivate_tenant_form()
         ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
         
@@ -569,8 +586,7 @@ class MainWindow:
             row1,
             "🏢",
             "Gestión de Apartamentos",
-            "Administrar apartamentos del edificio",
-            "#6366f1",  # Azul
+            "#6366f1",
             lambda: self._show_placeholder_dialog("Gestión de Apartamentos", "Funcionalidad en desarrollo")
         ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
         
@@ -579,8 +595,7 @@ class MainWindow:
             row1,
             "💾",
             "Backup de Datos",
-            "Respaldar información del sistema",
-            "#059669",  # Verde
+            "#059669",
             lambda: self._show_placeholder_dialog("Backup de Datos", "Funcionalidad en desarrollo")
         ).pack(side="left", fill="both", expand=True)
         
@@ -593,8 +608,7 @@ class MainWindow:
             row2,
             "📋",
             "Logs del Sistema",
-            "Ver actividad y auditoría",
-            "#7c3aed",  # Púrpura
+            "#7c3aed",
             lambda: self._show_placeholder_dialog("Logs del Sistema", "Funcionalidad en desarrollo")
         ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
         
@@ -603,8 +617,7 @@ class MainWindow:
             row2,
             "📧",
             "Gestión de Notificaciones",
-            "Configurar alertas y recordatorios",
-            "#ea580c",  # Naranja
+            "#ea580c",
             lambda: self._show_placeholder_dialog("Gestión de Notificaciones", "Funcionalidad en desarrollo")
         ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
         
@@ -613,8 +626,7 @@ class MainWindow:
             row2,
             "👥",
             "Gestión de Usuarios",
-            "Administrar accesos al sistema",
-            "#d97706",  # Amarillo
+            "#d97706",
             lambda: self._show_placeholder_dialog("Gestión de Usuarios", "Funcionalidad en desarrollo")
         ).pack(side="left", fill="both", expand=True)
 
@@ -665,38 +677,32 @@ class MainWindow:
             # Primera fila
             {
                 "icon": "👤", "title": "Nuevo Inquilino", 
-                "desc": "Registrar nuevo inquilino en el sistema",
                 "color": "#2563eb", "action": lambda: self._show_new_tenant_form(),
                 "row": 0, "col": 0
             },
             {
                 "icon": "💰", "title": "Registrar Pago", 
-                "desc": "Registrar pago recibido de inquilino",
-                "color": "#059669", "action": lambda: self._navigate_to("payments"),
+                "color": "#059669", "action": lambda: self._show_register_payment_direct(),
                 "row": 0, "col": 1
             },
             {
                 "icon": "💸", "title": "Registrar Gasto", 
-                "desc": "Anotar gastos del edificio",
-                "color": "#dc2626", "action": lambda: self._navigate_to("expenses"),
+                "color": "#dc2626", "action": lambda: self._show_register_expense_direct(),
                 "row": 0, "col": 2
             },
             # Segunda fila
             {
                 "icon": "🔍", "title": "Buscar Inquilino", 
-                "desc": "Búsqueda rápida por nombre",
                 "color": "#7c3aed", "action": lambda: self._show_search_dialog(),
                 "row": 1, "col": 0
             },
             {
                 "icon": "📊", "title": "Generar Reporte", 
-                "desc": "Reportes de inquilinos y finanzas",
                 "color": "#ea580c", "action": lambda: self._navigate_to("reports"),
                 "row": 1, "col": 1
             },
             {
                 "icon": "⏰", "title": "Pagos Pendientes", 
-                "desc": "Lista de pagos por cobrar",
                 "color": "#d97706", "action": lambda: self._show_pending_payments(),
                 "row": 1, "col": 2
             }
@@ -708,26 +714,16 @@ class MainWindow:
                 grid_container,
                 card_info["icon"],
                 card_info["title"],
-                card_info["desc"],
                 card_info["color"],
                 card_info["action"]
             )
-            
-            # Calcular padding para espaciado uniforme
-            padx_left = Spacing.XS if card_info["col"] > 0 else 0
-            padx_right = Spacing.XS if card_info["col"] < 2 else 0
-            pady_top = Spacing.XS if card_info["row"] > 0 else 0
-            pady_bottom = Spacing.XS if card_info["row"] < 1 else 0
-            
             card.grid(
-                row=card_info["row"], 
+                row=card_info["row"],
                 column=card_info["col"],
                 sticky="nsew",
-                padx=(padx_left, padx_right),
-                pady=(pady_top, pady_bottom)
+                padx=Spacing.XS,
+                pady=Spacing.XS
             )
-    
-
     
     def _show_new_tenant_form(self):
         """Muestra directamente el formulario de nuevo inquilino"""
@@ -752,9 +748,20 @@ class MainWindow:
         form_view.pack(fill="both", expand=True)
     
     def _show_search_dialog(self):
-        """Muestra diálogo de búsqueda de inquilinos"""
-        # Por ahora navegar a inquilinos, luego se puede implementar un diálogo específico
-        self._navigate_to("tenants")
+        """Muestra la vista de solo consulta de inquilinos (Ver detalles inquilinos)"""
+        from .tenants_view import TenantsView
+        # Limpiar contenido actual
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        # Crear la vista de solo consulta, pasando el callback correcto
+        tenants_view = TenantsView(
+            self.views_container,
+            on_navigate=self._navigate_to,
+            on_data_change=self.refresh_dashboard,
+            on_register_payment=self.navigate_to_payments
+        )
+        tenants_view._show_tenants_list()  # Ir directo a la vista de detalles
+        tenants_view.pack(fill="both", expand=True)
     
     def _show_pending_payments(self):
         """Muestra vista de pagos pendientes"""
@@ -779,7 +786,6 @@ class MainWindow:
 
     def _show_placeholder_dialog(self, title: str, message: str):
         """Muestra un diálogo placeholder para funcionalidades futuras"""
-        from tkinter import messagebox
         messagebox.showinfo(title, f"{message}\n\nEsta funcionalidad será implementada próximamente.")
 
     def _on_tenant_deactivated(self):
@@ -789,84 +795,65 @@ class MainWindow:
         # Volver a administración
         self._navigate_to("administration")
 
-    def _create_admin_action_card(self, parent, icon: str, title: str, description: str, 
-                                  color: str, action: Callable):
-        """Crea una card de acción administrativa"""
-        # Card container
-        card_frame = tk.Frame(
-            parent,
-            **theme_manager.get_style("card")
-        )
-        
-        # Hover effect
-        def on_enter(event):
-            card_frame.configure(relief="raised", bd=2)
-        
-        def on_leave(event):
-            card_frame.configure(relief="flat", bd=1)
-        
-        def on_click(event):
-            action()
-        
-        card_frame.bind("<Enter>", on_enter)
-        card_frame.bind("<Leave>", on_leave)
-        card_frame.bind("<Button-1>", on_click)
-        
-        # Configurar cursor
+    def _create_admin_action_card(self, parent, icon: str, title: str, color: str, action: Callable):
+        """Crea una card de acción administrativa solo con icono y título, sin descripción"""
+        style = theme_manager.get_style("card").copy()
+        style["bd"] = 2
+        style["relief"] = "raised"
+        style["width"] = 260
+        style["height"] = 120
+        style["bg"] = "white"
+        card_frame = tk.Frame(parent, **style)
+        card_frame.pack_propagate(False)
         card_frame.configure(cursor="hand2")
-        
-        # Contenido de la card
-        content_frame = tk.Frame(card_frame, **theme_manager.get_style("frame"))
-        content_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
-        
-        # Header con icono
-        header_frame = tk.Frame(content_frame, **theme_manager.get_style("frame"))
-        header_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        # Icono
+        # Contenido centrado
+        content_frame = tk.Frame(card_frame, bg="white")
+        content_frame.place(relx=0.5, rely=0.5, anchor="center")
+        # Icono grande
         icon_label = tk.Label(
-            header_frame,
+            content_frame,
             text=icon,
-            font=("Segoe UI", 24),
+            font=("Segoe UI", 32),
             fg=color,
-            **theme_manager.get_style("frame")
+            bg="white"
         )
-        icon_label.pack(side="left")
-        
-        # Título
+        icon_label.pack(pady=(0, 6))
+        # Título centrado y grande
         title_label = tk.Label(
             content_frame,
             text=title,
-            **theme_manager.get_style("label_subtitle")
+            font=("Segoe UI", 14, "bold"),
+            fg=color,
+            bg="white",
+            anchor="center",
+            justify="center"
         )
-        title_label.configure(font=("Segoe UI", 12, "bold"))
-        title_label.pack(anchor="w", pady=(0, Spacing.XS))
-        
-        # Descripción
-        desc_label = tk.Label(
-            content_frame,
-            text=description,
-            **theme_manager.get_style("label_body")
-        )
-        desc_label.configure(
-            font=("Segoe UI", 9),
-            wraplength=200,
-            justify="left"
-        )
-        desc_label.pack(anchor="w")
-        
-        # Propagar clics a todos los widgets hijos
-        for widget in [content_frame, header_frame, icon_label, title_label, desc_label]:
-            widget.bind("<Button-1>", on_click)
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.configure(cursor="hand2")
-        
+        title_label.pack(fill="x")
+        # Hover effect igual que en payments_view
+        def on_enter(e):
+            card_frame.configure(bg="#e3f2fd")
+            content_frame.configure(bg="#e3f2fd")
+            icon_label.configure(bg="#e3f2fd")
+            title_label.configure(bg="#e3f2fd")
+        def on_leave(e):
+            card_frame.configure(bg="white")
+            content_frame.configure(bg="white")
+            icon_label.configure(bg="white")
+            title_label.configure(bg="white")
+        card_frame.bind("<Enter>", on_enter)
+        card_frame.bind("<Leave>", on_leave)
+        for w in [content_frame, icon_label, title_label]:
+            w.bind("<Button-1>", lambda e: action())
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+            w.configure(cursor="hand2")
+        # Click
+        card_frame.bind("<Button-1>", lambda e: action())
         return card_frame
     
     def _get_tenant_statistics(self):
         """Obtiene estadísticas de inquilinos"""
-        from app.services.tenant_service import tenant_service
+        from manager.app.services.tenant_service import tenant_service
         return tenant_service.get_statistics()
     
     def refresh_dashboard(self):
@@ -880,26 +867,67 @@ class MainWindow:
             # Recrear la vista del dashboard
             self._create_dashboard_view()
     
-    def _calculate_net_balance(self):
-        """Calcula el saldo neto del mes (ingresos - gastos)"""
-        # Datos estáticos por ahora - se puede conectar con el servicio más tarde
-        ingresos = 15200  # $15,200
-        gastos = 3100     # $3,100
-        saldo_neto = ingresos - gastos
-        
-        # Formatear el valor
-        if saldo_neto >= 0:
-            value = f"${saldo_neto:,}"
-            theme = "success"  # Verde para positivo
-        else:
-            value = f"-${abs(saldo_neto):,}"
-            theme = "error"    # Rojo para negativo
-        
-        return {
-            "value": value,
-            "theme": theme
-        }
+    def _get_payments_of_current_month(self):
+        from manager.app.services.payment_service import PaymentService
+        import datetime
+        service = PaymentService()
+        now = datetime.datetime.now()
+        pagos = service.get_all_payments()
+        pagos_mes = [p for p in pagos if self._is_payment_in_current_month(p, now)]
+        total = sum(float(p.get('monto', 0)) for p in pagos_mes)
+        return total
+
+    def _is_payment_in_current_month(self, pago, now):
+        # fecha_pago formato 'DD/MM/YYYY'
+        try:
+            fecha = pago.get('fecha_pago', '')
+            if not fecha:
+                return False
+            dia, mes, anio = map(int, fecha.split('/'))
+            return mes == now.month and anio == now.year
+        except Exception:
+            return False
+    
+    def _show_register_payment_direct(self):
+        """Navega a la vista de pagos y abre directamente el registro de pago"""
+        # Limpiar contenido actual
+        self._update_nav_buttons("payments")
+        self.page_title.configure(text="Registrar pagos")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+        payments_view.pack(fill="both", expand=True)
+        payments_view._show_register_payment()
+    
+    def navigate_to_payments(self, tenant=None):
+        """Navega a la vista de pagos y abre el formulario con el inquilino preseleccionado si se proporciona."""
+        self._update_nav_buttons("payments")
+        self.page_title.configure(text="Registrar pagos")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"), preselected_tenant=tenant)
+        payments_view.pack(fill="both", expand=True)
+        payments_view._show_register_payment(preselected_tenant=tenant)
+    
+    def _show_register_expense_direct(self):
+        """Navega directamente al formulario de registrar gasto"""
+        self._update_nav_buttons("expenses")
+        self.page_title.configure(text="Registrar Gasto")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        from .register_expense_view import RegisterExpenseView
+        form = RegisterExpenseView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+        form.pack(fill="both", expand=True)
     
     def run(self):
         """Ejecuta la aplicación"""
         self.root.mainloop() 
+
+    def _get_expenses_of_current_month(self):
+        from manager.app.services.expense_service import ExpenseService
+        import datetime
+        service = ExpenseService()
+        now = datetime.datetime.now()
+        expenses = service.filter_expenses(year=now.year, month=now.month)
+        total = sum(float(e.get('monto', 0)) for e in expenses)
+        return total 

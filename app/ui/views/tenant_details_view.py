@@ -17,30 +17,25 @@ from ..components.modern_widgets import (
 class TenantDetailsView(tk.Frame):
     """Vista de detalles de inquilino"""
     
-    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None):
+    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         self.tenant_data = tenant_data
         self.on_back = on_back
         self.on_edit = on_edit
+        self.on_register_payment = on_register_payment
         
         # Crear layout
         self._create_layout()
     
     def _create_layout(self):
-        """Crea el layout principal de la vista"""
+        """Crea el layout principal de la vista (compacta y sin espacios extra)"""
         # Header con navegación
         self._create_header()
-        
-        # Separador
-        ModernSeparator(self)
-        
-        # Container principal con scroll
+        # Contenedor principal con scroll
         self._create_scroll_container()
-        
         # Contenido principal
         self._create_content()
-        
         # Botones de acción
         self._create_action_buttons()
     
@@ -107,10 +102,18 @@ class TenantDetailsView(tk.Frame):
         )
         status_badge.pack(side="left", padx=(Spacing.MD, 0))
         
-        # Botón editar
+        # Botones de acción
         actions_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
         actions_frame.pack(side="right")
         
+        btn_pdf = ModernButton(
+            actions_frame,
+            text="Generar Ficha PDF",
+            icon="📄",
+            style="pdf",
+            command=self._generate_pdf
+        )
+        btn_pdf.pack(side="right", padx=(0, Spacing.MD))
         btn_edit = ModernButton(
             actions_frame,
             text="Editar",
@@ -121,81 +124,61 @@ class TenantDetailsView(tk.Frame):
         btn_edit.pack(side="right")
     
     def _create_scroll_container(self):
-        """Crea el container con scroll"""
-        self.scroll_container = tk.Frame(self, **theme_manager.get_style("frame"))
-        self.scroll_container.pack(fill="both", expand=True, pady=(0, Spacing.LG))
+        """Crea el container con scroll vertical funcional y compacto"""
+        self.canvas = tk.Canvas(self, **theme_manager.get_style("frame"), highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True, pady=(0, 0), padx=(0, 0))
+        scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.scrollable_frame = tk.Frame(self.canvas, **theme_manager.get_style("frame"))
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
+        self.canvas.bind_all("<MouseWheel>", lambda event: self.canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
     
     def _create_content(self):
-        """Crea el contenido principal"""
-        # Grid de 2 columnas
-        content_grid = tk.Frame(self.scroll_container, **theme_manager.get_style("frame"))
-        content_grid.pack(fill="both", expand=True)
-        
-        # Columna izquierda
+        """Crea el contenido principal (aún más compacto, sin espacios extra)"""
+        content_grid = tk.Frame(self.scrollable_frame, **theme_manager.get_style("frame"))
+        content_grid.pack(fill="both", expand=True, pady=(0, 0), padx=(0, 0))
         left_column = tk.Frame(content_grid, **theme_manager.get_style("frame"))
-        left_column.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
-        
-        # Columna derecha
+        left_column.pack(side="left", fill="both", expand=True, padx=(0, 2))
         right_column = tk.Frame(content_grid, **theme_manager.get_style("frame"))
-        right_column.pack(side="right", fill="both", expand=True, padx=(Spacing.MD, 0))
-        
-        # Secciones de información
+        right_column.pack(side="right", fill="both", expand=True, padx=(2, 0))
         self._create_personal_info_section(left_column)
-        self._create_contact_info_section(left_column)
         self._create_emergency_contact_section(left_column)
-        
+        self._create_documents_section_simple(left_column)
         self._create_housing_info_section(right_column)
         self._create_payment_info_section(right_column)
-        self._create_documents_section_simple(right_column)
     
     def _create_personal_info_section(self, parent):
         """Crea la sección de información personal"""
         section = ModernCard(
             parent,
-            title="Información Personal",
-            subtitle="Datos básicos del inquilino"
+            title="Información Personal"
         )
-        section.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Información personal en formato de tabla
+        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.pack_configure(pady=(0, 0))
         info_data = [
             ("Nombre completo", self.tenant_data.get("nombre", "N/A")),
             ("Documento", self.tenant_data.get("numero_documento", "N/A")),
             ("Teléfono", self.tenant_data.get("telefono", "N/A")),
             ("Email", self.tenant_data.get("email", "N/A"))
         ]
-        
         for label, value in info_data:
             self._create_info_row(section.content_frame, label, value)
-    
-    def _create_contact_info_section(self, parent):
-        """Crea la sección de información de contacto"""
-        section = ModernCard(
-            parent,
-            title="Información de Contacto",
-            subtitle="Dirección y datos adicionales"
-        )
-        section.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Dirección
-        direccion = self.tenant_data.get("direccion", "No registrada")
-        self._create_info_row(section.content_frame, "Dirección", direccion)
     
     def _create_emergency_contact_section(self, parent):
         """Crea la sección de contacto de emergencia"""
         section = ModernCard(
             parent,
-            title="Contacto de Emergencia",
-            subtitle="Persona a contactar en caso de emergencia"
+            title="Contacto de Emergencia"
         )
-        section.pack(fill="x")
-        
-        # Información de contacto de emergencia
+        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.pack_configure(pady=(0, 0))
         emergency_data = [
             ("Nombre", self.tenant_data.get("contacto_emergencia_nombre", "No registrado")),
             ("Teléfono", self.tenant_data.get("contacto_emergencia_telefono", "No registrado"))
         ]
-        
         for label, value in emergency_data:
             self._create_info_row(section.content_frame, label, value)
     
@@ -203,12 +186,10 @@ class TenantDetailsView(tk.Frame):
         """Crea la sección de información de vivienda"""
         section = ModernCard(
             parent,
-            title="Información de Vivienda",
-            subtitle="Datos del apartamento y arriendo"
+            title="Información de Vivienda"
         )
-        section.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Información de vivienda
+        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.pack_configure(pady=(0, 0))
         valor_arriendo = self.tenant_data.get("valor_arriendo")
         housing_data = [
             ("Apartamento", self.tenant_data.get("apartamento", "N/A")),
@@ -216,7 +197,6 @@ class TenantDetailsView(tk.Frame):
             ("Fecha de ingreso", self.tenant_data.get("fecha_ingreso", "No registrada")),
             ("Estado de pago", self.tenant_data.get("estado_pago", "N/A").replace("_", " ").title())
         ]
-        
         for label, value in housing_data:
             self._create_info_row(section.content_frame, label, value)
     
@@ -224,209 +204,129 @@ class TenantDetailsView(tk.Frame):
         """Crea la sección de información de pagos"""
         section = ModernCard(
             parent,
-            title="Información de Pagos",
-            subtitle="Historial y estado de pagos"
+            title="Información de Pagos"
         )
-        section.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Información de pagos (expandir cuando tengamos servicio de pagos)
+        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.pack_configure(pady=(0, 0))
         payment_data = [
-            ("Último pago", "15/12/2024"),  # Mock data
-            ("Próximo vencimiento", "15/01/2025"),  # Mock data
-            ("Días de mora", "0" if self.tenant_data.get("estado_pago") == "al_dia" else "5")  # Mock logic
+            ("Último pago", "15/12/2024"),
+            ("Próximo vencimiento", "15/01/2025"),
+            ("Días de mora", "0" if self.tenant_data.get("estado_pago") == "al_dia" else "5")
         ]
-        
         for label, value in payment_data:
             self._create_info_row(section.content_frame, label, value)
-        
-        # Botón para ver historial completo
         btn_history = ModernButton(
             section.content_frame,
             text="Ver Historial Completo",
             icon=Icons.PAYMENT_RECEIVED,
             style="secondary",
-            command=self._view_payment_history
+            command=self._view_payment_history,
+            small=True
         )
-        btn_history.pack(pady=(Spacing.MD, 0))
+        btn_history.pack(anchor="w", pady=(2, 0), padx=(0, 0))
     
-    def _create_documents_section(self, parent):
-        """Crea la sección de documentos"""
-        try:
-            section = ModernCard(
-                parent,
-                title="Documentos Adjuntos",
-                subtitle="Archivos del inquilino"
-            )
-            section.pack(fill="x", pady=(0, Spacing.LG))
-            
-            # Obtener archivos reales del inquilino
-            archivos = self.tenant_data.get("archivos", {})
-            if isinstance(archivos, str):
-                # Si archivos es un string, intentar parsearlo como JSON
-                try:
-                    archivos = json.loads(archivos)
-                except:
-                    archivos = {}
-            
-            # Documentos disponibles
-            documentos = [
-                ("Documento de Identidad", "id", archivos.get("id")),
-                ("Contrato de Arrendamiento", "contract", archivos.get("contract"))
-            ]
-            
-            # Contar documentos disponibles
-            docs_count = sum(1 for _, _, path in documentos if path and str(path).strip())
-            total_docs = len(documentos)
-            
-            # Estado general de documentos
-            docs_frame = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
-            docs_frame.pack(fill="x", pady=(0, Spacing.MD))
-            
-            icon_text = "📄"  # Usar emoji simple en lugar de Icons.TENANT_DOCUMENTS por si hay problema
-            status_text = f"Documentos: {docs_count}/{total_docs}"
-            
-            if docs_count == total_docs and total_docs > 0:
-                color = theme_manager.themes[theme_manager.current_theme]["success"]
-                status_text += " ✓ Completos"
-            elif docs_count > 0:
-                color = theme_manager.themes[theme_manager.current_theme]["warning"] 
-                status_text += " ⚠ Incompletos"
-            else:
-                color = theme_manager.themes[theme_manager.current_theme]["error"]
-                status_text += " ✗ Faltantes"
-            
-            status_label = tk.Label(
-                docs_frame,
-                text=f"{icon_text} {status_text}",
-                fg=color,
+    def _create_documents_section_simple(self, parent):
+        section = ModernCard(
+            parent,
+            title="Documentos Adjuntos",
+        )
+        section.pack(fill="x")
+        archivos = self.tenant_data.get("archivos", {})
+        if isinstance(archivos, str):
+            try:
+                import json
+                archivos = json.loads(archivos)
+            except:
+                archivos = {}
+        doc_id = archivos.get("id") if archivos else None
+        doc_contract = archivos.get("contract") if archivos else None
+        id_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
+        id_row.pack(fill="x", pady=(0, 2))
+        id_label = tk.Label(
+            id_row,
+            text="• Documento de Identidad:",
+            **theme_manager.get_style("label_body")
+        )
+        id_label.pack(side="left")
+        if doc_id and str(doc_id).strip():
+            import os
+            filename = os.path.basename(str(doc_id))
+            id_status = tk.Label(
+                id_row,
+                text=f"✓ {filename}",
+                fg=theme_manager.themes[theme_manager.current_theme]["success"],
                 **theme_manager.get_style("frame")
             )
-            status_label.configure(font=("Segoe UI", 12, "bold"))
-            status_label.pack(anchor="w")
-            
-            # Lista de documentos individuales
-            for doc_name, doc_key, doc_path in documentos:
-                doc_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
-                doc_row.pack(fill="x", pady=(Spacing.XS, 0))
-                
-                # Nombre del documento
-                doc_label = tk.Label(
-                    doc_row,
-                    text=f"• {doc_name}:",
-                    **theme_manager.get_style("label_body")
-                )
-                doc_label.pack(side="left")
-                
-                # Estado y archivo
-                if doc_path and str(doc_path).strip():
-                    # Extraer solo el nombre del archivo
-                    try:
-                        file_name = os.path.basename(str(doc_path)) if doc_path else "Archivo"
-                    except:
-                        file_name = "Archivo adjunto"
-                    
-                    # Mostrar nombre del archivo
-                    file_label = tk.Label(
-                        doc_row,
-                        text=file_name,
-                        fg=theme_manager.themes[theme_manager.current_theme]["text_secondary"],
-                        **theme_manager.get_style("frame")
-                    )
-                    file_label.configure(font=("Segoe UI", 10, "normal"))
-                    file_label.pack(side="right", padx=(Spacing.XS, 0))
-                    
-                    # Icono de éxito
-                    status_icon = tk.Label(
-                        doc_row,
-                        text="✓",
-                        fg=theme_manager.themes[theme_manager.current_theme]["success"],
-                        **theme_manager.get_style("frame")
-                    )
-                    status_icon.configure(font=("Segoe UI", 12, "bold"))
-                    status_icon.pack(side="right")
-                else:
-                    # No hay archivo
-                    no_file_label = tk.Label(
-                        doc_row,
-                        text="No adjuntado",
-                        fg=theme_manager.themes[theme_manager.current_theme]["text_tertiary"],
-                        **theme_manager.get_style("frame")
-                    )
-                    no_file_label.configure(font=("Segoe UI", 10, "italic"))
-                    no_file_label.pack(side="right", padx=(Spacing.XS, 0))
-                    
-                    # Icono de falta
-                    status_icon = tk.Label(
-                        doc_row,
-                        text="✗",
-                        fg=theme_manager.themes[theme_manager.current_theme]["error"],
-                        **theme_manager.get_style("frame")
-                    )
-                    status_icon.configure(font=("Segoe UI", 12, "bold"))
-                    status_icon.pack(side="right")
-            
-            # Botón para gestionar documentos
-            btn_docs = ModernButton(
-                section.content_frame,
-                text="Gestionar Documentos",
-                icon=Icons.UPLOAD,
-                style="secondary",
-                command=self._manage_documents
+        else:
+            id_status = tk.Label(
+                id_row,
+                text="✗ No adjuntado",
+                fg=theme_manager.themes[theme_manager.current_theme]["error"],
+                **theme_manager.get_style("frame")
             )
-            btn_docs.pack(pady=(Spacing.MD, 0))
-            
-        except Exception as e:
-            # Si hay error, crear una sección simple
-            print(f"Error creando sección de documentos: {e}")
-            simple_section = ModernCard(
-                parent,
-                title="Documentos",
-                subtitle="Sección en desarrollo"
+        id_status.pack(side="right")
+        contract_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
+        contract_row.pack(fill="x", pady=(0, 2))
+        contract_label = tk.Label(
+            contract_row,
+            text="• Contrato de Arrendamiento:",
+            **theme_manager.get_style("label_body")
+        )
+        contract_label.pack(side="left")
+        if doc_contract and str(doc_contract).strip():
+            import os
+            filename = os.path.basename(str(doc_contract))
+            contract_status = tk.Label(
+                contract_row,
+                text=f"✓ {filename}",
+                fg=theme_manager.themes[theme_manager.current_theme]["success"],
+                **theme_manager.get_style("frame")
             )
-            simple_section.pack(fill="x", pady=(0, Spacing.LG))
-            
-            error_label = tk.Label(
-                simple_section.content_frame,
-                text="Error al cargar documentos. Funcionalidad en desarrollo.",
-                **theme_manager.get_style("label_body")
+        else:
+            contract_status = tk.Label(
+                contract_row,
+                text="✗ No adjuntado",
+                fg=theme_manager.themes[theme_manager.current_theme]["error"],
+                **theme_manager.get_style("frame")
             )
-            error_label.pack()
+        contract_status.pack(side="right")
+        btn_docs = ModernButton(
+            section.content_frame,
+            text="Gestionar Documentos",
+            icon=Icons.UPLOAD,
+            style="secondary",
+            command=self._manage_documents,
+            small=True
+        )
+        btn_docs.pack(anchor="w", pady=(2, 0), padx=(0, 0))
     
     def _create_info_row(self, parent, label: str, value: str):
-        """Crea una fila de información"""
+        """Crea una fila de información ultra compacta"""
         row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
-        row_frame.pack(fill="x", pady=(0, Spacing.SM))
-        
+        row_frame.pack(fill="x", pady=(0, 0), ipady=0, ipadx=0)
         # Label
         label_widget = tk.Label(
             row_frame,
             text=f"{label}:",
             **theme_manager.get_style("label_body")
         )
-        label_widget.configure(font=("Segoe UI", 12, "bold"))
-        label_widget.pack(side="left")
-        
+        label_widget.configure(font=("Segoe UI", 10, "bold"), pady=0, padx=0)
+        label_widget.pack(side="left", padx=(0, 2))
         # Value
         value_widget = tk.Label(
             row_frame,
             text=str(value),
             **theme_manager.get_style("label_body")
         )
-        value_widget.pack(side="right")
+        value_widget.configure(font=("Segoe UI", 10), pady=0, padx=0)
+        value_widget.pack(side="right", padx=(0, 2))
     
     def _create_action_buttons(self):
-        """Crea los botones de acción"""
+        """Crea los botones de acción (sin espacio extra arriba)"""
         actions_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        actions_frame.pack(fill="x", pady=(Spacing.LG, 0))
-        
-        # Separador
-        ModernSeparator(actions_frame)
-        
-        # Botones
+        actions_frame.pack(fill="x", pady=(0, 0))
         buttons_frame = tk.Frame(actions_frame, **theme_manager.get_style("frame"))
-        buttons_frame.pack(pady=(Spacing.MD, 0))
-        
-        # Botón registrar pago
+        buttons_frame.pack(pady=(0, 0))
         btn_payment = ModernButton(
             buttons_frame,
             text="Registrar Pago",
@@ -435,8 +335,6 @@ class TenantDetailsView(tk.Frame):
             command=self._register_payment
         )
         btn_payment.pack(side="left")
-        
-        # Botón generar recibo
         btn_receipt = ModernButton(
             buttons_frame,
             text="Generar Recibo",
@@ -445,8 +343,6 @@ class TenantDetailsView(tk.Frame):
             command=self._generate_receipt
         )
         btn_receipt.pack(side="left", padx=(Spacing.SM, 0))
-        
-        # Botón enviar notificación
         btn_notify = ModernButton(
             buttons_frame,
             text="Enviar Notificación",
@@ -476,8 +372,10 @@ class TenantDetailsView(tk.Frame):
         messagebox.showinfo("Info", "Gestión de documentos en desarrollo")
     
     def _register_payment(self):
-        """Registra un nuevo pago"""
-        messagebox.showinfo("Info", "Registro de pagos en desarrollo")
+        if hasattr(self, 'on_register_payment') and self.on_register_payment:
+            self.on_register_payment(self.tenant_data)
+        else:
+            messagebox.showinfo("Navegación", "No se pudo navegar al módulo de pagos.")
     
     def _generate_receipt(self):
         """Genera un recibo"""
@@ -486,95 +384,88 @@ class TenantDetailsView(tk.Frame):
     def _send_notification(self):
         """Envía notificación al inquilino"""
         messagebox.showinfo("Info", "Envío de notificaciones en desarrollo")
-    
-    def _create_documents_section_simple(self, parent):
-        """Crea la sección de documentos de forma simple y segura"""
-        section = ModernCard(
-            parent,
-            title="Documentos Adjuntos",
-            subtitle="Archivos del inquilino"
-        )
-        section.pack(fill="x")
-        
-        # Obtener archivos del inquilino
-        archivos = self.tenant_data.get("archivos", {})
-        
-        # Si archivos es string, intentar convertir a dict
+
+    def _generate_pdf(self):
+        """Genera la ficha PDF del inquilino"""
+        import os
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from tkinter import messagebox
+        from datetime import datetime
+
+        tenant = self.tenant_data
+        nombre = tenant.get("nombre", "Inquilino").replace(" ", "_")
+        apartamento = str(tenant.get("apartamento", "N/A")).replace(" ", "_")
+        filename = f"ficha_{nombre}_{apartamento}.pdf"
+        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../fichas'))
+        os.makedirs(folder, exist_ok=True)
+        filepath = os.path.join(folder, filename)
+
+        c = canvas.Canvas(filepath, pagesize=letter)
+        width, height = letter
+        y = height - 40
+        c.setFont("Helvetica-Bold", 18)
+        c.drawString(40, y, "Ficha de Inquilino")
+        c.setFont("Helvetica", 10)
+        c.drawString(40, y-20, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        y -= 50
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "Información Personal")
+        c.setFont("Helvetica", 11)
+        y -= 18
+        c.drawString(50, y, f"Nombre: {tenant.get('nombre', '')}")
+        y -= 15
+        c.drawString(50, y, f"Documento: {tenant.get('numero_documento', '')}")
+        y -= 15
+        c.drawString(50, y, f"Teléfono: {tenant.get('telefono', '')}")
+        y -= 15
+        c.drawString(50, y, f"Email: {tenant.get('email', '')}")
+        y -= 25
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "Información de Vivienda")
+        c.setFont("Helvetica", 11)
+        y -= 18
+        c.drawString(50, y, f"Apartamento: {tenant.get('apartamento', '')}")
+        y -= 15
+        c.drawString(50, y, f"Valor arriendo: {tenant.get('valor_arriendo', '')}")
+        y -= 15
+        c.drawString(50, y, f"Fecha de ingreso: {tenant.get('fecha_ingreso', '')}")
+        y -= 15
+        c.drawString(50, y, f"Estado de pago: {tenant.get('estado_pago', '')}")
+        y -= 25
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "Contacto de Emergencia")
+        c.setFont("Helvetica", 11)
+        y -= 18
+        c.drawString(50, y, f"Nombre: {tenant.get('contacto_emergencia_nombre', '')}")
+        y -= 15
+        c.drawString(50, y, f"Teléfono: {tenant.get('contacto_emergencia_telefono', '')}")
+        y -= 25
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "Información de Pagos")
+        c.setFont("Helvetica", 11)
+        y -= 18
+        c.drawString(50, y, f"Último pago: {tenant.get('ultimo_pago', 'N/A')}")
+        y -= 15
+        c.drawString(50, y, f"Próximo vencimiento: {tenant.get('proximo_vencimiento', 'N/A')}")
+        y -= 15
+        c.drawString(50, y, f"Días de mora: {tenant.get('dias_mora', '0')}")
+        y -= 25
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "Documentos Adjuntos")
+        c.setFont("Helvetica", 11)
+        y -= 18
+        archivos = tenant.get('archivos', {})
         if isinstance(archivos, str):
+            import json
             try:
-                import json
                 archivos = json.loads(archivos)
             except:
                 archivos = {}
-        
-        # Lista de documentos
-        doc_id = archivos.get("id") if archivos else None
-        doc_contract = archivos.get("contract") if archivos else None
-        
-        # Documento de Identidad
-        id_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
-        id_row.pack(fill="x", pady=(0, Spacing.SM))
-        
-        id_label = tk.Label(
-            id_row,
-            text="• Documento de Identidad:",
-            **theme_manager.get_style("label_body")
-        )
-        id_label.pack(side="left")
-        
-        if doc_id and str(doc_id).strip():
-            import os
-            filename = os.path.basename(str(doc_id))
-            id_status = tk.Label(
-                id_row,
-                text=f"✓ {filename}",
-                fg=theme_manager.themes[theme_manager.current_theme]["success"],
-                **theme_manager.get_style("frame")
-            )
-        else:
-            id_status = tk.Label(
-                id_row,
-                text="✗ No adjuntado",
-                fg=theme_manager.themes[theme_manager.current_theme]["error"],
-                **theme_manager.get_style("frame")
-            )
-        id_status.pack(side="right")
-        
-        # Contrato de Arrendamiento
-        contract_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
-        contract_row.pack(fill="x", pady=(0, Spacing.SM))
-        
-        contract_label = tk.Label(
-            contract_row,
-            text="• Contrato de Arrendamiento:",
-            **theme_manager.get_style("label_body")
-        )
-        contract_label.pack(side="left")
-        
-        if doc_contract and str(doc_contract).strip():
-            import os
-            filename = os.path.basename(str(doc_contract))
-            contract_status = tk.Label(
-                contract_row,
-                text=f"✓ {filename}",
-                fg=theme_manager.themes[theme_manager.current_theme]["success"],
-                **theme_manager.get_style("frame")
-            )
-        else:
-            contract_status = tk.Label(
-                contract_row,
-                text="✗ No adjuntado",
-                fg=theme_manager.themes[theme_manager.current_theme]["error"],
-                **theme_manager.get_style("frame")
-            )
-        contract_status.pack(side="right")
-        
-        # Botón gestionar documentos
-        btn_docs = ModernButton(
-            section.content_frame,
-            text="Gestionar Documentos",
-            icon=Icons.UPLOAD,
-            style="secondary",
-            command=self._manage_documents
-        )
-        btn_docs.pack(pady=(Spacing.MD, 0))
+        doc_id = archivos.get('id')
+        doc_contract = archivos.get('contract')
+        c.drawString(50, y, f"Documento de Identidad: {'Adjuntado' if doc_id else 'No adjuntado'}")
+        y -= 15
+        c.drawString(50, y, f"Contrato de Arrendamiento: {'Adjuntado' if doc_contract else 'No adjuntado'}")
+        c.save()
+        messagebox.showinfo("PDF generado", f"Ficha PDF generada exitosamente:\n{filepath}")
