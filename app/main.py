@@ -12,7 +12,7 @@ from pathlib import Path
 app_dir = Path(__file__).parent
 sys.path.insert(0, str(app_dir))
 
-from ui.views.main_window import MainWindow
+from manager.app.ui.views.main_window import MainWindow
 from config.settings import Settings
 
 class BuildingManagerApp:
