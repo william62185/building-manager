@@ -1,0 +1,72 @@
+[
+  {
+    "fecha": "2025-06-15",
+    "categoria": "Servicios públicos",
+    "subtipo": "Acueducto y alcantarillado",
+    "apartamento": "102",
+    "monto": 60000.0,
+    "descripcion": "pagado",
+    "documento": null,
+    "id": 3
+  },
+  {
+    "fecha": "2025-06-16",
+    "categoria": "Reparaciones",
+    "subtipo": "Techo",
+    "apartamento": "101",
+    "monto": 2050000.0,
+    "descripcion": "ajuste del techo dañado por el viento",
+    "documento": null,
+    "id": 4
+  },
+  {
+    "fecha": "2025-06-16",
+    "categoria": "Mantenimiento",
+    "subtipo": "Jardinería",
+    "apartamento": "---",
+    "monto": 35000.0,
+    "descripcion": "pintada de reja",
+    "documento": null,
+    "id": 6
+  },
+  {
+    "fecha": "2025-06-16",
+    "categoria": "Servicios públicos",
+    "subtipo": "Gas domiciliario",
+    "apartamento": "102",
+    "monto": 25000.0,
+    "descripcion": "servicio de gas",
+    "documento": "C:\\Users\\Will\\building_manager_cursor\\manager\\gastos_docs\\gasto_20250616_215623_flask_logo.pdf",
+    "id": 7
+  },
+  {
+    "fecha": "2025-06-15",
+    "categoria": "Servicios públicos",
+    "subtipo": "Aseo/Residuos",
+    "apartamento": "106",
+    "monto": 34000.0,
+    "descripcion": "acueducto y alcantarillado",
+    "documento": null,
+    "id": 8
+  },
+  {
+    "fecha": "2025-06-16",
+    "categoria": "Servicios públicos",
+    "subtipo": "Energía eléctrica",
+    "apartamento": "101",
+    "monto": 55000.0,
+    "descripcion": "energia-online",
+    "documento": null,
+    "id": 9
+  },
+  {
+    "fecha": "2025-06-16",
+    "categoria": "Otros",
+    "subtipo": "Papelería y suministros",
+    "apartamento": "201",
+    "monto": 35000.0,
+    "descripcion": "un cartucho para impresora",
+    "documento": null,
+    "id": 10
+  }
+]

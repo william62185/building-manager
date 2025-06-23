@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1,
+    "id_inquilino": 1,
+    "nombre_inquilino": "Adriana pinto",
+    "fecha_pago": "16/06/2025",
+    "monto": 600000.0,
+    "metodo": "Efectivo",
+    "observaciones": "",
+    "creado_en": "2025-06-16T16:46:21.260624",
+    "actualizado_en": "2025-06-16T16:46:21.260634"
+  }
+]
