@@ -12,15 +12,17 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from .edit_delete_payments_view import EditDeletePaymentsView
+from manager.app.services.apartment_service import apartment_service
 
 class PaymentsView(tk.Frame):
     """Vista profesional para gestión de pagos de inquilinos"""
-    def __init__(self, parent, on_back=None, preselected_tenant=None):
+    def __init__(self, parent, on_back=None, preselected_tenant=None, on_payment_saved=None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         self.payment_service = PaymentService()
         self.tenant_service = TenantService()
         self.on_back = on_back
         self.preselected_tenant = preselected_tenant
+        self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
         self._create_layout()
         # self._load_payments()  # Eliminado: solo se usará en la funcionalidad específica
 
@@ -137,7 +139,10 @@ class PaymentsView(tk.Frame):
         if preselected_tenant is None:
             self.selected_tenant = None
         else:
-            self.selected_tenant = preselected_tenant
+            # Buscar el inquilino por ID en self.tenants para asegurar coincidencia por referencia
+            tenant_id = preselected_tenant.get('id')
+            match = next((t for t in self.tenants if t.get('id') == tenant_id), None)
+            self.selected_tenant = match if match else preselected_tenant
         # Sección central: formulario de pago (padding mínimo)
         self.form_frame = tk.Frame(self, **theme_manager.get_style("card"))
         self.form_frame.pack(fill="x", padx=2, pady=(0, 2))
@@ -235,9 +240,19 @@ class PaymentsView(tk.Frame):
             row_bg.grid(row=row_idx, column=0, columnspan=len(columns), sticky="nsew")
             nombre = payment.get('nombre_inquilino', '')
             apto = ''
+            # Buscar apartamento real del inquilino
             for t in self.tenants:
                 if t['id'] == payment['id_inquilino']:
-                    apto = t.get('apartamento', '')
+                    apt_id = t.get('apartamento', '')
+                    if apt_id:
+                        try:
+                            apt = apartment_service.get_apartment_by_id(int(apt_id))
+                            if apt and 'number' in apt:
+                                apto = apt['number']
+                            else:
+                                apto = apt_id
+                        except Exception:
+                            apto = apt_id
                     break
             values = [
                 f"{nombre} (Apt. {apto})",
@@ -276,13 +291,29 @@ class PaymentsView(tk.Frame):
             "metodo": self.metodo_var.get(),
             "observaciones": self.obs_var.get()
         }
-        self.payment_service.add_payment(data)
+        
+        # Verificar si ya existe un pago similar (prevenir duplicados)
+        existing_payments = self.payment_service.get_payments_by_tenant(data.get('id_inquilino'))
+        for payment in existing_payments:
+            if (payment.get('fecha_pago') == data.get('fecha_pago') and 
+                payment.get('monto') == data.get('monto')):
+                messagebox.showwarning("Advertencia", "Ya existe un pago con la misma fecha y monto para este inquilino.")
+                return
+        
+        # Registrar el pago (esto también actualiza automáticamente el estado del inquilino)
+        payment_result = self.payment_service.add_payment(data)
+        
         # Generar PDF profesional del recibo
         pdf_path = self._generate_payment_receipt_pdf(data)
         # Mostrar mensaje y preguntar si desea abrir el PDF
         if messagebox.askyesno("Recibo generado", f"Recibo PDF generado exitosamente:\n{pdf_path}\n\n¿Desea abrir el recibo ahora?"):
             webbrowser.open_new(pdf_path)
         messagebox.showinfo("Éxito", "Pago registrado correctamente.")
+        
+        # Llamar callback para actualizar otras vistas DESPUÉS de que todo se guarde
+        if self.on_payment_saved:
+            self.on_payment_saved()
+        
         self._display_register_payments(self._get_all_payments())
         self.fecha_var.set(datetime.now().strftime("%d/%m/%Y"))
         self.monto_var.set(str(self.selected_tenant.get('valor_arriendo', '')))
@@ -349,7 +380,11 @@ class PaymentsView(tk.Frame):
         # Limpiar vista y mostrar la vista profesional de edición/eliminación de pagos
         for widget in self.winfo_children():
             widget.destroy()
-        edit_delete_view = EditDeletePaymentsView(self, on_back=self._create_layout)
+        edit_delete_view = EditDeletePaymentsView(
+            self, 
+            on_back=self._create_layout,
+            on_payment_saved=self.on_payment_saved
+        )
         edit_delete_view.pack(fill="both", expand=True)
 
     def _show_reports(self):
@@ -614,10 +649,19 @@ class PaymentsManagerWindow(tk.Toplevel):
             # Mostrar nombre y apartamento
             nombre = payment.get('nombre_inquilino', '')
             apto = ''
-            # Buscar apartamento del inquilino
+            # Buscar apartamento real del inquilino
             for t in self.tenants:
                 if t['id'] == payment['id_inquilino']:
-                    apto = t.get('apartamento', '')
+                    apt_id = t.get('apartamento', '')
+                    if apt_id:
+                        try:
+                            apt = apartment_service.get_apartment_by_id(int(apt_id))
+                            if apt and 'number' in apt:
+                                apto = apt['number']
+                            else:
+                                apto = apt_id
+                        except Exception:
+                            apto = apt_id
                     break
             tk.Label(info, text=f"{nombre} (Apt. {apto})", font=("Segoe UI", 11, "bold"), fg="#222").pack(side="left", padx=(0, Spacing.LG))
             tk.Label(info, text=f"{payment['fecha_pago']}", font=("Segoe UI", 10), fg="#1976d2").pack(side="left")

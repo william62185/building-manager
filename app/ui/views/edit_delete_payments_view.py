@@ -10,11 +10,12 @@ from manager.app.services.tenant_service import TenantService
 
 class EditDeletePaymentsView(tk.Frame):
     """Vista profesional para editar/eliminar pagos (independiente, duplicado de registrar pago)"""
-    def __init__(self, parent, on_back=None):
+    def __init__(self, parent, on_back=None, on_payment_saved=None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         self.payment_service = PaymentService()
         self.tenant_service = TenantService()
         self.on_back = on_back
+        self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
         self.selected_tenant = None
         self.editing_payment = None
         self._create_layout()
@@ -220,6 +221,11 @@ class EditDeletePaymentsView(tk.Frame):
         data['observaciones'] = obs
         self.payment_service.update_payment(self.editing_payment['id'], data)
         messagebox.showinfo("Éxito", "Pago actualizado correctamente.")
+        
+        # Llamar callback para actualizar otras vistas (como la lista de inquilinos)
+        if self.on_payment_saved:
+            self.on_payment_saved()
+        
         self.editing_payment = None
         # Limpiar el formulario de edición y ocultar el contenedor
         for widget in self.edit_placeholder.winfo_children():
@@ -244,6 +250,11 @@ class EditDeletePaymentsView(tk.Frame):
             success = self.payment_service.delete_payment(payment['id'])
             if success:
                 messagebox.showinfo("Eliminado", "Pago eliminado correctamente.")
+                
+                # Llamar callback para actualizar otras vistas (como la lista de inquilinos)
+                if self.on_payment_saved:
+                    self.on_payment_saved()
+                
                 self._create_payments_list()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el pago.")

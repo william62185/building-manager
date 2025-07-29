@@ -49,6 +49,17 @@ class PaymentService:
         }
         self.payments.append(payment)
         self._save_data()
+        
+        # Actualizar automáticamente el estado del inquilino
+        tenant_id = payment_data.get("id_inquilino")
+        if tenant_id:
+            try:
+                from manager.app.services.tenant_service import tenant_service
+                tenant_service.update_payment_status(tenant_id)
+                print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id}")
+            except Exception as e:
+                print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+        
         return payment.copy()
 
     def update_payment(self, payment_id: int, payment_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -58,13 +69,44 @@ class PaymentService:
                     self.payments[i][key] = value
                 self.payments[i]["actualizado_en"] = datetime.now().isoformat()
                 self._save_data()
+                
+                # Actualizar automáticamente el estado del inquilino
+                tenant_id = payment_data.get("id_inquilino")
+                if tenant_id:
+                    try:
+                        from manager.app.services.tenant_service import tenant_service
+                        tenant_service.update_payment_status(tenant_id)
+                        print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id}")
+                    except Exception as e:
+                        print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+                
                 return self.payments[i].copy()
         return None
 
     def delete_payment(self, payment_id: int) -> bool:
+        # Obtener el inquilino antes de eliminar el pago
+        tenant_id = None
+        for payment in self.payments:
+            if payment.get("id") == payment_id:
+                tenant_id = payment.get("id_inquilino")
+                break
+        
         initial_count = len(self.payments)
         self.payments = [p for p in self.payments if p.get("id") != payment_id]
         if len(self.payments) < initial_count:
             self._save_data()
+            
+            # Actualizar automáticamente el estado del inquilino después de eliminar el pago
+            if tenant_id:
+                try:
+                    from manager.app.services.tenant_service import tenant_service
+                    tenant_service.update_payment_status(tenant_id)
+                    print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id} después de eliminar pago")
+                except Exception as e:
+                    print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+            
             return True
         return False 
+
+# Instancia global del servicio
+payment_service = PaymentService() 

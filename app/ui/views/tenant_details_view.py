@@ -13,6 +13,8 @@ from ..components.icons import Icons
 from ..components.modern_widgets import (
     ModernButton, ModernCard, ModernBadge, ModernSeparator
 )
+from manager.app.services.apartment_service import apartment_service
+from manager.app.services.building_service import building_service
 
 class TenantDetailsView(tk.Frame):
     """Vista de detalles de inquilino"""
@@ -74,9 +76,26 @@ class TenantDetailsView(tk.Frame):
         info_frame = tk.Frame(title_frame, **theme_manager.get_style("frame"))
         info_frame.pack(anchor="w", pady=(Spacing.XS, 0))
         
+        # --- Display amigable del apartamento ---
+        apt_id = self.tenant_data.get('apartamento', None)
+        apt_display = 'N/A'
+        if apt_id is not None:
+            apt = apartment_service.get_apartment_by_id(apt_id)
+            if apt:
+                building = building_service.get_building_by_id(apt.get('building_id')) if hasattr(building_service, 'get_building_by_id') else None
+                if not building:
+                    all_buildings = building_service.get_all_buildings()
+                    building = next((b for b in all_buildings if b.get('id') == apt.get('building_id')), None)
+                building_name = building.get('name') if building else ''
+                tipo = apt.get('unit_type', 'Apartamento Estándar')
+                numero = apt.get('number', '')
+                if building_name:
+                    apt_display = f"{building_name} - {tipo} {numero}" if tipo != 'Apartamento Estándar' else f"{building_name} - {numero}"
+                else:
+                    apt_display = f"{tipo} {numero}" if tipo != 'Apartamento Estándar' else str(numero)
         apt_label = tk.Label(
             info_frame,
-            text=f"Apartamento {self.tenant_data.get('apartamento', 'N/A')}",
+            text=apt_display,
             **theme_manager.get_style("label_subtitle")
         )
         apt_label.pack(side="left")
@@ -85,13 +104,15 @@ class TenantDetailsView(tk.Frame):
         status_colors = {
             "al_dia": "success",
             "moroso": "danger",
-            "inactivo": "neutral"
+            "inactivo": "neutral",
+            "pendiente_registro": "warning"
         }
         
         status_texts = {
             "al_dia": "Al día",
             "moroso": "Moroso",
-            "inactivo": "Inactivo"
+            "inactivo": "Inactivo",
+            "pendiente_registro": "Pendiente Registro"
         }
         
         status = self.tenant_data.get("estado_pago", "al_dia")
@@ -191,9 +212,34 @@ class TenantDetailsView(tk.Frame):
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
         section.content_frame.pack_configure(pady=(0, 0))
         valor_arriendo = self.tenant_data.get("valor_arriendo")
+        # --- Display amigable del apartamento ---
+        apt_id = self.tenant_data.get('apartamento', None)
+        apt_display = 'N/A'
+        if apt_id is not None:
+            apt = apartment_service.get_apartment_by_id(apt_id)
+            if apt:
+                building = building_service.get_building_by_id(apt.get('building_id')) if hasattr(building_service, 'get_building_by_id') else None
+                if not building:
+                    all_buildings = building_service.get_all_buildings()
+                    building = next((b for b in all_buildings if b.get('id') == apt.get('building_id')), None)
+                building_name = building.get('name') if building else ''
+                tipo = apt.get('unit_type', 'Apartamento Estándar')
+                numero = apt.get('number', '')
+                if building_name:
+                    apt_display = f"{building_name} - {tipo} {numero}" if tipo != 'Apartamento Estándar' else f"{building_name} - {numero}"
+                else:
+                    apt_display = f"{tipo} {numero}" if tipo != 'Apartamento Estándar' else str(numero)
+        # --- Formatear valor_arriendo de forma segura ---
+        valor_arriendo_display = "No registrado"
+        if valor_arriendo is not None and valor_arriendo != "":
+            try:
+                valor_arriendo_num = float(valor_arriendo)
+                valor_arriendo_display = f"${valor_arriendo_num:,.0f}"
+            except Exception:
+                valor_arriendo_display = str(valor_arriendo)
         housing_data = [
-            ("Apartamento", self.tenant_data.get("apartamento", "N/A")),
-            ("Valor arriendo", f"${valor_arriendo:,}" if valor_arriendo else "No registrado"),
+            ("Apartamento", apt_display),
+            ("Valor arriendo", valor_arriendo_display),
             ("Fecha de ingreso", self.tenant_data.get("fecha_ingreso", "No registrada")),
             ("Estado de pago", self.tenant_data.get("estado_pago", "N/A").replace("_", " ").title())
         ]

@@ -1,0 +1,38 @@
+[
+    {
+        "id": 1,
+        "name": "Edificio del Oso Tubarão",
+        "floor_count": 5,
+        "apartment_count": 9,
+        "special_unit_count": 1,
+        "floors": [
+            {
+                "floor_number": 1,
+                "apartment_count": 1
+            },
+            {
+                "floor_number": 2,
+                "apartment_count": 2
+            },
+            {
+                "floor_number": 3,
+                "apartment_count": 2
+            },
+            {
+                "floor_number": 4,
+                "apartment_count": 2
+            },
+            {
+                "floor_number": 5,
+                "apartment_count": 2
+            }
+        ],
+        "special_units": [
+            {
+                "name": "Local 1",
+                "type": "Local",
+                "floor": "1"
+            }
+        ]
+    }
+]

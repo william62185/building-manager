@@ -18,6 +18,12 @@ from manager.app.services.expense_service import ExpenseService
 from .payments_view import PaymentsView
 from .tenants_view import TenantsView
 from .expenses_view import ExpensesView
+from .apartment_management_view import ApartmentManagementView
+from .building_setup_view import BuildingSetupView
+from .apartment_form_view import ApartmentFormView
+from .apartments_list_view import ApartmentsListView
+from .building_management_view import BuildingManagementView
+from .deactivate_tenant_view import DeactivateTenantView
 
 class MainWindow:
     """Ventana principal con diseño profesional"""
@@ -406,6 +412,10 @@ class MainWindow:
         
         # Cargar nueva vista
         self._load_view(view_name)
+        
+        # Forzar actualización especial para la vista de inquilinos
+        if view_name == "tenants":
+            self.root.after(500, self._force_tenants_refresh)
     
     def _update_nav_buttons(self, active_view: str):
         """Actualiza el estado visual de los botones de navegación"""
@@ -433,8 +443,15 @@ class MainWindow:
             self._create_dashboard_view()
         elif view_name == "tenants":
             self._create_tenants_view()
+            # Forzar actualización después de cargar la vista de inquilinos
+            self.root.after(100, self.root.update_idletasks)
+            self.root.after(200, self.root.update)
         elif view_name == "payments":
-            payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+            payments_view = PaymentsView(
+                self.views_container, 
+                on_back=lambda: self._navigate_to("dashboard"),
+                on_payment_saved=self.refresh_tenants_view
+            )
             payments_view.pack(fill="both", expand=True)
         elif view_name == "expenses":
             expenses_view = ExpensesView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
@@ -543,92 +560,91 @@ class MainWindow:
             on_register_payment=self.navigate_to_payments
         )
         tenants_view.pack(fill="both", expand=True)
+        
+        # Forzar actualización después de crear la vista
+        self.root.update_idletasks()
+        self.root.update()
     
     def _create_administration_view(self):
         """Crea la vista de administración"""
         # Grid de acciones administrativas
         self._create_administration_actions_grid()
     
-    def _create_administration_view(self):
-        """Crea la vista de administración"""
-        # Grid de acciones administrativas
+    def _create_administration_actions_grid(self):
+        """Crea el grid de acciones administrativas"""
         admin_frame = tk.Frame(self.views_container, **theme_manager.get_style("frame"))
         admin_frame.pack(fill="both", expand=True)
+
+        # Verificar si ya existe un edificio para la versión profesional
+        from manager.app.services.building_service import building_service
+        has_existing_building = building_service.has_buildings()
+
+        actions_grid = [
+            {
+                "icon": "🏗️",
+                "title": "Crear Nuevo Edificio",
+                "color": "#8b5cf6",
+                "action": self._show_building_setup_view,
+                "enabled": not has_existing_building,  # Deshabilitar si ya existe un edificio
+                "disabled_message": "Ya existe un edificio configurado"
+            },
+            {
+                "icon": "🏢",
+                "title": "Gestionar Edificio" if has_existing_building else "Gestionar Edificios",
+                "color": "#6366f1",
+                "action": self._show_building_management_view,
+                "enabled": True
+            },
+            {
+                "icon": "🛋️",
+                "title": "Gestión de Apartamentos",
+                "color": "#3b82f6",
+                "action": self._show_apartment_management_view,
+                "enabled": True
+            },
+            {
+                "icon": "💾",
+                "title": "Backup de Datos",
+                "color": "#10b981",
+                "action": lambda: self._show_placeholder_dialog("Backup de Datos", "Funcionalidad en desarrollo"),
+                "enabled": True
+            },
+            {
+                "icon": "👥",
+                "title": "Desactivar Inquilino",
+                "color": "#ef4444",
+                "action": self._show_deactivate_tenant_form,
+                "enabled": True
+            },
+            {
+                "icon": "🔔",
+                "title": "Notificaciones",
+                "color": "#f59e0b",
+                "action": lambda: self._show_placeholder_dialog("Gestión de Notificaciones", "Funcionalidad en desarrollo"),
+                "enabled": True
+            },
+            {
+                "icon": "⚙️",
+                "title": "Gestión de Usuarios",
+                "color": "#6366f1",
+                "action": lambda: self._show_placeholder_dialog("Gestión de Usuarios", "Funcionalidad en desarrollo"),
+                "enabled": True
+            }
+        ]
         
-        # Título de la sección
-        title_label = tk.Label(
-            admin_frame,
-            text="Herramientas de Administración",
-            **theme_manager.get_style("label_title")
-        )
-        title_label.configure(font=("Segoe UI", 18, "bold"))
-        title_label.pack(anchor="w", pady=(0, Spacing.LG))
-        
-        # Contenedor del grid con distribución uniforme
-        grid_container = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
-        grid_container.pack(fill="both", expand=True)
-        
-        # Primera fila de cards
-        row1 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row1.pack(fill="both", expand=True, pady=(0, Spacing.MD))
-        
-        # Card 1: Desactivar Inquilino
-        self._create_admin_action_card(
-            row1,
-            "⚠️",
-            "Desactivar Inquilino",
-            "#dc2626",
-            lambda: self._show_deactivate_tenant_form()
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 2: Gestión de Apartamentos (futuro)
-        self._create_admin_action_card(
-            row1,
-            "🏢",
-            "Gestión de Apartamentos",
-            "#6366f1",
-            lambda: self._show_placeholder_dialog("Gestión de Apartamentos", "Funcionalidad en desarrollo")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 3: Backup de Datos (futuro)
-        self._create_admin_action_card(
-            row1,
-            "💾",
-            "Backup de Datos",
-            "#059669",
-            lambda: self._show_placeholder_dialog("Backup de Datos", "Funcionalidad en desarrollo")
-        ).pack(side="left", fill="both", expand=True)
-        
-        # Segunda fila de cards
-        row2 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row2.pack(fill="both", expand=True)
-        
-        # Card 4: Logs del Sistema (futuro)
-        self._create_admin_action_card(
-            row2,
-            "📋",
-            "Logs del Sistema",
-            "#7c3aed",
-            lambda: self._show_placeholder_dialog("Logs del Sistema", "Funcionalidad en desarrollo")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 5: Notificaciones (futuro)
-        self._create_admin_action_card(
-            row2,
-            "📧",
-            "Gestión de Notificaciones",
-            "#ea580c",
-            lambda: self._show_placeholder_dialog("Gestión de Notificaciones", "Funcionalidad en desarrollo")
-        ).pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
-        
-        # Card 6: Usuarios (futuro)
-        self._create_admin_action_card(
-            row2,
-            "👥",
-            "Gestión de Usuarios",
-            "#d97706",
-            lambda: self._show_placeholder_dialog("Gestión de Usuarios", "Funcionalidad en desarrollo")
-        ).pack(side="left", fill="both", expand=True)
+        # Crear filas de 3 tarjetas cada una
+        num_columns = 3
+        for i in range(0, len(actions_grid), num_columns):
+            row_frame = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
+            row_frame.pack(fill="x", pady=Spacing.LG, padx=Spacing.LG, anchor="n")
+            
+            row_items = actions_grid[i:i+num_columns]
+            for item in row_items:
+                card = self._create_admin_action_card(
+                    row_frame, item["icon"], item["title"], item["color"], 
+                    item["action"], item.get("enabled", True), item.get("disabled_message", "")
+                )
+                card.pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
 
     def _create_placeholder_view(self, title: str, subtitle: str):
         """Crea una vista placeholder"""
@@ -784,6 +800,15 @@ class MainWindow:
         )
         deactivate_view.pack(fill="both", expand=True)
 
+    def _show_apartment_management_view(self):
+        """Muestra la vista de gestión de apartamentos"""
+        self.page_title.configure(text="Gestión de Apartamentos")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        
+        apartment_view = ApartmentManagementView(self.views_container, on_navigate=self._navigate_to)
+        apartment_view.pack(fill="both", expand=True)
+
     def _show_placeholder_dialog(self, title: str, message: str):
         """Muestra un diálogo placeholder para funcionalidades futuras"""
         messagebox.showinfo(title, f"{message}\n\nEsta funcionalidad será implementada próximamente.")
@@ -795,60 +820,119 @@ class MainWindow:
         # Volver a administración
         self._navigate_to("administration")
 
-    def _create_admin_action_card(self, parent, icon: str, title: str, color: str, action: Callable):
+    def _create_admin_action_card(self, parent, icon: str, title: str, color: str, action: Callable, enabled: bool = True, disabled_message: str = ""):
         """Crea una card de acción administrativa solo con icono y título, sin descripción"""
         style = theme_manager.get_style("card").copy()
         style["bd"] = 2
         style["relief"] = "raised"
         style["width"] = 260
         style["height"] = 120
-        style["bg"] = "white"
+        
+        # Ajustar estilo según si está habilitada o no
+        if enabled:
+            style["bg"] = "white"
+            cursor = "hand2"
+        else:
+            style["bg"] = "#f5f5f5"  # Gris claro para deshabilitado
+            cursor = "arrow"
+            color = "#999999"  # Gris para icono y texto deshabilitado
+        
         card_frame = tk.Frame(parent, **style)
         card_frame.pack_propagate(False)
-        card_frame.configure(cursor="hand2")
+        card_frame.configure(cursor=cursor)
+        
         # Contenido centrado
-        content_frame = tk.Frame(card_frame, bg="white")
+        content_frame = tk.Frame(card_frame, bg=style["bg"])
         content_frame.place(relx=0.5, rely=0.5, anchor="center")
+        
         # Icono grande
         icon_label = tk.Label(
             content_frame,
             text=icon,
             font=("Segoe UI", 32),
             fg=color,
-            bg="white"
+            bg=style["bg"]
         )
         icon_label.pack(pady=(0, 6))
+        
         # Título centrado y grande
         title_label = tk.Label(
             content_frame,
             text=title,
             font=("Segoe UI", 14, "bold"),
             fg=color,
-            bg="white",
+            bg=style["bg"],
             anchor="center",
             justify="center"
         )
         title_label.pack(fill="x")
-        # Hover effect igual que en payments_view
-        def on_enter(e):
-            card_frame.configure(bg="#e3f2fd")
-            content_frame.configure(bg="#e3f2fd")
-            icon_label.configure(bg="#e3f2fd")
-            title_label.configure(bg="#e3f2fd")
-        def on_leave(e):
-            card_frame.configure(bg="white")
-            content_frame.configure(bg="white")
-            icon_label.configure(bg="white")
-            title_label.configure(bg="white")
-        card_frame.bind("<Enter>", on_enter)
-        card_frame.bind("<Leave>", on_leave)
-        for w in [content_frame, icon_label, title_label]:
-            w.bind("<Button-1>", lambda e: action())
-            w.bind("<Enter>", on_enter)
-            w.bind("<Leave>", on_leave)
-            w.configure(cursor="hand2")
-        # Click
-        card_frame.bind("<Button-1>", lambda e: action())
+        
+        # Si está deshabilitada, agregar mensaje de ayuda
+        if not enabled and disabled_message:
+            help_label = tk.Label(
+                content_frame,
+                text=disabled_message,
+                font=("Segoe UI", 9),
+                fg="#666666",
+                bg=style["bg"],
+                anchor="center",
+                justify="center",
+                wraplength=220
+            )
+            help_label.pack(pady=(4, 0))
+        
+        # Hover effect solo si está habilitada
+        if enabled:
+            def on_enter(e):
+                card_frame.configure(bg="#e3f2fd")
+                content_frame.configure(bg="#e3f2fd")
+                icon_label.configure(bg="#e3f2fd")
+                title_label.configure(bg="#e3f2fd")
+                if not enabled and disabled_message:
+                    help_label.configure(bg="#e3f2fd")
+            
+            def on_leave(e):
+                card_frame.configure(bg="white")
+                content_frame.configure(bg="white")
+                icon_label.configure(bg="white")
+                title_label.configure(bg="white")
+                if not enabled and disabled_message:
+                    help_label.configure(bg="white")
+            
+            card_frame.bind("<Enter>", on_enter)
+            card_frame.bind("<Leave>", on_leave)
+            
+            for w in [content_frame, icon_label, title_label]:
+                w.bind("<Button-1>", lambda e: action())
+                w.bind("<Enter>", on_enter)
+                w.bind("<Leave>", on_leave)
+                w.configure(cursor="hand2")
+            
+            # Click
+            card_frame.bind("<Button-1>", lambda e: action())
+        else:
+            # Si está deshabilitada, mostrar tooltip al hacer hover
+            def show_disabled_tooltip(e):
+                if disabled_message:
+                    # Crear tooltip temporal
+                    tooltip = tk.Toplevel(card_frame)
+                    tooltip.wm_overrideredirect(True)
+                    tooltip.wm_geometry(f"+{e.x_root+10}+{e.y_root+10}")
+                    
+                    label = tk.Label(tooltip, text=disabled_message, 
+                                   justify="left", background="#ffffe0", 
+                                   relief="solid", borderwidth=1,
+                                   font=("Segoe UI", 9))
+                    label.pack()
+                    
+                    def hide_tooltip(e):
+                        tooltip.destroy()
+                    
+                    tooltip.bind("<Leave>", hide_tooltip)
+                    card_frame.bind("<Leave>", hide_tooltip)
+            
+            card_frame.bind("<Enter>", show_disabled_tooltip)
+        
         return card_frame
     
     def _get_tenant_statistics(self):
@@ -866,6 +950,61 @@ class MainWindow:
                 widget.destroy()
             # Recrear la vista del dashboard
             self._create_dashboard_view()
+    
+    def refresh_tenants_view(self):
+        """Refresca la vista de inquilinos para mostrar estados actualizados"""
+        # SIEMPRE refrescar, sin importar desde dónde se llame
+        current_view = getattr(self, '_current_view', None)
+        print(f"🔄 Refrescando vista de inquilinos desde vista: {current_view}")
+        
+        try:
+            # Forzar actualización de Tkinter antes de refrescar
+            self.root.update_idletasks()
+            self.root.update()
+            
+            # Limpiar contenido actual
+            for widget in self.views_container.winfo_children():
+                widget.destroy()
+            
+            # Forzar actualización después de limpiar
+            self.root.update_idletasks()
+            self.root.update()
+            
+            # Recrear la vista de inquilinos
+            self._create_tenants_view()
+            
+            # Forzar actualización después de recrear
+            self.root.update_idletasks()
+            self.root.update()
+            
+            # Forzar actualización final
+            self.root.after(100, self.root.update_idletasks)
+            self.root.after(200, self.root.update)
+            
+            print(f"✅ Vista de inquilinos refrescada automáticamente (SIEMPRE)")
+        except Exception as e:
+            print(f"⚠️ Error al refrescar vista de inquilinos: {str(e)}")
+    
+    def _force_tenants_refresh(self):
+        """Fuerza un refresh completo de la vista de inquilinos"""
+        print(f"🔄 Forzando refresh completo de vista de inquilinos")
+        try:
+            # Limpiar contenido actual
+            for widget in self.views_container.winfo_children():
+                widget.destroy()
+            
+            # Recrear la vista de inquilinos
+            self._create_tenants_view()
+            
+            # Forzar actualización múltiple
+            self.root.update_idletasks()
+            self.root.update()
+            self.root.after(100, self.root.update_idletasks)
+            self.root.after(200, self.root.update)
+            
+            print(f"✅ Refresh completo forzado exitosamente")
+        except Exception as e:
+            print(f"⚠️ Error al forzar refresh: {str(e)}")
     
     def _get_payments_of_current_month(self):
         from manager.app.services.payment_service import PaymentService
@@ -895,7 +1034,11 @@ class MainWindow:
         self.page_title.configure(text="Registrar pagos")
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+        payments_view = PaymentsView(
+            self.views_container, 
+            on_back=lambda: self._navigate_to("dashboard"),
+            on_payment_saved=self.refresh_tenants_view
+        )
         payments_view.pack(fill="both", expand=True)
         payments_view._show_register_payment()
     
@@ -905,7 +1048,12 @@ class MainWindow:
         self.page_title.configure(text="Registrar pagos")
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        payments_view = PaymentsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"), preselected_tenant=tenant)
+        payments_view = PaymentsView(
+            self.views_container, 
+            on_back=lambda: self._navigate_to("dashboard"), 
+            preselected_tenant=tenant,
+            on_payment_saved=self.refresh_tenants_view
+        )
         payments_view.pack(fill="both", expand=True)
         payments_view._show_register_payment(preselected_tenant=tenant)
     
@@ -919,6 +1067,24 @@ class MainWindow:
         form = RegisterExpenseView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
         form.pack(fill="both", expand=True)
     
+    def _show_building_setup_view(self):
+        """Muestra el asistente de configuración del edificio."""
+        self.page_title.configure(text="Configuración del Edificio")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        
+        setup_view = BuildingSetupView(self.views_container, on_back=lambda: self._navigate_to("administration"))
+        setup_view.pack(fill="both", expand=True)
+
+    def _show_building_management_view(self):
+        """Muestra la vista para gestionar edificios existentes."""
+        self.page_title.configure(text="Gestión de Edificios")
+        for widget in self.views_container.winfo_children():
+            widget.destroy()
+        
+        management_view = BuildingManagementView(self.views_container, on_back=lambda: self._navigate_to("administration"))
+        management_view.pack(fill="both", expand=True)
+
     def run(self):
         """Ejecuta la aplicación"""
         self.root.mainloop() 

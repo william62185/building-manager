@@ -59,13 +59,16 @@ class TenantService:
             archivos = tenant_data.get("archivos", {})
             
             # Preparar datos del inquilino con valores por defecto
+            apto_val = tenant_data.get("apartamento", "")
+            if isinstance(apto_val, str):
+                apto_val = apto_val.strip()
             tenant = {
                 "id": new_id,
                 "nombre": tenant_data.get("nombre", "").strip(),
                 "numero_documento": tenant_data.get("numero_documento", "").strip(),
                 "telefono": tenant_data.get("telefono", "").strip(),
                 "email": tenant_data.get("email", "").strip(),
-                "apartamento": tenant_data.get("apartamento", "").strip(),
+                "apartamento": apto_val,
                 "valor_arriendo": float(tenant_data.get("valor_arriendo", 0)),
                 "fecha_ingreso": tenant_data.get("fecha_ingreso", "").strip(),
                 "estado_pago": tenant_data.get("estado_pago", "al_dia"),
@@ -76,6 +79,7 @@ class TenantService:
                 "has_documents": bool(archivos.get("id") or archivos.get("contract")),
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
+                "deposito": tenant_data.get("deposito", ""),
                 "deposito_devuelto": 0  # Valor por defecto
             }
             
@@ -130,10 +134,12 @@ class TenantService:
         
         results = []
         for tenant in self.tenants:
-            if (query_lower in tenant.get("nombre", "").lower() or
-                query_lower in tenant.get("apartamento", "").lower() or
-                query_lower in tenant.get("telefono", "").lower() or
-                query_lower in tenant.get("email", "").lower()):
+            if (
+                query_lower in str(tenant.get("nombre") or "").lower() or
+                query_lower in str(tenant.get("apartamento") or "").lower() or
+                query_lower in str(tenant.get("telefono") or "").lower() or
+                query_lower in str(tenant.get("email") or "").lower()
+            ):
                 results.append(tenant.copy())
         
         return results
@@ -151,6 +157,116 @@ class TenantService:
             "moroso": moroso,
             "inactivo": inactivo
         }
+    
+    def calculate_payment_status(self, tenant_id: int) -> str:
+        """Calcula automáticamente el estado de pago basado en el historial real"""
+        try:
+            from manager.app.services.payment_service import payment_service
+            from datetime import datetime, timedelta
+            
+            # Obtener el inquilino
+            tenant = self.get_tenant_by_id(tenant_id)
+            if not tenant:
+                return "inactivo"
+            
+            # Obtener todos los pagos del inquilino
+            payments = payment_service.get_payments_by_tenant(tenant_id)
+            
+            if not payments:
+                # Si no hay pagos, verificar si es un inquilino nuevo
+                fecha_ingreso = tenant.get("fecha_ingreso", "")
+                if fecha_ingreso:
+                    try:
+                        # Convertir fecha de ingreso a datetime
+                        fecha_ingreso_dt = datetime.strptime(fecha_ingreso, "%d/%m/%Y")
+                        dias_desde_ingreso = (datetime.now() - fecha_ingreso_dt).days
+                        
+                        if dias_desde_ingreso <= 5:
+                            return "pendiente_registro"  # Alerta: pendiente registro pago inicial
+                        else:
+                            return "moroso"  # Sin pagos y más de 5 días
+                    except:
+                        return "moroso"  # Error en fecha, considerar moroso
+                else:
+                    return "moroso"  # Sin fecha de ingreso, considerar moroso
+            
+            # Ordenar pagos por fecha (más reciente primero)
+            payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+            
+            # Obtener el pago más reciente
+            ultimo_pago = payments[0]
+            fecha_ultimo_pago = datetime.strptime(ultimo_pago.get("fecha_pago", "01/01/1900"), "%d/%m/%Y")
+            
+            # Calcular días desde el último pago
+            dias_desde_ultimo_pago = (datetime.now() - fecha_ultimo_pago).days
+            
+            # Lógica para determinar estado:
+            # - Si el último pago fue hace menos de 30 días: al_dia
+            # - Si fue hace más de 30 días pero menos de 90: moroso
+            # - Si fue hace más de 90 días: inactivo (muy moroso)
+            
+            if dias_desde_ultimo_pago <= 30:
+                return "al_dia"
+            elif dias_desde_ultimo_pago <= 90:
+                return "moroso"
+            else:
+                return "inactivo"
+                
+        except Exception as e:
+            print(f"Error al calcular estado de pago: {str(e)}")
+            return "moroso"  # En caso de error, considerar moroso
+    
+    def update_payment_status(self, tenant_id: int) -> bool:
+        """Actualiza el estado de pago de un inquilino basado en el cálculo automático"""
+        try:
+            new_status = self.calculate_payment_status(tenant_id)
+            
+            # Buscar y actualizar el inquilino en la lista original
+            for i, tenant in enumerate(self.tenants):
+                if tenant.get("id") == tenant_id:
+                    self.tenants[i]["estado_pago"] = new_status
+                    self.tenants[i]["updated_at"] = datetime.now().isoformat()
+                    self._save_data()
+                    print(f"✅ Estado actualizado para {tenant.get('nombre')}: {new_status}")
+                    return True
+            
+            return False
+        except Exception as e:
+            print(f"Error al actualizar estado de pago: {str(e)}")
+            return False
+    
+    def recalculate_all_payment_statuses(self) -> Dict[str, int]:
+        """Recalcula el estado de pago de todos los inquilinos"""
+        try:
+            updated_count = 0
+            status_changes = {
+                'al_dia': 0,
+                'pendiente_registro': 0,
+                'moroso': 0,
+                'inactivo': 0
+            }
+            
+            for tenant in self.tenants:
+                old_status = tenant.get('estado_pago', 'al_dia')
+                new_status = self.calculate_payment_status(tenant.get('id'))
+                
+                if old_status != new_status:
+                    tenant['estado_pago'] = new_status
+                    tenant['updated_at'] = datetime.now().isoformat()
+                    updated_count += 1
+                    print(f"Inquilino {tenant.get('nombre')}: {old_status} → {new_status}")
+                
+                status_changes[new_status] += 1
+            
+            if updated_count > 0:
+                self._save_data()
+                print(f"✅ Estados actualizados: {updated_count} inquilinos")
+            
+            return status_changes
+            
+        except Exception as e:
+            print(f"Error al recalcular estados: {str(e)}")
+            return {}
 
 # Instancia global del servicio
 tenant_service = TenantService() 

@@ -1,15 +1,5 @@
 [
   {
-    "fecha": "2025-06-15",
-    "categoria": "Servicios públicos",
-    "subtipo": "Acueducto y alcantarillado",
-    "apartamento": "102",
-    "monto": 60000.0,
-    "descripcion": "pagado",
-    "documento": null,
-    "id": 3
-  },
-  {
     "fecha": "2025-06-16",
     "categoria": "Reparaciones",
     "subtipo": "Techo",
@@ -54,9 +44,9 @@
     "categoria": "Servicios públicos",
     "subtipo": "Energía eléctrica",
     "apartamento": "101",
-    "monto": 55000.0,
+    "monto": 56000.0,
     "descripcion": "energia-online",
-    "documento": null,
+    "documento": "C:\\Users\\Will\\building_manager_cursor\\manager\\gastos_docs\\gasto_20250621_093653_ApprovalInPrincipleLetter_SP_NewRenewalChangeDesignation_0485121A_20250430_135353.pdf",
     "id": 9
   },
   {

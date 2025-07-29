@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
+from manager.app.services.apartment_service import apartment_service
 
 class TenantAutocompleteEntry(tk.Frame):
     """Campo de búsqueda con autocomplete profesional para inquilinos"""
@@ -50,11 +51,24 @@ class TenantAutocompleteEntry(tk.Frame):
     def _search_tenants(self, value):
         results = []
         for t in self.tenants:
-            if (value in t.get("nombre", "").lower() or
-                value in t.get("numero_documento", "").lower() or
-                value in t.get("apartamento", "").lower() or
-                value in t.get("email", "").lower() or
-                value in t.get("telefono", "").lower()):
+            # Buscar por número real de apartamento
+            apt_number = None
+            apt_id = t.get("apartamento")
+            if apt_id is not None:
+                try:
+                    apt = apartment_service.get_apartment_by_id(int(apt_id))
+                    if apt and 'number' in apt:
+                        apt_number = str(apt['number']).lower()
+                except Exception:
+                    pass
+            if (
+                value in str(t.get("nombre") or "").lower() or
+                value in str(t.get("numero_documento") or "").lower() or
+                value in str(t.get("apartamento") or "").lower() or
+                value in str(t.get("email") or "").lower() or
+                value in str(t.get("telefono") or "").lower() or
+                (apt_number and value in apt_number)
+            ):
                 results.append(t)
         return results[:10]  # Máximo 10 sugerencias
 
@@ -68,7 +82,13 @@ class TenantAutocompleteEntry(tk.Frame):
         y = self.entry.winfo_rooty() + self.entry.winfo_height()
         self.suggestions.wm_geometry(f"{self.entry.winfo_width()}x{min(220, 22*len(matches))}+{x}+{y}")
         for i, t in enumerate(matches):
-            text = f"{t['nombre']} | Apt. {t['apartamento']} | CC: {t['numero_documento']} | Día pago: {self._get_dia_pago(t)} | ${int(t['valor_arriendo']):,}"
+            apt_number = self._get_apartment_number(t)
+            valor = t.get('valor_arriendo', 0)
+            try:
+                valor = float(valor)
+            except Exception:
+                valor = 0
+            text = f"{t['nombre']} | Apt. {apt_number} | CC: {t['numero_documento']} | Día pago: {self._get_dia_pago(t)} | ${valor:,.0f}"
             label = tk.Label(self.suggestions, text=text, anchor="w", bg="#e3f2fd", fg="#1976d2", font=("Segoe UI", 10), padx=8, pady=2)
             label.pack(fill="x")
             label.bind("<Button-1>", lambda e, tenant=t: self._select_tenant(tenant))
@@ -88,7 +108,13 @@ class TenantAutocompleteEntry(tk.Frame):
 
     def _select_tenant(self, tenant):
         self.selected_tenant = tenant
-        text = f"{tenant['nombre']} | Apt. {tenant['apartamento']} | CC: {tenant['numero_documento']} | Día pago: {self._get_dia_pago(tenant)} | ${int(tenant['valor_arriendo']):,}"
+        apt_number = self._get_apartment_number(tenant)
+        valor = tenant.get('valor_arriendo', 0)
+        try:
+            valor = float(valor)
+        except Exception:
+            valor = 0
+        text = f"{tenant['nombre']} | Apt. {apt_number} | CC: {tenant['numero_documento']} | Día pago: {self._get_dia_pago(tenant)} | ${valor:,.0f}"
         self.var.set(text)
         self._hide_suggestions()
         if self.on_select:
@@ -100,6 +126,17 @@ class TenantAutocompleteEntry(tk.Frame):
             return int(fecha.split('/')[0])
         except:
             return "-"
+
+    def _get_apartment_number(self, tenant):
+        apt_id = tenant.get('apartamento')
+        if apt_id is not None:
+            try:
+                apt = apartment_service.get_apartment_by_id(int(apt_id))
+                if apt and 'number' in apt:
+                    return apt['number']
+            except Exception:
+                pass
+        return apt_id if apt_id is not None else 'N/A'
 
     def get_selected_tenant(self):
         return self.selected_tenant

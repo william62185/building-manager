@@ -11,9 +11,10 @@ from manager.app.ui.components.icons import Icons
 from manager.app.services.tenant_service import tenant_service
 from manager.app.ui.views.tenant_form_view import TenantFormView
 from manager.app.ui.views.tenant_details_view import TenantDetailsView
-from manager.app.ui.views.edit_delete_tenants_view import EditDeleteTenantsView
 import csv
 import os
+from manager.app.services.apartment_service import apartment_service
+from manager.app.services.building_service import building_service
 
 class TenantsView(tk.Frame):
     """Vista principal del módulo de inquilinos con diseño simplificado"""
@@ -96,7 +97,7 @@ class TenantsView(tk.Frame):
         self._create_action_card(
             row1,
             "👥",
-            "Ver Inquilinos", 
+            "Ver/Editar Inquilinos", 
             "Consultar lista completa de inquilinos",
             "#3b82f6",  # info blue
             lambda: self._show_tenants_list()
@@ -105,16 +106,6 @@ class TenantsView(tk.Frame):
         # Fila 2
         row2 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
         row2.pack()
-        
-        # Card 3: Editar/Eliminar
-        self._create_action_card(
-            row2,
-            "✏️", 
-            "Editar/Eliminar",
-            "Modificar o eliminar inquilinos existentes",
-            "#f59e0b",  # warning orange
-            lambda: self._show_edit_options()
-        ).pack(side="left", padx=(0, Spacing.LG))
         
         # Card 4: Reportes
         self._create_action_card(
@@ -275,7 +266,25 @@ class TenantsView(tk.Frame):
         tk.Label(content, text="Filtro por apartamento:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,5))
         self.apartment_var = tk.StringVar(value="Todos")
         apartment_combo = ttk.Combobox(content, textvariable=self.apartment_var, font=("Segoe UI", 10))
-        apartment_combo['values'] = ("Todos", "101", "102", "103", "106", "201", "202", "203", "301", "302", "303")
+        
+        # Obtener apartamentos reales de la base de datos
+        apartment_options = ["Todos"]
+        try:
+            from manager.app.services.apartment_service import apartment_service
+            apartments = apartment_service.get_all_apartments()
+            for apt in apartments:
+                apt_number = apt.get('number', '')
+                apt_type = apt.get('unit_type', 'Apartamento Estándar')
+                if apt_type == "Apartamento Estándar":
+                    apartment_options.append(apt_number)
+                else:
+                    apartment_options.append(f"{apt_type} {apt_number}")
+        except Exception as e:
+            print(f"Error al cargar apartamentos: {e}")
+            # Fallback a valores básicos si hay error
+            apartment_options.extend(["101", "102", "201", "202", "301", "302"])
+        
+        apartment_combo['values'] = apartment_options
         apartment_combo.pack(fill="x", pady=(0,10))
         apartment_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
         
@@ -283,7 +292,7 @@ class TenantsView(tk.Frame):
         tk.Label(content, text="Estado:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,5))
         self.status_var = tk.StringVar(value="Todos")
         status_combo = ttk.Combobox(content, textvariable=self.status_var, font=("Segoe UI", 10))
-        status_combo['values'] = ("Todos", "Activo", "En Mora", "Inactivo")
+        status_combo['values'] = ("Todos", "Al Día", "Pendiente Registro", "En Mora", "Inactivo")
         status_combo.pack(fill="x", pady=(0,10))
         status_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
         
@@ -417,14 +426,18 @@ class TenantsView(tk.Frame):
         return panel
     
     def _load_and_display_tenants(self):
-        """Carga y muestra todos los inquilinos con agrupación inteligente"""
+        """Carga y muestra todos los inquilinos"""
         try:
-            tenants = tenant_service.get_all_tenants()
-            self.all_tenants = tenants  # Guardar para filtros
-            self._display_tenants(tenants)
+            # Recalcular estados de pago automáticamente antes de cargar
+            tenant_service.recalculate_all_payment_statuses()
             
+            # Cargar inquilinos actualizados
+            self.all_tenants = tenant_service.get_all_tenants()
+            self._display_tenants(self.all_tenants)
         except Exception as e:
-            self._show_error(f"Error al cargar inquilinos: {str(e)}")
+            print(f"Error al cargar inquilinos: {str(e)}")
+            self.all_tenants = []
+            self._display_tenants([])
     
     def _display_tenants(self, tenants):
         """Muestra los inquilinos agrupados por estado"""
@@ -438,6 +451,7 @@ class TenantsView(tk.Frame):
         
         # Agrupar por estado (real)
         active_tenants = []
+        pending_tenants = []
         overdue_tenants = []
         inactive_tenants = []
         
@@ -447,6 +461,8 @@ class TenantsView(tk.Frame):
                 inactive_tenants.append(tenant)
             elif estado == 'moroso':
                 overdue_tenants.append(tenant)
+            elif estado == 'pendiente_registro':
+                pending_tenants.append(tenant)
             else:
                 active_tenants.append(tenant)
         
@@ -454,7 +470,10 @@ class TenantsView(tk.Frame):
         current_row = 0
         
         if active_tenants:
-            current_row = self._display_group("✅ ACTIVOS", active_tenants, "#4caf50", current_row)
+            current_row = self._display_group("✅ AL DÍA", active_tenants, "#4caf50", current_row)
+        
+        if pending_tenants:
+            current_row = self._display_group("⏰ PENDIENTE REGISTRO", pending_tenants, "#ffc107", current_row)
         
         if overdue_tenants:
             current_row = self._display_group("⚠️ EN MORA", overdue_tenants, "#ff9800", current_row)
@@ -483,6 +502,10 @@ class TenantsView(tk.Frame):
         # Forzar actualización del scroll
         self.scrollable_frame.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+        # Forzar actualización completa de Tkinter
+        self.update_idletasks()
+        self.update()
     
     def _display_group(self, title, tenants, color, start_row):
         """Muestra un grupo de inquilinos"""
@@ -513,11 +536,46 @@ class TenantsView(tk.Frame):
         content = tk.Frame(row_frame, bg=bg_color)
         content.pack(fill="x", padx=10, pady=8)
         name = tenant.get('nombre', 'Sin nombre')
-        apartment = tenant.get('apartamento', 'N/A')
+        apartment_id = tenant.get('apartamento', None)
+        apartment_display = 'N/A'
+        if apartment_id is not None:
+            try:
+                apartment_id_int = int(apartment_id)
+            except Exception:
+                apartment_id_int = apartment_id
+            apt = apartment_service.get_apartment_by_id(apartment_id_int) if hasattr(apartment_service, 'get_apartment_by_id') else None
+            if not apt:
+                # Si no hay método, buscar manualmente
+                all_apts = apartment_service.get_all_apartments()
+                apt = next((a for a in all_apts if a.get('id') == apartment_id_int), None)
+            if apt:
+                building = None
+                if hasattr(building_service, 'get_building_by_id'):
+                    building = building_service.get_building_by_id(apt.get('building_id'))
+                else:
+                    all_buildings = building_service.get_all_buildings()
+                    building = next((b for b in all_buildings if b.get('id') == apt.get('building_id')), None)
+                building_name = building.get('name') if building else ''
+                tipo = apt.get('unit_type', 'Apartamento Estándar')
+                numero = apt.get('number', '')
+                if building_name:
+                    apartment_display = f"{building_name} - {tipo} {numero}" if tipo != 'Apartamento Estándar' else f"{building_name} - {numero}"
+                else:
+                    apartment_display = f"{tipo} {numero}" if tipo != 'Apartamento Estándar' else str(numero)
         valor_arriendo = tenant.get('valor_arriendo', 0)
+        # Formateo seguro para valor_arriendo
+        if valor_arriendo is not None and valor_arriendo != "":
+            try:
+                valor_arriendo_num = float(valor_arriendo)
+                valor_arriendo_display = f"${valor_arriendo_num:,.0f}"
+            except Exception:
+                valor_arriendo_display = str(valor_arriendo)
+        else:
+            valor_arriendo_display = "No registrado"
         estado_pago = tenant.get('estado_pago', 'al_dia')
         estado_texto = {
             'al_dia': 'Al día',
+            'pendiente_registro': 'Pendiente Registro',
             'moroso': 'En mora',
             'inactivo': 'Inactivo'
         }.get(estado_pago, 'Al día')
@@ -531,7 +589,7 @@ class TenantsView(tk.Frame):
         main_info.pack(anchor="w")
         details = tk.Label(
             content,
-            text=f"🏠 Apartamento: {apartment} | 💰 Arriendo: ${valor_arriendo:,.0f} | 📞 Teléfono: {tenant.get('telefono', 'No registrado')}",
+            text=f"🏠 Apartamento: {apartment_display} | 💰 Arriendo: {valor_arriendo_display} | 📞 Teléfono: {tenant.get('telefono', 'No registrado')}",
             font=("Segoe UI", 9),
             bg=bg_color,
             anchor="w"
@@ -564,6 +622,26 @@ class TenantsView(tk.Frame):
             bg=bg_color
         )
         estado_label.pack(anchor="w", pady=(2,0))
+        
+        # Frame para botones de acción
+        actions_frame = tk.Frame(content, bg=bg_color)
+        actions_frame.pack(anchor="w", pady=(5,0))
+        
+        # Botón de eliminar
+        delete_btn = tk.Button(
+            actions_frame,
+            text="🗑️ Eliminar",
+            font=("Segoe UI", 8),
+            bg="#dc2626",
+            fg="white",
+            relief="flat",
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            command=lambda t=tenant: self._confirm_delete_tenant(t)
+        )
+        delete_btn.pack(side="left")
+        
         # Hacer clic en el card para ver detalles
         def on_card_click(event, t=tenant):
             self._show_tenant_details(t)
@@ -611,12 +689,8 @@ class TenantsView(tk.Frame):
         form_view.pack(fill="both", expand=True)
     
     def _show_edit_options(self):
-        """Muestra la vista independiente de Editar/Eliminar Inquilinos"""
-        self.current_view = "edit_delete"
-        for widget in self.winfo_children():
-            widget.destroy()
-        edit_delete_view = EditDeleteTenantsView(self, on_navigate=self.on_navigate, on_data_change=self.on_data_change)
-        edit_delete_view.pack(fill="both", expand=True)
+        """(Eliminado: ya no se usa EditDeleteTenantsView)"""
+        pass
     
     def _show_reports(self):
         """Muestra reportes"""
@@ -659,23 +733,72 @@ class TenantsView(tk.Frame):
         # Filtro por texto - BÚSQUEDA MEJORADA
         search_text = self.search_entry.get().lower().strip()
         if search_text:
+            def matches_apartment_number(tenant):
+                from manager.app.services.apartment_service import apartment_service
+                apt_id = tenant.get('apartamento', None)
+                if apt_id is not None:
+                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
+                    if not apt:
+                        all_apts = apartment_service.get_all_apartments()
+                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
+                    if apt:
+                        num = str(apt.get('number', '')).lower()
+                        return search_text in num
+                return False
             filtered = [t for t in filtered if 
-                       search_text in t.get('nombre', '').lower() or
-                       search_text in t.get('numero_documento', '').lower() or
-                       search_text in t.get('apartamento', '').lower() or
-                       search_text in t.get('email', '').lower() or
-                       search_text in t.get('telefono', '').lower()]
+                       search_text in str(t.get('nombre', '')).lower() or
+                       search_text in str(t.get('numero_documento', '')).lower() or
+                       matches_apartment_number(t) or
+                       search_text in str(t.get('email', '')).lower() or
+                       search_text in str(t.get('telefono', '')).lower()]
         # Filtro por apartamento (combo) - Solo aplica si no se buscó apartamento en texto
         apartment = self.apartment_var.get()
         if apartment != "Todos" and not search_text:
-            filtered = [t for t in filtered if t.get('apartamento') == apartment]
+            # Buscar inquilinos que coincidan con el apartamento seleccionado
+            def matches_apartment_filter(tenant):
+                from manager.app.services.apartment_service import apartment_service
+                apt_id = tenant.get('apartamento', None)
+                if apt_id is not None:
+                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
+                    if not apt:
+                        all_apts = apartment_service.get_all_apartments()
+                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
+                    if apt:
+                        apt_number = apt.get('number', '')
+                        apt_type = apt.get('unit_type', 'Apartamento Estándar')
+                        if apt_type == "Apartamento Estándar":
+                            apt_display = apt_number
+                        else:
+                            apt_display = f"{apt_type} {apt_number}"
+                        return apt_display == apartment
+                return False
+            filtered = [t for t in filtered if matches_apartment_filter(t)]
         elif apartment != "Todos" and search_text:
-            filtered = [t for t in filtered if t.get('apartamento') == apartment]
+            # Si hay búsqueda de texto, aplicar el mismo filtro
+            def matches_apartment_filter(tenant):
+                from manager.app.services.apartment_service import apartment_service
+                apt_id = tenant.get('apartamento', None)
+                if apt_id is not None:
+                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
+                    if not apt:
+                        all_apts = apartment_service.get_all_apartments()
+                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
+                    if apt:
+                        apt_number = apt.get('number', '')
+                        apt_type = apt.get('unit_type', 'Apartamento Estándar')
+                        if apt_type == "Apartamento Estándar":
+                            apt_display = apt_number
+                        else:
+                            apt_display = f"{apt_type} {apt_number}"
+                        return apt_display == apartment
+                return False
+            filtered = [t for t in filtered if matches_apartment_filter(t)]
         # Filtro por estado
         status = self.status_var.get()
         if status != "Todos":
             status_mapping = {
-                "Activo": "al_dia",
+                "Al Día": "al_dia",
+                "Pendiente Registro": "pendiente_registro",
                 "En Mora": "moroso",
                 "Inactivo": "inactivo"
             }
@@ -698,6 +821,14 @@ class TenantsView(tk.Frame):
     def _confirm_delete_tenant(self, tenant):
         nombre = tenant.get("nombre", "Inquilino")
         if messagebox.askyesno("Confirmar eliminación", f"¿Seguro que deseas eliminar a {nombre}? Esta acción no se puede deshacer."):
+            # Liberar apartamento si corresponde
+            apt_id = tenant.get("apartamento")
+            if apt_id is not None:
+                try:
+                    from manager.app.services.apartment_service import apartment_service
+                    apartment_service.update_apartment(apt_id, {"status": "Disponible"})
+                except Exception as e:
+                    print(f"Error al actualizar el estado del apartamento: {e}")
             success = tenant_service.delete_tenant(tenant.get("id"))
             if success:
                 self._load_and_display_tenants()
