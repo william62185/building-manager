@@ -328,5 +328,27 @@
     "observaciones": "",
     "creado_en": "2025-07-29T04:31:37.842036",
     "actualizado_en": "2025-07-29T04:31:37.842044"
+  },
+  {
+    "id": 48,
+    "id_inquilino": 51,
+    "nombre_inquilino": "Stefani Ruiz",
+    "fecha_pago": "08/10/2025",
+    "monto": 800000.0,
+    "metodo": "Efectivo",
+    "observaciones": "Pago inicial - Stefani Ruiz - Apartamento 502",
+    "creado_en": "2025-10-08T01:25:29.820022",
+    "actualizado_en": "2025-10-08T01:25:29.820035"
+  },
+  {
+    "id": 49,
+    "id_inquilino": 25,
+    "nombre_inquilino": "Adriana Pinto",
+    "fecha_pago": "08/10/2025",
+    "monto": 1200000.0,
+    "metodo": "Efectivo",
+    "observaciones": "",
+    "creado_en": "2025-10-08T01:26:33.381140",
+    "actualizado_en": "2025-10-08T01:26:33.381148"
   }
 ]
