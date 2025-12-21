@@ -1,0 +1,25 @@
+# Interfaz gráfica
+tkinter
+
+# Base de datos
+sqlite3
+
+# Utilidades
+pathlib
+decimal
+typing-extensions
+
+# Manejo de archivos e imágenes
+pillow
+
+# Generación de PDFs
+reportlab
+
+# Exportación de Excel
+openpyxl
+
+# Fechas y tiempo
+python-dateutil
+
+# Seleccionador de fechas
+tkcalendar 
