@@ -24,6 +24,7 @@ from .apartment_form_view import ApartmentFormView
 from .apartments_list_view import ApartmentsListView
 from .building_management_view import BuildingManagementView
 from .deactivate_tenant_view import DeactivateTenantView
+from .settings_view import SettingsView
 
 class MainWindow:
     """Ventana principal con diseño profesional"""
@@ -175,7 +176,7 @@ class MainWindow:
                 "text": "Dashboard",
                 "icon": Icons.DASHBOARD,
                 "command": lambda: self._navigate_to("dashboard"),
-                "active": True
+                "active": False
             },
             {
                 "text": "Inquilinos",
@@ -219,10 +220,10 @@ class MainWindow:
         """Crea un botón de navegación elegante"""
         theme = theme_manager.themes[theme_manager.current_theme]
         
-        # Frame del botón
+        # Frame del botón - siempre usa bg_secondary (sin estado activo permanente)
         btn_frame = tk.Frame(
             parent,
-            bg=theme["bg_accent"] if item.get("active") else theme["bg_secondary"],
+            bg=theme["bg_secondary"],
             relief="flat",
             height=50
         )
@@ -242,7 +243,7 @@ class MainWindow:
             text=item["icon"],
             font=("Segoe UI Symbol", 16),
             bg=inner_frame.cget("bg"),
-            fg=theme["text_accent"] if item.get("active") else theme["text_primary"],
+            fg=theme["text_primary"],
             width=3
         )
         icon_label.pack(side="left")
@@ -251,31 +252,30 @@ class MainWindow:
         text_label = tk.Label(
             inner_frame,
             text=item["text"],
-            font=("Segoe UI", 11, "bold" if item.get("active") else "normal"),
+            font=("Segoe UI", 11, "normal"),
             bg=inner_frame.cget("bg"),
-            fg=theme["text_accent"] if item.get("active") else theme["text_primary"],
+            fg=theme["text_primary"],
             anchor="w"
         )
         text_label.pack(side="left", fill="x", expand=True, padx=(Spacing.MD, 0))
         
-        # Efectos de hover y click
+        # Efectos de hover y click - todos los botones solo cambian en hover
         def on_click(event=None):
             item["command"]()
         
         def on_enter(event):
-            if not item.get("active"):
-                btn_frame.configure(bg=theme["bg_tertiary"])
-                inner_frame.configure(bg=theme["bg_tertiary"])
-                icon_label.configure(bg=theme["bg_tertiary"])
-                text_label.configure(bg=theme["bg_tertiary"])
+            hover_bg = theme["bg_tertiary"]
+            btn_frame.configure(bg=hover_bg)
+            inner_frame.configure(bg=hover_bg)
+            icon_label.configure(bg=hover_bg)
+            text_label.configure(bg=hover_bg)
         
         def on_leave(event):
-            if not item.get("active"):
-                original_bg = theme["bg_secondary"]
-                btn_frame.configure(bg=original_bg)
-                inner_frame.configure(bg=original_bg)
-                icon_label.configure(bg=original_bg)
-                text_label.configure(bg=original_bg)
+            original_bg = theme["bg_secondary"]
+            btn_frame.configure(bg=original_bg)
+            inner_frame.configure(bg=original_bg)
+            icon_label.configure(bg=original_bg)
+            text_label.configure(bg=original_bg)
         
         # Bind events
         for widget in [btn_frame, inner_frame, icon_label, text_label]:
@@ -363,7 +363,7 @@ class MainWindow:
         # Botón de notificaciones
         notif_btn = tk.Button(
             actions_frame,
-            text=f"{Icons.NOTIFICATION}",
+            text=f"{Icons.NOTIFICATIONS}",
             font=("Segoe UI Symbol", 16),
             bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
             fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
@@ -422,11 +422,9 @@ class MainWindow:
         theme = theme_manager.themes[theme_manager.current_theme]
         
         for view_name, btn_frame in self.nav_buttons.items():
-            is_active = view_name == active_view
-            
-            # Colores según estado
-            bg_color = theme["bg_accent"] if is_active else theme["bg_secondary"]
-            text_color = theme["text_accent"] if is_active else theme["text_primary"]
+            # Todos los botones usan el mismo color base (sin estado activo permanente)
+            bg_color = theme["bg_secondary"]
+            text_color = theme["text_primary"]
             
             # Actualizar frame principal
             btn_frame.configure(bg=bg_color)
@@ -435,13 +433,35 @@ class MainWindow:
             for child in btn_frame.winfo_children():
                 child.configure(bg=bg_color)
                 for grandchild in child.winfo_children():
-                    grandchild.configure(bg=bg_color, fg=text_color)
+                    # Mantener el estilo normal (no bold) para todos
+                    if isinstance(grandchild, tk.Label):
+                        current_font = grandchild.cget("font")
+                        if isinstance(current_font, tuple):
+                            # Remover "bold" si existe
+                            font_parts = list(current_font)
+                            if len(font_parts) >= 3:
+                                font_parts[2] = "normal"
+                            elif len(font_parts) >= 2 and "bold" in str(current_font):
+                                font_parts = [font_parts[0], font_parts[1], "normal"]
+                        grandchild.configure(bg=bg_color, fg=text_color, font=("Segoe UI", 11, "normal"))
     
     def _load_view(self, view_name: str):
         """Carga una vista específica"""
         if view_name == "dashboard":
             self._create_dashboard_view()
         elif view_name == "tenants":
+            # Recargar datos de inquilinos antes de crear la vista para asegurar datos actualizados
+            from manager.app.services.tenant_service import tenant_service
+            try:
+                # Recargar datos desde archivo
+                tenant_service._load_data()
+                # Recalcular estados basándose en pagos recientes
+                tenant_service.recalculate_all_payment_statuses()
+                # Recargar datos después del recálculo
+                tenant_service._load_data()
+            except Exception as e:
+                print(f"Error al recargar datos de inquilinos: {str(e)}")
+            
             self._create_tenants_view()
             # Forzar actualización después de cargar la vista de inquilinos
             self.root.after(100, self.root.update_idletasks)
@@ -461,15 +481,16 @@ class MainWindow:
         elif view_name == "reports":
             self._create_placeholder_view("Módulo de Reportes", "Análisis y reportes del edificio")
         elif view_name == "settings":
-            self._create_placeholder_view("Configuración", "Configuración del sistema")
+            settings_view = SettingsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+            settings_view.pack(fill="both", expand=True)
     
     def _create_dashboard_view(self):
         """Crea la vista del dashboard"""
-        # Grid de métricas principales
+        # Grid de métricas principales con espaciado compacto
         metrics_frame = tk.Frame(self.views_container, **theme_manager.get_style("frame"))
         metrics_frame.pack(fill="x", pady=(0, Spacing.XL))
         
-        # Fila de métricas
+        # Fila de métricas con espaciado compacto y profesional
         metrics_row = tk.Frame(metrics_frame, **theme_manager.get_style("frame"))
         metrics_row.pack(fill="x")
         
@@ -494,7 +515,7 @@ class MainWindow:
             icon=Icons.TENANTS,
             color_theme="primary"
         )
-        metric1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
+        metric1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
         
         # Métrica 2: Pagos Pendientes
         metric2 = ModernMetricCard(
@@ -504,7 +525,7 @@ class MainWindow:
             icon=Icons.PAYMENT_PENDING,
             color_theme="warning"
         )
-        metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
+        metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
         
         # Métrica 3: Ingresos del Mes (real)
         ingresos_mes = self._get_payments_of_current_month()
@@ -515,9 +536,9 @@ class MainWindow:
             icon=Icons.PAYMENT_RECEIVED,
             color_theme="success"
         )
-        metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
+        metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
         
-        # Métrica 4: Gastos del Mes (ya está bien)
+        # Métrica 4: Gastos del Mes
         gastos_mes = self._get_expenses_of_current_month()
         metric4 = ModernMetricCard(
             metrics_row,
@@ -526,7 +547,7 @@ class MainWindow:
             icon=Icons.EXPENSES,
             color_theme="error"
         )
-        metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.MD))
+        metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
         
         # Métrica 5: Saldo Neto del Mes (ingresos reales - gastos reales)
         saldo_neto = ingresos_mes - gastos_mes
@@ -552,7 +573,7 @@ class MainWindow:
         self._create_admin_actions_grid()
     
     def _create_tenants_view(self):
-        """Crea la vista de inquilinos"""
+        """Crea la vista de inquilinos con datos actualizados"""
         tenants_view = TenantsView(
             self.views_container,
             on_navigate=self._navigate_to,
@@ -648,16 +669,34 @@ class MainWindow:
 
     def _create_placeholder_view(self, title: str, subtitle: str):
         """Crea una vista placeholder"""
-        card = ModernCard(
-            self.views_container,
-            title=title,
-            subtitle=subtitle
-        )
-        card.pack(fill="both", expand=True)
+        card = ModernCard(self.views_container)
+        card.pack(fill="both", expand=True, padx=Spacing.XL, pady=Spacing.XL)
         
+        # Contenedor interno
+        content_frame = tk.Frame(card, **theme_manager.get_style("frame"))
+        content_frame.pack(fill="both", expand=True, padx=Spacing.XL, pady=Spacing.XL)
+        
+        # Título
+        title_label = tk.Label(
+            content_frame,
+            text=title,
+            **theme_manager.get_style("label_title")
+        )
+        title_label.pack(pady=(0, Spacing.MD))
+        
+        # Subtítulo
+        if subtitle:
+            subtitle_label = tk.Label(
+                content_frame,
+                text=subtitle,
+                **theme_manager.get_style("label_body")
+            )
+            subtitle_label.pack(pady=(0, Spacing.LG))
+        
+        # Mensaje placeholder
         placeholder_label = tk.Label(
-            card.content_frame,
-            text="🚧 Módulo en desarrollo\n\nEste módulo será implementado próximamente.",
+            content_frame,
+            text="Modulo en desarrollo\n\nEste modulo sera implementado proximamente.",
             **theme_manager.get_style("label_body"),
             justify="center"
         )
@@ -737,8 +776,8 @@ class MainWindow:
                 row=card_info["row"],
                 column=card_info["col"],
                 sticky="nsew",
-                padx=Spacing.XS,
-                pady=Spacing.XS
+                padx=Spacing.SM,
+                pady=Spacing.SM
             )
     
     def _show_new_tenant_form(self):
@@ -821,12 +860,15 @@ class MainWindow:
         self._navigate_to("administration")
 
     def _create_admin_action_card(self, parent, icon: str, title: str, color: str, action: Callable, enabled: bool = True, disabled_message: str = ""):
-        """Crea una card de acción administrativa solo con icono y título, sin descripción"""
+        """Crea una card de acción administrativa mejorada visualmente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
         style = theme_manager.get_style("card").copy()
-        style["bd"] = 2
-        style["relief"] = "raised"
-        style["width"] = 260
-        style["height"] = 120
+        style["bd"] = 1
+        style["relief"] = "flat"
+        style["highlightbackground"] = theme["border_light"]
+        style["highlightthickness"] = 1
+        style["width"] = 400
+        style["height"] = 220
         
         # Ajustar estilo según si está habilitada o no
         if enabled:
@@ -841,68 +883,85 @@ class MainWindow:
         card_frame.pack_propagate(False)
         card_frame.configure(cursor=cursor)
         
-        # Contenido centrado
-        content_frame = tk.Frame(card_frame, bg=style["bg"])
-        content_frame.place(relx=0.5, rely=0.5, anchor="center")
+        # Contenedor interno centrado con padding adecuado
+        inner_container = tk.Frame(card_frame, bg=style["bg"])
+        inner_container.pack(fill="both", expand=True)
         
-        # Icono grande
+        # Usar place para centrar el contenido verticalmente
+        content_wrapper = tk.Frame(inner_container, bg=style["bg"])
+        content_wrapper.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Sección superior para el icono con padding reducido
+        icon_frame = tk.Frame(content_wrapper, bg=style["bg"])
+        icon_frame.pack(pady=(0, Spacing.SM))
+        
+        # Icono grande y bien proporcionado
         icon_label = tk.Label(
-            content_frame,
+            icon_frame,
             text=icon,
-            font=("Segoe UI", 32),
+            font=("Segoe UI Symbol", 42),
             fg=color,
             bg=style["bg"]
         )
-        icon_label.pack(pady=(0, 6))
+        icon_label.pack()
         
-        # Título centrado y grande
+        # Sección inferior para el título
+        title_frame = tk.Frame(content_wrapper, bg=style["bg"])
+        title_frame.pack(fill="x", padx=Spacing.MD)
+        
+        # Título centrado y legible
         title_label = tk.Label(
-            content_frame,
+            title_frame,
             text=title,
-            font=("Segoe UI", 14, "bold"),
+            font=("Segoe UI", 15, "bold"),
             fg=color,
             bg=style["bg"],
             anchor="center",
-            justify="center"
+            justify="center",
+            wraplength=300
         )
-        title_label.pack(fill="x")
+        title_label.pack()
         
         # Si está deshabilitada, agregar mensaje de ayuda
         if not enabled and disabled_message:
             help_label = tk.Label(
-                content_frame,
+                content_wrapper,
                 text=disabled_message,
                 font=("Segoe UI", 9),
                 fg="#666666",
                 bg=style["bg"],
                 anchor="center",
                 justify="center",
-                wraplength=220
+                wraplength=300
             )
-            help_label.pack(pady=(4, 0))
+            help_label.pack(pady=(Spacing.SM, 0))
         
         # Hover effect solo si está habilitada
         if enabled:
             def on_enter(e):
-                card_frame.configure(bg="#e3f2fd")
-                content_frame.configure(bg="#e3f2fd")
-                icon_label.configure(bg="#e3f2fd")
-                title_label.configure(bg="#e3f2fd")
-                if not enabled and disabled_message:
-                    help_label.configure(bg="#e3f2fd")
+                hover_bg = "#f0f9ff"
+                card_frame.configure(bg=hover_bg)
+                inner_container.configure(bg=hover_bg)
+                content_wrapper.configure(bg=hover_bg)
+                icon_frame.configure(bg=hover_bg)
+                title_frame.configure(bg=hover_bg)
+                icon_label.configure(bg=hover_bg)
+                title_label.configure(bg=hover_bg)
             
             def on_leave(e):
-                card_frame.configure(bg="white")
-                content_frame.configure(bg="white")
-                icon_label.configure(bg="white")
-                title_label.configure(bg="white")
-                if not enabled and disabled_message:
-                    help_label.configure(bg="white")
+                original_bg = style["bg"]
+                card_frame.configure(bg=original_bg)
+                inner_container.configure(bg=original_bg)
+                content_wrapper.configure(bg=original_bg)
+                icon_frame.configure(bg=original_bg)
+                title_frame.configure(bg=original_bg)
+                icon_label.configure(bg=original_bg)
+                title_label.configure(bg=original_bg)
             
             card_frame.bind("<Enter>", on_enter)
             card_frame.bind("<Leave>", on_leave)
             
-            for w in [content_frame, icon_label, title_label]:
+            for w in [inner_container, content_wrapper, icon_frame, title_frame, icon_label, title_label]:
                 w.bind("<Button-1>", lambda e: action())
                 w.bind("<Enter>", on_enter)
                 w.bind("<Leave>", on_leave)
@@ -952,42 +1011,39 @@ class MainWindow:
             self._create_dashboard_view()
     
     def refresh_tenants_view(self):
-        """Refresca la vista de inquilinos para mostrar estados actualizados"""
-        # SIEMPRE refrescar, sin importar desde dónde se llame
+        """Refresca la vista de inquilinos para mostrar estados actualizados en tiempo real"""
         current_view = getattr(self, '_current_view', None)
         print(f"🔄 Refrescando vista de inquilinos desde vista: {current_view}")
         
         try:
-            # Forzar actualización de Tkinter antes de refrescar
-            self.root.update_idletasks()
-            self.root.update()
+            # Primero intentar refrescar si la vista de inquilinos ya está activa
+            if current_view == "tenants":
+                # Buscar la instancia de TenantsView en los widgets hijos
+                for widget in self.views_container.winfo_children():
+                    if isinstance(widget, TenantsView):
+                        # Si está en la lista, refrescar solo la lista sin destruir la vista
+                        if widget.current_view == "list":
+                            widget.refresh_list()
+                            print("✅ Lista de inquilinos refrescada en tiempo real (sin recrear vista)")
+                            # Forzar actualización de la UI
+                            self.root.update_idletasks()
+                            self.root.update()
+                            return
+                        # Si está en otra subvista (dashboard, details), refrescar cuando vuelva a lista
             
-            # Limpiar contenido actual
-            for widget in self.views_container.winfo_children():
-                widget.destroy()
+            # Si no estamos en la vista de inquilinos o no está en lista, 
+            # los datos se recargarán automáticamente cuando navegues a inquilinos
+            # gracias a _create_tenants_view() que ya recarga datos
             
-            # Forzar actualización después de limpiar
-            self.root.update_idletasks()
-            self.root.update()
-            
-            # Recrear la vista de inquilinos
-            self._create_tenants_view()
-            
-            # Forzar actualización después de recrear
-            self.root.update_idletasks()
-            self.root.update()
-            
-            # Forzar actualización final
-            self.root.after(100, self.root.update_idletasks)
-            self.root.after(200, self.root.update)
-            
-            print(f"✅ Vista de inquilinos refrescada automáticamente (SIEMPRE)")
+            print(f"✅ Callback de refresh ejecutado - Los datos se actualizarán al navegar a inquilinos")
         except Exception as e:
             print(f"⚠️ Error al refrescar vista de inquilinos: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _force_tenants_refresh(self):
         """Fuerza un refresh completo de la vista de inquilinos"""
-        print(f"🔄 Forzando refresh completo de vista de inquilinos")
+        print("Forzando refresh completo de vista de inquilinos")
         try:
             # Limpiar contenido actual
             for widget in self.views_container.winfo_children():
@@ -1002,9 +1058,9 @@ class MainWindow:
             self.root.after(100, self.root.update_idletasks)
             self.root.after(200, self.root.update)
             
-            print(f"✅ Refresh completo forzado exitosamente")
+            print(f"Refresh completo forzado exitosamente")
         except Exception as e:
-            print(f"⚠️ Error al forzar refresh: {str(e)}")
+            print(f"Error al forzar refresh: {str(e)}")
     
     def _get_payments_of_current_month(self):
         from manager.app.services.payment_service import PaymentService

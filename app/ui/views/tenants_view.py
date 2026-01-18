@@ -13,6 +13,8 @@ from manager.app.ui.views.tenant_form_view import TenantFormView
 from manager.app.ui.views.tenant_details_view import TenantDetailsView
 import csv
 import os
+import subprocess
+import platform
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.building_service import building_service
 
@@ -28,8 +30,30 @@ class TenantsView(tk.Frame):
         self.current_view = "dashboard"
         self.selected_tenant = None
         
+        # Almacenar referencia del scrollable_frame para refrescar lista
+        self.scrollable_frame = None
+        
         # Crear layout principal
         self._create_layout()
+    
+    def refresh_list(self):
+        """Método público para refrescar la lista de inquilinos en tiempo real"""
+        try:
+            # Si estamos en la vista de lista, recargar y redisplay
+            if self.current_view == "list":
+                # Recargar datos desde el archivo
+                tenant_service._load_data()
+                # Recalcular estados basándose en pagos recientes
+                tenant_service.recalculate_all_payment_statuses()
+                # Recargar datos después del recálculo
+                tenant_service._load_data()
+                # Volver a mostrar con datos actualizados
+                self._load_and_display_tenants()
+                print("✅ Lista de inquilinos refrescada en tiempo real")
+        except Exception as e:
+            print(f"Error al refrescar lista: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _create_layout(self):
         """Crea el layout principal con 4 cards centrales"""
@@ -407,6 +431,7 @@ class TenantsView(tk.Frame):
         self.canvas = tk.Canvas(self.scroll_frame, bg="#f1f8e9", highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.scroll_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas, bg="#f1f8e9")
+        # Guardar referencia del scrollable_frame como atributo de instancia para acceso externo
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -428,10 +453,17 @@ class TenantsView(tk.Frame):
     def _load_and_display_tenants(self):
         """Carga y muestra todos los inquilinos"""
         try:
+            # Recargar datos desde el archivo para asegurar datos actualizados
+            tenant_service._load_data()
+            
             # Recalcular estados de pago automáticamente antes de cargar
+            # Esto asegura que los estados se actualicen basándose en los pagos más recientes
             tenant_service.recalculate_all_payment_statuses()
             
-            # Cargar inquilinos actualizados
+            # Recargar datos nuevamente después del recálculo para obtener estados actualizados
+            tenant_service._load_data()
+            
+            # Cargar inquilinos actualizados (después de recargar y recalcular)
             self.all_tenants = tenant_service.get_all_tenants()
             self._display_tenants(self.all_tenants)
         except Exception as e:
@@ -870,10 +902,163 @@ class TenantsView(tk.Frame):
                 for t in tenants:
                     row = [t.get(h[1], "") for h in headers]
                     writer.writerow(row)
-            messagebox.showinfo("Exportar", f"Exportación exitosa. Archivo guardado en:\n{ruta}")
+            
+            # Mostrar diálogo personalizado con ruta copiable
+            self._show_export_success_dialog(ruta)
         except Exception as e:
             messagebox.showerror("Exportar", f"Error al exportar: {str(e)}")
 
+    def _show_export_success_dialog(self, file_path: str):
+        """Muestra un diálogo personalizado con la ruta del archivo exportado"""
+        dialog = tk.Toplevel(self)
+        dialog.title("Exportar")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centrar el diálogo
+        dialog.update_idletasks()
+        width = 550
+        height = 200
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Frame principal
+        main_frame = tk.Frame(dialog, bg="white", padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+        
+        # Icono y mensaje
+        info_frame = tk.Frame(main_frame, bg="white")
+        info_frame.pack(fill="x", pady=(0, 15))
+        
+        # Icono de información
+        icon_label = tk.Label(
+            info_frame,
+            text="ℹ️",
+            font=("Segoe UI", 24),
+            bg="white",
+            fg="#1976d2"
+        )
+        icon_label.pack(side="left", padx=(0, 10))
+        
+        # Texto del mensaje
+        text_frame = tk.Frame(info_frame, bg="white")
+        text_frame.pack(side="left", fill="x", expand=True)
+        
+        msg_label = tk.Label(
+            text_frame,
+            text="Exportación exitosa. Archivo guardado en:",
+            font=("Segoe UI", 10),
+            bg="white",
+            fg="#333",
+            anchor="w"
+        )
+        msg_label.pack(fill="x")
+        
+        # Campo de entrada con la ruta (seleccionable)
+        path_frame = tk.Frame(main_frame, bg="white")
+        path_frame.pack(fill="x", pady=(0, 15))
+        
+        path_entry = tk.Entry(
+            path_frame,
+            font=("Segoe UI", 9),
+            relief="solid",
+            bd=1,
+            bg="#ffffff",
+            fg="#000000",
+            selectbackground="#1976d2",
+            selectforeground="white",
+            readonlybackground="#ffffff",
+            insertbackground="#000000"
+        )
+        path_entry.pack(side="left", fill="x", expand=True, ipady=5)
+        # Insertar texto primero, luego configurar como readonly
+        path_entry.config(state="normal")
+        path_entry.insert(0, file_path)
+        path_entry.config(state="readonly")
+        # Seleccionar todo el texto para que sea visible y fácil de copiar
+        path_entry.select_range(0, tk.END)
+        
+        # Botones
+        buttons_frame = tk.Frame(main_frame, bg="white")
+        buttons_frame.pack(fill="x")
+        
+        def copy_to_clipboard():
+            dialog.clipboard_clear()
+            dialog.clipboard_append(file_path)
+            dialog.update()
+            copy_btn.config(text="✓ Copiado", bg="#4caf50")
+            dialog.after(1500, lambda: copy_btn.config(text="📋 Copiar", bg="#1976d2"))
+        
+        def open_folder():
+            folder_path = os.path.dirname(file_path)
+            try:
+                if platform.system() == "Windows":
+                    # Usar explorer.exe /select para abrir la carpeta y seleccionar el archivo
+                    subprocess.Popen(['explorer.exe', '/select,', os.path.normpath(file_path)])
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.Popen(["open", "-R", file_path])  # -R revela el archivo en Finder
+                else:  # Linux
+                    # Para Linux, intentar usar el gestor de archivos con selección de archivo
+                    try:
+                        subprocess.Popen(["xdg-open", os.path.dirname(file_path)])
+                    except:
+                        subprocess.Popen(["nautilus", "--select", file_path])
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo abrir la carpeta: {str(e)}")
+        
+        copy_btn = tk.Button(
+            buttons_frame,
+            text="📋 Copiar",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1976d2",
+            fg="white",
+            relief="flat",
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=copy_to_clipboard
+        )
+        copy_btn.pack(side="left", padx=(0, 10))
+        
+        open_btn = tk.Button(
+            buttons_frame,
+            text="📂 Abrir carpeta",
+            font=("Segoe UI", 9),
+            bg="#666",
+            fg="white",
+            relief="flat",
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=open_folder
+        )
+        open_btn.pack(side="left", padx=(0, 10))
+        
+        ok_btn = tk.Button(
+            buttons_frame,
+            text="Aceptar",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1976d2",
+            fg="white",
+            relief="flat",
+            padx=20,
+            pady=5,
+            cursor="hand2",
+            command=dialog.destroy
+        )
+        ok_btn.pack(side="right")
+        
+        # Permitir copiar con Ctrl+C en el campo de entrada
+        path_entry.bind("<Control-c>", lambda e: copy_to_clipboard())
+        
+        # Enfocar el campo de entrada para facilitar selección
+        path_entry.focus_set()
+        
+        # Hacer el diálogo modal
+        dialog.wait_window()
+    
     def on_register_payment(self, tenant):
         # Llama a la función de navegación real si está disponible
         if self.on_register_payment_callback:

@@ -7,6 +7,7 @@ from typing import Callable, List, Dict, Any
 
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.building_service import building_service
+from manager.app.services.tenant_service import tenant_service
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.modern_widgets import ModernButton
 from .apartment_form_view import ApartmentFormView
@@ -208,7 +209,18 @@ class ApartmentsListView(tk.Frame):
 
         tenant_label = None
         if apt.get('status') == 'Ocupado':
-            tenant_label = tk.Label(details_frame, text=f"Inquilino: {apt.get('tenant_name', 'No asignado')}", font=("Segoe UI", 10, "italic"))
+            # Buscar el inquilino que tiene asignado este apartamento
+            apartment_id = apt.get('id')
+            tenant_name = "No asignado"
+            
+            # Buscar inquilino por ID del apartamento
+            all_tenants = tenant_service.get_all_tenants()
+            for tenant in all_tenants:
+                if str(tenant.get('apartamento', '')) == str(apartment_id):
+                    tenant_name = tenant.get('nombre', 'No asignado')
+                    break
+            
+            tenant_label = tk.Label(details_frame, text=f"Inquilino: {tenant_name}", font=("Segoe UI", 10, "italic"))
             tenant_label.pack(anchor="w")
 
         # Actions
@@ -261,10 +273,18 @@ class ApartmentsListView(tk.Frame):
 
         # 3. Filter by search term
         if search_term:
+            # Obtener nombres de inquilinos para cada apartamento ocupado
+            all_tenants = tenant_service.get_all_tenants()
+            tenant_by_apt = {}
+            for tenant in all_tenants:
+                apt_id = str(tenant.get('apartamento', ''))
+                if apt_id:
+                    tenant_by_apt[apt_id] = tenant.get('nombre', '').lower()
+            
             filtered = [apt for apt in filtered if 
                         search_term in str(apt.get('number', '')).lower() or
                         search_term in str(apt.get('floor', '')).lower() or
-                        search_term in apt.get('tenant_name', '').lower()]
+                        search_term in tenant_by_apt.get(str(apt.get('id', '')), '').lower()]
 
         self._display_apartments(filtered)
 

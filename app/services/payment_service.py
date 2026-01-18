@@ -32,6 +32,8 @@ class PaymentService:
         return self.payments.copy()
 
     def get_payments_by_tenant(self, tenant_id: int) -> List[Dict[str, Any]]:
+        # Asegurar que los datos estén actualizados
+        self._load_data()
         return [p for p in self.payments if p.get("id_inquilino") == tenant_id]
 
     def add_payment(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,15 +52,22 @@ class PaymentService:
         self.payments.append(payment)
         self._save_data()
         
-        # Actualizar automáticamente el estado del inquilino
+        # Actualizar automáticamente el estado del inquilino DESPUÉS de guardar
         tenant_id = payment_data.get("id_inquilino")
         if tenant_id:
             try:
                 from manager.app.services.tenant_service import tenant_service
+                # Recargar datos de inquilinos para asegurar datos actualizados
+                tenant_service._load_data()
+                # Recargar datos de pagos en este servicio para asegurar consistencia
+                self._load_data()
+                # Actualizar el estado del inquilino específico (esto también recarga pagos)
                 tenant_service.update_payment_status(tenant_id)
                 print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id}")
             except Exception as e:
                 print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+                import traceback
+                traceback.print_exc()
         
         return payment.copy()
 

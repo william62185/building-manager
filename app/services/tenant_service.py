@@ -164,12 +164,15 @@ class TenantService:
             from manager.app.services.payment_service import payment_service
             from datetime import datetime, timedelta
             
+            # Recargar datos de pagos para asegurar que estén actualizados
+            payment_service._load_data()
+            
             # Obtener el inquilino
             tenant = self.get_tenant_by_id(tenant_id)
             if not tenant:
                 return "inactivo"
             
-            # Obtener todos los pagos del inquilino
+            # Obtener todos los pagos del inquilino (después de recargar datos)
             payments = payment_service.get_payments_by_tenant(tenant_id)
             
             if not payments:
@@ -238,6 +241,13 @@ class TenantService:
     def recalculate_all_payment_statuses(self) -> Dict[str, int]:
         """Recalcula el estado de pago de todos los inquilinos"""
         try:
+            # Recargar datos de pagos antes de recalcular estados
+            from manager.app.services.payment_service import payment_service
+            payment_service._load_data()
+            
+            # Recargar datos de inquilinos también
+            self._load_data()
+            
             updated_count = 0
             status_changes = {
                 'al_dia': 0,

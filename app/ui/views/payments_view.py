@@ -350,9 +350,22 @@ class PaymentsView(tk.Frame):
         y -= 18
         c.drawString(50, y, f"Nombre: {pago.get('nombre_inquilino', '')}")
         y -= 15
-        c.drawString(50, y, f"Apartamento: {self.selected_tenant.get('apartamento', '')}")
+        # Obtener el número real del apartamento (no el ID)
+        apt_display = "N/A"
+        if self.selected_tenant:
+            apt_id = self.selected_tenant.get('apartamento', '')
+            if apt_id:
+                try:
+                    apt = apartment_service.get_apartment_by_id(int(apt_id))
+                    if apt and 'number' in apt:
+                        apt_display = apt['number']
+                    else:
+                        apt_display = str(apt_id)
+                except Exception:
+                    apt_display = str(apt_id)
+        c.drawString(50, y, f"Apartamento: {apt_display}")
         y -= 15
-        c.drawString(50, y, f"Documento: {self.selected_tenant.get('numero_documento', '')}")
+        c.drawString(50, y, f"Documento: {self.selected_tenant.get('numero_documento', '') if self.selected_tenant else 'N/A'}")
         y -= 25
         c.setFont("Helvetica-Bold", 12)
         c.drawString(40, y, "Detalles del Pago:")
