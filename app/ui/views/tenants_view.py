@@ -180,25 +180,33 @@ class TenantsView(tk.Frame):
             justify="center"
         )
         desc_label.pack(pady=(Spacing.XS, 0))
+        
         def on_enter(event):
             card_frame.configure(bg="#e3f2fd")
             content_frame.configure(bg="#e3f2fd")
             icon_label.configure(bg="#e3f2fd")
             title_label.configure(bg="#e3f2fd")
             desc_label.configure(bg="#e3f2fd")
+        
         def on_leave(event):
             card_frame.configure(bg="white")
             content_frame.configure(bg="white")
             icon_label.configure(bg="white")
             title_label.configure(bg="white")
             desc_label.configure(bg="white")
-        card_frame.bind("<Enter>", on_enter)
-        card_frame.bind("<Leave>", on_leave)
-        for w in [icon_label, title_label, desc_label]:
-            w.bind("<Button-1>", lambda e: command())
-            w.configure(cursor="hand2")
-        card_frame.bind("<Button-1>", lambda e: command())
-        card_frame.configure(cursor="hand2")
+        
+        def on_card_click(event):
+            command()
+        
+        # Hacer TODO el card clickeable - bind a todos los elementos
+        # Esto asegura que cualquier parte del card responda al clic
+        all_widgets = [card_frame, content_frame, icon_label, title_label, desc_label]
+        for widget in all_widgets:
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.bind("<Button-1>", on_card_click)
+            widget.configure(cursor="hand2")
+        
         return card_frame
     
     def _show_tenant_form(self):
@@ -275,15 +283,15 @@ class TenantsView(tk.Frame):
             fg="white"
         )
         title.pack(expand=True)
-        # Contenido del panel
+        # Contenido del panel - REDUCIR PADDING para dar más espacio a los botones
         content = tk.Frame(panel, bg="#e3f2fd")
-        content.pack(fill="both", expand=True, padx=12, pady=12)
+        content.pack(fill="both", expand=True, padx=8, pady=8)
         
         # === BÚSQUEDA POR TEXTO ===
         tk.Label(content, text="Búsqueda general:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,2))
         tk.Label(content, text="(Nombre, Cédula, Apartamento, Email, Teléfono)", font=("Segoe UI", 8), bg="#e3f2fd", fg="#666666").pack(anchor="w", pady=(0,5))
         self.search_entry = tk.Entry(content, font=("Segoe UI", 10), relief="solid", bd=1)
-        self.search_entry.pack(fill="x", pady=(0,10))
+        self.search_entry.pack(fill="x", pady=(0,8))
         self.search_entry.bind('<KeyRelease>', self._on_search_change)
         
         # === FILTRO POR APARTAMENTO ===
@@ -309,7 +317,7 @@ class TenantsView(tk.Frame):
             apartment_options.extend(["101", "102", "201", "202", "301", "302"])
         
         apartment_combo['values'] = apartment_options
-        apartment_combo.pack(fill="x", pady=(0,10))
+        apartment_combo.pack(fill="x", pady=(0,8))
         apartment_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
         
         # === FILTRO POR ESTADO ===
@@ -317,14 +325,14 @@ class TenantsView(tk.Frame):
         self.status_var = tk.StringVar(value="Todos")
         status_combo = ttk.Combobox(content, textvariable=self.status_var, font=("Segoe UI", 10))
         status_combo['values'] = ("Todos", "Al Día", "Pendiente Registro", "En Mora", "Inactivo")
-        status_combo.pack(fill="x", pady=(0,10))
+        status_combo.pack(fill="x", pady=(0,8))
         status_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
         
         # === RANGO DE FECHAS (COMPACTO) ===
-        tk.Label(content, text="Fecha de ingreso:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(5,2))
+        tk.Label(content, text="Fecha de ingreso:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
         
         date_frame = tk.Frame(content, bg="#e3f2fd")
-        date_frame.pack(fill="x", pady=(0,5))
+        date_frame.pack(fill="x", pady=(0,3))
         
         tk.Label(date_frame, text="Desde:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
         self.date_from = tk.Entry(date_frame, width=10, font=("Segoe UI", 8))
@@ -335,10 +343,10 @@ class TenantsView(tk.Frame):
         self.date_to.pack(side="left", padx=3)
         
         # === RANGO DE ARRIENDO (COMPACTO) ===
-        tk.Label(content, text="Rango de arriendo:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(5,2))
+        tk.Label(content, text="Rango de arriendo:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
         
         rent_frame = tk.Frame(content, bg="#e3f2fd")
-        rent_frame.pack(fill="x", pady=(0,5))
+        rent_frame.pack(fill="x", pady=(0,3))
         
         tk.Label(rent_frame, text="Min:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
         self.rent_min = tk.Entry(rent_frame, width=8, font=("Segoe UI", 8))
@@ -356,21 +364,22 @@ class TenantsView(tk.Frame):
             bg="#e3f2fd",
             fg="#2e7d32"
         )
-        self.results_indicator.pack(anchor="w", pady=(8,8))
+        self.results_indicator.pack(anchor="w", pady=(5,5))
         
         # === BOTONES ===
         btn_frame = tk.Frame(content, bg="#e3f2fd")
-        btn_frame.pack(fill="x", pady=8)
+        btn_frame.pack(fill="x", pady=(5,0))
         
         btn_search = tk.Button(
             btn_frame,
             text="🔍 Aplicar",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg="#4caf50",
             fg="white",
             relief="flat",
-            padx=15,
-            pady=5,
+            padx=20,
+            pady=8,
+            cursor="hand2",
             command=self._apply_filters
         )
         btn_search.pack(side="left", padx=(0,8))
@@ -378,12 +387,13 @@ class TenantsView(tk.Frame):
         btn_clear = tk.Button(
             btn_frame,
             text="🧹 Limpiar",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 10),
             bg="#ff9800",
             fg="white",
             relief="flat",
-            padx=15,
-            pady=5,
+            padx=20,
+            pady=8,
+            cursor="hand2",
             command=self._clear_filters
         )
         btn_clear.pack(side="left")
@@ -674,16 +684,30 @@ class TenantsView(tk.Frame):
         )
         delete_btn.pack(side="left")
         
-        # Hacer clic en el card para ver detalles
+        # Hacer clic en el card para ver detalles - MEJORADO: toda el área es clickeable
         def on_card_click(event, t=tenant):
+            # Verificar que el clic no fue en el botón de eliminar o su frame
+            clicked_widget = event.widget
+            # Si el clic fue en el botón de eliminar o en su frame de acciones, no hacer nada
+            if clicked_widget == delete_btn or clicked_widget == actions_frame:
+                return
+            # Verificar si el widget es hijo del botón o del frame de acciones
+            try:
+                parent = clicked_widget.winfo_parent()
+                if parent == str(delete_btn) or parent == str(actions_frame):
+                    return
+            except:
+                pass
             self._show_tenant_details(t)
-        # Bind a todo el card y sus hijos
-        for widget in [row_frame, content, main_info, details, estado_label]:
+        
+        # Bind a TODO el card y TODOS sus hijos para hacer toda el área clickeable
+        all_clickable_widgets = [row_frame, content, main_info, details, estado_label]
+        if 'dia_pago_label' in locals():
+            all_clickable_widgets.append(dia_pago_label)
+        
+        for widget in all_clickable_widgets:
             widget.bind("<Button-1>", on_card_click)
             widget.configure(cursor="hand2")
-        if 'dia_pago_label' in locals():
-            dia_pago_label.bind("<Button-1>", on_card_click)
-            dia_pago_label.configure(cursor="hand2")
     
     def _show_tenant_details(self, tenant):
         """Muestra los detalles de un inquilino"""
@@ -725,15 +749,21 @@ class TenantsView(tk.Frame):
         pass
     
     def _show_reports(self):
-        """Muestra reportes"""
-        messagebox.showinfo(
-            "Reportes",
-            "Módulo de reportes en desarrollo.\n\n" +
-            "Próximamente disponible:\n" +
-            "• Reporte de ocupación\n" +
-            "• Reporte de pagos\n" +
-            "• Estadísticas generales"
+        """Muestra la vista completa de reportes"""
+        self.current_view = "reports"
+        
+        # Limpiar vista
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        # Importar e instanciar la vista de reportes
+        from manager.app.ui.views.reports_view import ReportsView
+        
+        reports_view = ReportsView(
+            self,
+            on_back=self._back_to_dashboard
         )
+        reports_view.pack(fill="both", expand=True)
     
     def _back_to_dashboard(self):
         """Vuelve al dashboard principal"""
