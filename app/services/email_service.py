@@ -4,10 +4,14 @@ Maneja la configuración SMTP y envío de recibos
 """
 import smtplib
 import os
+import re
+import urllib.parse
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from email.header import Header
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import json
@@ -148,14 +152,55 @@ Saludos cordiales,
             msg.attach(MIMEText(body, 'plain', 'utf-8'))
             
             # Adjuntar PDF
+            # Crear un nombre de archivo descriptivo y limpio
+            original_filename = os.path.basename(pdf_path)
+            
+            # Extraer información del nombre original si es posible
+            # Formato esperado: recibo_pago_Nombre_Apellido_DD-MM-YYYY.pdf
+            # MEJORA: Manejar mejor caracteres especiales como "ñ"
+            filename = None
+            if 'recibo_pago_' in original_filename:
+                try:
+                    # Extraer partes del nombre
+                    name_without_prefix = original_filename.replace('.pdf', '').replace('recibo_pago_', '')
+                    parts = name_without_prefix.split('_')
+                    if len(parts) >= 2:
+                        # Reconstruir nombre más legible
+                        name_parts = parts[:-1]  # Todo excepto la fecha
+                        date_part = parts[-1] if len(parts) > 1 else ''
+                        tenant_name = ' '.join(name_parts).title()
+                        # Crear nombre descriptivo: "Recibo de Pago - Nombre - Fecha.pdf"
+                        filename = f"Recibo de Pago - {tenant_name} - {date_part}.pdf"
+                except Exception:
+                    # Si hay error, usar el nombre del recipiente (más confiable)
+                    pass
+            
+            # Si no pudimos extraer, usar el nombre del recipiente que sabemos que es correcto
+            if not filename:
+                filename = f"Recibo de Pago - {recipient_name} - {payment_date.replace('/', '-')}.pdf"
+            
+            # Asegurar que tenga extensión .pdf
+            if not filename.lower().endswith('.pdf'):
+                filename = f"{filename}.pdf"
+            
+            # Limpiar caracteres problemáticos pero mantener legibilidad
+            # Reemplazar solo caracteres que pueden causar problemas en nombres de archivo
+            safe_filename = filename.replace(':', '-').replace('/', '-')
+            
             with open(pdf_path, "rb") as attachment:
-                part = MIMEBase('application', 'octet-stream')
+                part = MIMEBase('application', 'pdf')
                 part.set_payload(attachment.read())
                 encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename= {os.path.basename(pdf_path)}'
-                )
+                
+                # Configurar headers correctamente usando el método de Python que maneja RFC 2231 automáticamente
+                # Content-Type: usar el parámetro 'name' con encoding automático
+                part.add_header('Content-Type', 'application/pdf', name=safe_filename)
+                
+                # Content-Disposition: usar el parámetro 'filename' como tupla (charset, language, value)
+                # Esto permite que Python maneje automáticamente el encoding RFC 2231
+                # Formato: ('utf-8', '', filename) donde '' es el idioma (vacío)
+                part.add_header('Content-Disposition', 'attachment', filename=('utf-8', '', safe_filename))
+                
                 msg.attach(part)
             
             # Conectar y enviar
@@ -180,6 +225,174 @@ Saludos cordiales,
             error_msg += "• Para Gmail: Asegúrese de usar una contraseña de aplicación (no su contraseña normal)\n"
             error_msg += "• Para Gmail: Verifique que tenga 2FA habilitado y genere una nueva contraseña de aplicación\n"
             error_msg += "• El email puede tener espacios o caracteres incorrectos\n\n"
+            error_msg += f"Detalles técnicos: {str(e)}"
+            return False, error_msg
+        except smtplib.SMTPServerDisconnected:
+            return False, "No se pudo conectar al servidor SMTP. Verifique su conexión a internet y los datos de servidor."
+        except smtplib.SMTPException as e:
+            return False, f"Error SMTP: {str(e)}"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return False, f"Error inesperado: {str(e)}"
+    
+    def send_simple_email(self, recipient_email: str, recipient_name: str, 
+                         subject: str, body: str) -> Tuple[bool, str]:
+        """
+        Envía un email simple sin adjuntos
+        
+        Args:
+            recipient_email: Email del destinatario
+            recipient_name: Nombre del destinatario
+            subject: Asunto del email
+            body: Cuerpo del mensaje
+            
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        if not self.is_configured():
+            return False, "El email no está configurado. Por favor configure las credenciales SMTP primero."
+        
+        try:
+            # Crear mensaje
+            msg = MIMEMultipart()
+            msg['From'] = f"{self.config.get('sender_name', 'Building Manager Pro')} <{self.config['email']}>"
+            msg['To'] = recipient_email
+            msg['Subject'] = subject
+            
+            # Cuerpo del mensaje
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            # Conectar y enviar
+            server = smtplib.SMTP(self.config['smtp_server'], self.config['smtp_port'])
+            server.starttls()
+            
+            # Limpiar credenciales de espacios
+            email_clean = self.config['email'].strip()
+            password_clean = self.config['password'].strip()
+            
+            server.login(email_clean, password_clean)
+            text = msg.as_string()
+            server.sendmail(email_clean, recipient_email, text)
+            server.quit()
+            
+            return True, "Email enviado exitosamente."
+            
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = "Error de autenticación SMTP.\n\n"
+            error_msg += "Posibles causas:\n"
+            error_msg += "• La contraseña de aplicación es incorrecta\n"
+            error_msg += "• Para Gmail: Asegúrese de usar una contraseña de aplicación (no su contraseña normal)\n"
+            error_msg += "• Para Gmail: Verifique que tenga 2FA habilitado y genere una nueva contraseña de aplicación\n"
+            error_msg += "• El email puede tener espacios o caracteres incorrectos\n\n"
+            error_msg += f"Detalles técnicos: {str(e)}"
+            return False, error_msg
+        except smtplib.SMTPServerDisconnected:
+            return False, "No se pudo conectar al servidor SMTP. Verifique su conexión a internet y los datos de servidor."
+        except smtplib.SMTPException as e:
+            return False, f"Error SMTP: {str(e)}"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return False, f"Error inesperado: {str(e)}"
+    
+    def send_email_with_attachment(self, recipient_email: str, recipient_name: str,
+                                   subject: str, body: str, pdf_path: str) -> Tuple[bool, str]:
+        """
+        Envía un email con un PDF adjunto y asunto/cuerpo personalizados
+        
+        Args:
+            recipient_email: Email del destinatario
+            recipient_name: Nombre del destinatario
+            subject: Asunto del email
+            body: Cuerpo del mensaje
+            pdf_path: Ruta completa del archivo PDF a adjuntar
+            
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        if not self.is_configured():
+            return False, "El email no está configurado. Por favor configure las credenciales SMTP primero."
+        
+        if not os.path.exists(pdf_path):
+            return False, f"El archivo PDF no existe: {pdf_path}"
+        
+        try:
+            # Crear mensaje
+            msg = MIMEMultipart()
+            msg['From'] = f"{self.config.get('sender_name', 'Building Manager Pro')} <{self.config['email']}>"
+            msg['To'] = recipient_email
+            msg['Subject'] = subject
+            
+            # Cuerpo del mensaje
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            # Adjuntar PDF - usar el nombre del recipiente directamente para evitar problemas con caracteres especiales
+            original_filename = os.path.basename(pdf_path)
+            
+            # Intentar extraer la fecha del nombre del archivo para usar en el nombre descriptivo
+            # Extraer información del nombre original si es posible
+            # Formato esperado: recibo_pago_Nombre_Apellido_DD-MM-YYYY.pdf
+            date_part = None
+            try:
+                import re
+                # Buscar la fecha en el formato DD-MM-YYYY
+                date_match = re.search(r'(\d{2}-\d{2}-\d{4})', original_filename)
+                if date_match:
+                    date_part = date_match.group(1)
+            except Exception:
+                pass
+            
+            # SIEMPRE usar el recipient_name que se pasa como parámetro (es más confiable que parsear el archivo)
+            # Esto evita problemas con caracteres especiales como "ñ" que pueden estar mal codificados en el nombre del archivo
+            if date_part:
+                filename = f"Recibo de Pago - {recipient_name} - {date_part}.pdf"
+            else:
+                filename = f"Recibo de Pago - {recipient_name} - {datetime.now().strftime('%d-%m-%Y')}.pdf"
+            
+            # Asegurar que tenga extensión .pdf
+            if not filename.lower().endswith('.pdf'):
+                filename = f"{filename}.pdf"
+            
+            # Limpiar caracteres problemáticos pero mantener legibilidad
+            # Reemplazar solo caracteres que pueden causar problemas en nombres de archivo
+            safe_filename = filename.replace(':', '-').replace('/', '-')
+            
+            # Leer el archivo PDF - usar EXACTAMENTE la misma lógica que send_receipt_email
+            with open(pdf_path, "rb") as attachment:
+                part = MIMEBase('application', 'pdf')
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                
+                # Configurar headers correctamente usando el método de Python que maneja RFC 2231 automáticamente
+                # Content-Type: usar el parámetro 'name' con encoding automático
+                part.add_header('Content-Type', 'application/pdf', name=safe_filename)
+                
+                # Content-Disposition: usar el parámetro 'filename' como tupla (charset, language, value)
+                # Esto permite que Python maneje automáticamente el encoding RFC 2231
+                # Formato: ('utf-8', '', filename) donde '' es el idioma (vacío)
+                part.add_header('Content-Disposition', 'attachment', filename=('utf-8', '', safe_filename))
+                
+                msg.attach(part)
+            
+            # Conectar y enviar
+            server = smtplib.SMTP(self.config['smtp_server'], self.config['smtp_port'])
+            server.starttls()
+            email_clean = self.config['email'].strip()
+            password_clean = self.config['password'].strip()
+            server.login(email_clean, password_clean)
+            text = msg.as_string()
+            server.sendmail(email_clean, recipient_email, text)
+            server.quit()
+            
+            return True, "Email enviado exitosamente."
+            
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = "Error de autenticación SMTP.\n\n"
+            error_msg += "Posibles causas:\n"
+            error_msg += "• La contraseña de aplicación es incorrecta\n"
+            error_msg += "• Para Gmail: Asegúrese de usar una contraseña de aplicación (no su contraseña normal)\n"
+            error_msg += "• Para Gmail: Verifique que tenga 2FA habilitado y genere una nueva contraseña de aplicación\n"
             error_msg += f"Detalles técnicos: {str(e)}"
             return False, error_msg
         except smtplib.SMTPServerDisconnected:
