@@ -7,6 +7,7 @@ from manager.app.ui.components.modern_widgets import ModernButton
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
 from manager.app.services.payment_service import PaymentService
 from manager.app.services.tenant_service import TenantService
+from manager.app.services.apartment_service import apartment_service
 
 class EditDeletePaymentsView(tk.Frame):
     """Vista profesional para editar/eliminar pagos (independiente, duplicado de registrar pago)"""
@@ -127,9 +128,19 @@ class EditDeletePaymentsView(tk.Frame):
             row.grid(row=row_idx, column=0, sticky="ew")
             nombre = payment.get('nombre_inquilino', '')
             apto = ''
+            # Buscar apartamento real del inquilino
             for t in self.tenants:
                 if t['id'] == payment['id_inquilino']:
-                    apto = t.get('apartamento', '')
+                    apt_id = t.get('apartamento', '')
+                    if apt_id:
+                        try:
+                            apt = apartment_service.get_apartment_by_id(int(apt_id))
+                            if apt and 'number' in apt:
+                                apto = apt['number']
+                            else:
+                                apto = str(apt_id)
+                        except Exception:
+                            apto = str(apt_id)
                     break
             values = [
                 f"{nombre} (Apt. {apto})",

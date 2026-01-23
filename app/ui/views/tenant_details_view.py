@@ -4,7 +4,7 @@ Muestra toda la información de un inquilino de forma profesional
 """
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from typing import Dict, Any, Callable
 import json
 import os
@@ -20,6 +20,7 @@ from manager.app.services.building_service import building_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.email_service import email_service
+from manager.app.services.notification_service import notification_service
 from datetime import datetime, timedelta
 
 class TenantDetailsView(tk.Frame):
@@ -1460,8 +1461,511 @@ class TenantDetailsView(tk.Frame):
             traceback.print_exc()
     
     def _send_notification(self):
-        """Envía recordatorio de pago al inquilino (funcionalidad futura)"""
-        messagebox.showinfo("Info", "Envío de recordatorios de pago en desarrollo.\n\nEsta función permitirá enviar recordatorios automáticos a los inquilinos sobre pagos pendientes.")
+        """Abre la ventana modal para enviar notificaciones al inquilino"""
+        tenant_email = self.tenant_data.get("email", "").strip()
+        tenant_name = self.tenant_data.get("nombre", "Inquilino")
+        
+        # Verificar que el inquilino tenga email
+        if not tenant_email:
+            messagebox.showwarning(
+                "Email no disponible",
+                f"El inquilino {tenant_name} no tiene un email registrado.\n\n"
+                f"Por favor, edite el inquilino y agregue su email para poder enviar notificaciones."
+            )
+            return
+        
+        # Verificar que el email esté configurado
+        if not email_service.is_configured():
+            messagebox.showwarning(
+                "Email no configurado",
+                "El sistema de email no está configurado.\n\n"
+                "Por favor, configure las credenciales SMTP en Configuración antes de enviar notificaciones."
+            )
+            return
+        
+        # Abrir ventana modal de notificaciones
+        self._show_notification_modal()
+    
+    def _show_notification_modal(self):
+        """Muestra la ventana modal para enviar notificaciones"""
+        tenant_id = self.tenant_data.get("id")
+        tenant_name = self.tenant_data.get("nombre", "Inquilino")
+        tenant_email = self.tenant_data.get("email", "").strip()
+        
+        # Crear ventana modal
+        modal = tk.Toplevel(self)
+        modal.title(f"Enviar Notificación - {tenant_name}")
+        modal.transient(self)
+        modal.grab_set()
+        modal.resizable(False, False)
+        
+        # Centrar ventana
+        modal.update_idletasks()
+        width = 700
+        height = 600  # Altura aumentada para que quepan los botones
+        screen_width = modal.winfo_screenwidth()
+        screen_height = modal.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        available_height = screen_height - 50
+        y = (available_height // 2) - (height // 2)
+        if y < 0:
+            y = 50
+        modal.geometry(f"{width}x{height}+{x}+{y}")
+        modal.configure(bg="white")
+        
+        # PRIMERO: Contenedor de botones (fijo en la parte inferior)
+        buttons_container = tk.Frame(modal, bg="white", padx=20, pady=15)
+        buttons_container.pack(side="bottom", fill="x")
+        
+        # Separador visual para los botones
+        buttons_separator = tk.Frame(buttons_container, height=1, bg="#e0e0e0")
+        buttons_separator.pack(fill="x", pady=(0, 15))
+        
+        buttons_frame = tk.Frame(buttons_container, bg="white")
+        buttons_frame.pack(fill="x")
+        
+        # DESPUÉS: Frame principal con scroll si es necesario (debe dejar espacio para los botones)
+        scroll_container = tk.Frame(modal, bg="white")
+        scroll_container.pack(fill="both", expand=True, before=buttons_container)
+        
+        # Canvas para scroll si el contenido es muy largo
+        canvas = tk.Canvas(scroll_container, bg="white", highlightthickness=0)
+        scrollbar = tk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
+        main_frame = tk.Frame(canvas, bg="white", padx=20, pady=15)
+        
+        # Configurar scroll
+        main_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Ajustar ancho del frame al canvas
+        def on_canvas_configure(event):
+            canvas_width = event.width
+            canvas.itemconfig(canvas_window, width=canvas_width)
+        canvas.bind("<Configure>", on_canvas_configure)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Manejar scroll del canvas y sus widgets hijos
+        def on_canvas_mousewheel(event):
+            # Obtener el widget que recibió el evento
+            widget = event.widget
+            
+            # Si es un Text widget, dejar que maneje su propio scroll
+            if isinstance(widget, tk.Text):
+                return None
+            
+            # Si es el canvas o cualquier widget dentro del canvas, hacer scroll del canvas
+            # Verificar si el widget está dentro del main_frame o es el canvas
+            try:
+                current = widget
+                while current and current != modal:
+                    if current == canvas or current == main_frame or current == scroll_container:
+                        # Este widget está dentro del área scrolleable
+                        if event.delta:
+                            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                        return "break"  # Prevenir propagación a la ventana principal
+                    current = current.master
+            except:
+                pass
+            
+            return "break"  # Bloquear scroll en otros lugares
+        
+        # Bind scroll en el canvas y en toda la ventana modal
+        canvas.bind("<MouseWheel>", on_canvas_mousewheel)
+        scroll_container.bind("<MouseWheel>", on_canvas_mousewheel)
+        
+        # También bind en el main_frame y sus hijos
+        def bind_scroll_to_widget(widget):
+            if not isinstance(widget, tk.Text):  # Los Text widgets ya manejan su propio scroll
+                widget.bind("<MouseWheel>", on_canvas_mousewheel)
+            for child in widget.winfo_children():
+                bind_scroll_to_widget(child)
+        
+        bind_scroll_to_widget(main_frame)
+        
+        # Título
+        title_label = tk.Label(
+            main_frame,
+            text=f"📧 Enviar Notificación a {tenant_name}",
+            font=("Segoe UI", 13, "bold"),  # Reducido de 14 a 13
+            bg="white",
+            fg="#1976d2"
+        )
+        title_label.pack(pady=(0, 8))  # Reducido de 10 a 8
+        
+        # Email del destinatario
+        email_label = tk.Label(
+            main_frame,
+            text=f"Destinatario: {tenant_email}",
+            font=("Segoe UI", 9),  # Reducido de 10 a 9
+            bg="white",
+            fg="#666"
+        )
+        email_label.pack(anchor="w", pady=(0, 10))  # Reducido de 15 a 10
+        
+        # Separador
+        separator = tk.Frame(main_frame, height=1, bg="#e0e0e0")
+        separator.pack(fill="x", pady=(0, 10))  # Reducido de 15 a 10
+        
+        # Tipo de notificación
+        type_frame = tk.Frame(main_frame, bg="white")
+        type_frame.pack(fill="x", pady=(0, 10))  # Reducido de 15 a 10
+        
+        tk.Label(
+            type_frame,
+            text="Tipo de Notificación:",
+            font=("Segoe UI", 10, "bold"),
+            bg="white"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        template_var = tk.StringVar(value="payment_reminder")
+        templates = notification_service.get_templates()
+        
+        # Frame para los radio buttons
+        radio_frame = tk.Frame(type_frame, bg="white")
+        radio_frame.pack(fill="x")
+        
+        for key, template in templates.items():
+            if key == "custom":
+                continue  # Lo manejamos después
+            radio = tk.Radiobutton(
+                radio_frame,
+                text=template["name"],
+                variable=template_var,
+                value=key,
+                font=("Segoe UI", 10),
+                bg="white",
+                activebackground="white",
+                selectcolor="white"
+            )
+            radio.pack(anchor="w", pady=1)  # Reducido de 2 a 1
+        
+        # Opción personalizada
+        radio_custom = tk.Radiobutton(
+            radio_frame,
+            text="Mensaje Personalizado",
+            variable=template_var,
+            value="custom",
+            font=("Segoe UI", 10),
+            bg="white",
+            activebackground="white",
+            selectcolor="white"
+        )
+        radio_custom.pack(anchor="w", pady=2)
+        
+        # Campos para mensaje personalizado
+        custom_frame = tk.Frame(main_frame, bg="white")
+        
+        custom_subject_var = tk.StringVar()
+        custom_message_var = tk.StringVar()
+        
+        def on_template_change():
+            if template_var.get() == "custom":
+                custom_frame.pack(fill="x", pady=(10, 15))
+            else:
+                custom_frame.pack_forget()
+                preview_text.config(state="normal")
+                preview_text.delete(1.0, tk.END)
+                selected_template = templates.get(template_var.get())
+                if selected_template:
+                    preview_text.insert(1.0, self._generate_preview(selected_template))
+                preview_text.config(state="disabled")
+        
+        template_var.trace("w", lambda *args: on_template_change())
+        
+        tk.Label(
+            custom_frame,
+            text="Asunto:",
+            font=("Segoe UI", 10, "bold"),
+            bg="white"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        custom_subject_entry = tk.Entry(
+            custom_frame,
+            textvariable=custom_subject_var,
+            font=("Segoe UI", 10),
+            width=60
+        )
+        custom_subject_entry.pack(fill="x", pady=(0, 10))
+        
+        tk.Label(
+            custom_frame,
+            text="Mensaje:",
+            font=("Segoe UI", 10, "bold"),
+            bg="white"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        custom_message_text = tk.Text(
+            custom_frame,
+            font=("Segoe UI", 10),
+            height=3,  # Reducido a 3 líneas para ahorrar más espacio
+            wrap=tk.WORD
+        )
+        custom_message_text.pack(fill="both", expand=True)
+        
+        # Aislar completamente el scroll del Text widget de mensaje personalizado
+        def on_custom_text_mousewheel(event):
+            if event.delta:
+                custom_message_text.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"
+        
+        # Permitir scroll solo cuando el mouse está sobre el Text widget
+        def on_custom_text_enter(event):
+            modal.unbind_all("<MouseWheel>")
+            custom_message_text.bind("<MouseWheel>", on_custom_text_mousewheel)
+        
+        def on_custom_text_leave(event):
+            custom_message_text.unbind("<MouseWheel>")
+            modal.bind_all("<MouseWheel>", prevent_scroll_propagation)
+        
+        custom_message_text.bind("<Enter>", on_custom_text_enter)
+        custom_message_text.bind("<Leave>", on_custom_text_leave)
+        
+        # Vista previa del mensaje
+        preview_frame = tk.Frame(main_frame, bg="white")
+        preview_frame.pack(fill="x", pady=(0, 8))  # Reducido padding para ahorrar espacio
+        
+        tk.Label(
+            preview_frame,
+            text="Vista Previa:",
+            font=("Segoe UI", 10, "bold"),
+            bg="white"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        preview_text = tk.Text(
+            preview_frame,
+            font=("Segoe UI", 10),
+            height=4,  # Reducido a 4 líneas para ahorrar espacio
+            wrap=tk.WORD,
+            bg="#f5f5f5",
+            relief="solid",
+            bd=1
+        )
+        preview_text.pack(fill="x")  # Cambiado de expand=True a fill="x" para que no ocupe todo el espacio vertical
+        preview_text.config(state="disabled")
+        
+        # Aislar completamente el scroll del Text widget
+        def on_text_mousewheel(event):
+            # Manejar scroll solo dentro del Text widget
+            if event.delta:
+                preview_text.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"  # Prevenir propagación del evento
+        
+        preview_text.bind("<MouseWheel>", on_text_mousewheel)
+        
+        # Actualizar vista previa cuando cambie el tipo
+        def update_preview():
+            preview_text.config(state="normal")
+            preview_text.delete(1.0, tk.END)
+            selected_key = template_var.get()
+            if selected_key == "custom":
+                if custom_subject_var.get() and custom_message_var.get():
+                    preview_text.insert(1.0, f"Asunto: {custom_subject_var.get()}\n\n{custom_message_var.get()}")
+            else:
+                selected_template = templates.get(selected_key)
+                if selected_template:
+                    preview_text.insert(1.0, self._generate_preview(selected_template))
+            preview_text.config(state="disabled")
+        
+        custom_subject_var.trace("w", lambda *args: update_preview())
+        custom_message_text.bind("<KeyRelease>", lambda e: update_preview())
+        
+        # Inicializar vista previa
+        update_preview()
+        
+        # Opción de adjuntar recibo (solo para algunos tipos)
+        attach_receipt_var = tk.BooleanVar(value=False)
+        receipt_payment_var = tk.StringVar()
+        
+        attach_frame = tk.Frame(main_frame, bg="white")
+        
+        def update_attach_options():
+            selected_key = template_var.get()
+            if selected_key in ["payment_received", "custom"]:
+                attach_frame.pack(fill="x", pady=(0, 8))  # Reducido de 15 a 8
+                # Cargar pagos del inquilino
+                payment_service._load_data()
+                payments = payment_service.get_payments_by_tenant(tenant_id)
+                if payments:
+                    # Ordenar por fecha
+                    try:
+                        payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+                    except:
+                        pass
+                    
+                    payment_combo['values'] = [f"{p.get('fecha_pago', '')} - ${float(p.get('monto', 0)):,.0f}" for p in payments]
+                    if payments:
+                        receipt_payment_var.set(payment_combo['values'][0])
+            else:
+                attach_frame.pack_forget()
+        
+        template_var.trace("w", lambda *args: update_attach_options())
+        
+        attach_check = tk.Checkbutton(
+            attach_frame,
+            text="Adjuntar recibo de pago",
+            variable=attach_receipt_var,
+            font=("Segoe UI", 10),
+            bg="white",
+            activebackground="white",
+            selectcolor="white"
+        )
+        attach_check.pack(anchor="w", pady=(0, 5))
+        
+        payment_combo = ttk.Combobox(
+            attach_frame,
+            textvariable=receipt_payment_var,
+            state="readonly",
+            width=50,
+            font=("Segoe UI", 10)
+        )
+        payment_combo.pack(anchor="w")
+        
+        def send_notification():
+            selected_key = template_var.get()
+            custom_subject = custom_subject_var.get().strip() if selected_key == "custom" else None
+            custom_message = custom_message_text.get(1.0, tk.END).strip() if selected_key == "custom" else None
+            
+            # Validaciones
+            if selected_key == "custom":
+                if not custom_subject:
+                    messagebox.showerror("Error", "Por favor ingrese un asunto para el mensaje personalizado.")
+                    return
+                if not custom_message:
+                    messagebox.showerror("Error", "Por favor ingrese un mensaje personalizado.")
+                    return
+            
+            # Obtener ID del pago si se adjunta recibo
+            receipt_payment_id = None
+            if attach_receipt_var.get():
+                payment_service._load_data()
+                payments = payment_service.get_payments_by_tenant(tenant_id)
+                if payments:
+                    try:
+                        payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+                    except:
+                        pass
+                    
+                    selected_index = payment_combo.current()
+                    if selected_index >= 0 and selected_index < len(payments):
+                        receipt_payment_id = payments[selected_index].get("id")
+                    else:
+                        messagebox.showerror("Error", "Por favor seleccione un pago del listado para adjuntar el recibo.")
+                        return
+                else:
+                    messagebox.showerror("Error", "No hay pagos disponibles para adjuntar.")
+                    return
+            
+            # Confirmar envío
+            confirm_msg = f"¿Desea enviar la notificación a {tenant_name}?\n\n"
+            confirm_msg += f"Tipo: {templates.get(selected_key, {}).get('name', 'Personalizado')}\n"
+            confirm_msg += f"Email: {tenant_email}"
+            
+            if not messagebox.askyesno("Confirmar envío", confirm_msg):
+                return
+            
+            # Enviar notificación
+            success, message = notification_service.send_notification(
+                tenant=self.tenant_data,
+                template_key=selected_key,
+                custom_subject=custom_subject,
+                custom_message=custom_message,
+                attach_receipt=attach_receipt_var.get(),
+                receipt_payment_id=receipt_payment_id
+            )
+            
+            if success:
+                messagebox.showinfo("✅ Notificación enviada", f"La notificación ha sido enviada exitosamente a:\n{tenant_email}")
+                modal.destroy()
+            else:
+                messagebox.showerror("❌ Error al enviar", message)
+        
+        # Los botones ya están creados arriba, solo los configuramos aquí
+        send_btn = ModernButton(
+            buttons_frame,
+            text="Enviar Notificación",
+            icon="📧",
+            style="primary",
+            command=send_notification
+        )
+        send_btn.pack(side="right", padx=(10, 0))
+        
+        cancel_btn = ModernButton(
+            buttons_frame,
+            text="Cancelar",
+            icon="❌",
+            style="secondary",
+            command=modal.destroy
+        )
+        cancel_btn.pack(side="right")
+        
+        # Asegurar que los botones sean visibles - forzar actualización del layout
+        modal.update_idletasks()
+        
+        # Asegurar que la ventana tenga el tamaño correcto y los botones sean visibles
+        modal.update()
+        
+        # Inicializar opciones de adjunto
+        update_attach_options()
+    
+    def _generate_preview(self, template: Dict[str, str]) -> str:
+        """Genera una vista previa del mensaje usando datos del inquilino"""
+        tenant_name = self.tenant_data.get("nombre", "Inquilino")
+        apartment_id = self.tenant_data.get("apartamento")
+        apartment_number = "N/A"
+        
+        if apartment_id:
+            try:
+                apt = apartment_service.get_apartment_by_id(int(apartment_id))
+                if apt and 'number' in apt:
+                    apartment_number = apt['number']
+            except Exception:
+                apartment_number = str(apartment_id)
+        
+        rent_amount = float(self.tenant_data.get("valor_arriendo", 0))
+        sender_name = email_service.config.get("sender_name", "Building Manager Pro")
+        
+        # Calcular información de pagos
+        payment_service._load_data()
+        payments = payment_service.get_payments_by_tenant(self.tenant_data.get("id"))
+        
+        next_due_date = "N/A"
+        days_overdue = 0
+        
+        if payments:
+            try:
+                payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+                last_payment = payments[0]
+                last_payment_date = datetime.strptime(last_payment.get("fecha_pago", "01/01/1900"), "%d/%m/%Y")
+                next_due = last_payment_date + timedelta(days=30)
+                next_due_date = next_due.strftime("%d/%m/%Y")
+                today = datetime.now()
+                if today > next_due:
+                    days_overdue = (today - next_due).days
+            except Exception:
+                pass
+        
+        try:
+            preview = template["template"].format(
+                tenant_name=tenant_name,
+                apartment_number=apartment_number,
+                rent_amount=rent_amount,
+                sender_name=sender_name,
+                next_due_date=next_due_date,
+                days_overdue=days_overdue,
+                payment_date=payments[0].get("fecha_pago", "") if payments else "",
+                payment_amount=float(payments[0].get("monto", 0)) if payments else 0,
+                payment_method=payments[0].get("metodo", "N/A") if payments else "N/A",
+                custom_message="[Su mensaje personalizado aparecerá aquí]"
+            )
+            return preview
+        except Exception:
+            return template.get("template", "")
 
     def _generate_pdf(self):
         """Genera la ficha PDF del inquilino"""

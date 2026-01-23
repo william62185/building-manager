@@ -401,7 +401,19 @@ class PaymentsView(tk.Frame):
         edit_delete_view.pack(fill="both", expand=True)
 
     def _show_reports(self):
-        messagebox.showinfo("Reportes de Pagos", "Aquí se mostrarán los reportes y estadísticas de pagos.")
+        """Muestra la vista completa de reportes de pagos"""
+        # Limpiar vista
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        # Importar e instanciar la vista de reportes de pagos
+        from manager.app.ui.views.payment_reports_view import PaymentReportsView
+        
+        reports_view = PaymentReportsView(
+            self,
+            on_back=self._create_layout
+        )
+        reports_view.pack(fill="both", expand=True)
 
     def _on_back(self):
         if self.on_back:
