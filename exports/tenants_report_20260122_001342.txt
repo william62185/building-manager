@@ -1,0 +1,67 @@
+============================================================
+REPORTE DE INQUILINOS
+============================================================
+Fecha de generación: 22/01/2026 00:13
+
+RESUMEN:
+  • Total de inquilinos: 8
+  • Inquilinos activos: 8
+  • Inquilinos inactivos: 0
+
+DETALLE DE INQUILINOS:
+------------------------------------------------------------
+Nombre: William Muñoz
+  • Apartamento: 22
+  • Documento: 2222223
+  • Teléfono: 333333
+  • Estado: Al Día
+  • Arriendo: $500,000.00
+
+Nombre: Stefani Ruiz
+  • Apartamento: 39
+  • Documento: 454545459
+  • Teléfono: 1515515115
+  • Estado: Al Día
+  • Arriendo: $1,000,000.00
+
+Nombre: eduin
+  • Apartamento: 23
+  • Documento: 22222
+  • Teléfono: 33333
+  • Estado: Al Día
+  • Arriendo: $550,000.00
+
+Nombre: ryan
+  • Apartamento: 24
+  • Documento: 6565
+  • Teléfono: 1212120
+  • Estado: Al Día
+  • Arriendo: $700,000.00
+
+Nombre: prasant
+  • Apartamento: 25
+  • Documento: 88888
+  • Teléfono: 20202020
+  • Estado: Al Día
+  • Arriendo: $400,000.00
+
+Nombre: dilson muñoz
+  • Apartamento: 26
+  • Documento: 4456454
+  • Teléfono: 333333
+  • Estado: Al Día
+  • Arriendo: $550,000.00
+
+Nombre: Leidy Bebé Salcedo
+  • Apartamento: 40
+  • Documento: 7777777
+  • Teléfono: 42424242
+  • Estado: Al Día
+  • Arriendo: $1,200,000.00
+
+Nombre: Cristian
+  • Apartamento: 27
+  • Documento: 1787878
+  • Teléfono: 636363
+  • Estado: Al Día
+  • Arriendo: $300,000.00

@@ -1,0 +1,8 @@
+============================================================
+REPORTE DE MORA Y PAGOS PENDIENTES
+============================================================
+Fecha de generación: 22/01/2026 00:14
+
+RESUMEN:
+  • Inquilinos en mora: 0
+  • Inquilinos con pago pendiente: 0

@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-19T23:03:06.968337",
+    "attached_receipt": false
+  },
+  {
+    "id": 2,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-19T23:35:55.689177",
+    "attached_receipt": false
+  },
+  {
+    "id": 3,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-19T23:46:55.227624",
+    "attached_receipt": true
+  },
+  {
+    "id": 4,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-19T23:51:04.607803",
+    "attached_receipt": true
+  },
+  {
+    "id": 5,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-19T23:55:41.540624",
+    "attached_receipt": true
+  },
+  {
+    "id": 6,
+    "tenant_id": 1,
+    "tenant_name": "William Muñoz",
+    "tenant_email": "william62185@gmail.com",
+    "template_key": "payment_received",
+    "subject": "Confirmación: Pago de Arriendo Recibido",
+    "sent_at": "2026-01-21T23:15:28.650781",
+    "attached_receipt": true
+  }
+]

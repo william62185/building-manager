@@ -1,0 +1,26 @@
+============================================================
+REPORTE DE OCUPACIÓN
+============================================================
+Fecha de generación: 22/01/2026 00:10
+
+RESUMEN GENERAL:
+  • Total de apartamentos: 12
+  • Ocupados: 8
+  • Disponibles: 4
+  • En mantenimiento: 0
+  • Tasa de ocupación: 66.67%
+
+DETALLE POR APARTAMENTO:
+------------------------------------------------------------
+Apartamento 1: Disponible - Inquilino: Sin asignar
+Apartamento 101: Ocupado - Inquilino: William Muñoz
+Apartamento 201: Ocupado - Inquilino: eduin
+Apartamento 202: Ocupado - Inquilino: ryan
+Apartamento 301: Ocupado - Inquilino: prasant
+Apartamento 302: Ocupado - Inquilino: dilson muñoz
+Apartamento 401: Ocupado - Inquilino: Cristian
+Apartamento 402: Disponible - Inquilino: Sin asignar
+Apartamento 501: Disponible - Inquilino: Sin asignar
+Apartamento 502: Disponible - Inquilino: Sin asignar
+Apartamento Fancy: Ocupado - Inquilino: Leidy Bebé Salcedo
+Apartamento Lux: Ocupado - Inquilino: Stefani Ruiz

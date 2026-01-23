@@ -1,0 +1,23 @@
+============================================================
+REPORTE DE INGRESOS CONSOLIDADO
+Período: Enero 2026
+============================================================
+Fecha de generación: 22/01/2026 22:35
+
+PERÍODO SELECCIONADO: Enero 2026
+
+RESUMEN FINANCIERO:
+  • Ingresos totales (histórico): $6,050,000.00
+  • Ingresos del mes actual: $6,050,000.00
+  • Ingresos del año actual: $6,050,000.00
+  • Total de pagos procesados: 10
+
+ESTADÍSTICAS:
+  • Promedio por pago: $605,000.00
+  • Promedio mensual (mes actual): $6,050,000.00
+  • Proyección anual (basada en mes actual): $72,600,000.00
+
+DETALLE POR PERÍODO:
+------------------------------------------------------------
+  • Pagos en el mes actual: 10
+  • Pagos en el año actual: 10

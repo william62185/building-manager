@@ -934,6 +934,32 @@ class TenantFormView(tk.Frame):
             except Exception as e:
                 print(f"[DEBUG] Excepción al buscar apartamento: {e}")
                 self.selected_apartment_var.set("")
+        
+        # Cargar archivos existentes
+        archivos = self.tenant_data.get("archivos", {})
+        if isinstance(archivos, str):
+            try:
+                import json
+                archivos = json.loads(archivos)
+            except:
+                archivos = {}
+        
+        if archivos:
+            # Cargar documento de identidad
+            doc_id = archivos.get("id")
+            if doc_id and str(doc_id).strip():
+                self.selected_files["id"] = doc_id
+                import os
+                filename = os.path.basename(str(doc_id))
+                self.id_file_label.configure(text=filename)
+            
+            # Cargar contrato
+            doc_contract = archivos.get("contract")
+            if doc_contract and str(doc_contract).strip():
+                self.selected_files["contract"] = doc_contract
+                import os
+                filename = os.path.basename(str(doc_contract))
+                self.contract_file_label.configure(text=filename)
     
     def _upload_document(self, doc_type: str):
         """Maneja la subida de documentos"""

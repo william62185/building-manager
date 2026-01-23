@@ -11,16 +11,6 @@
   },
   {
     "fecha": "2025-06-16",
-    "categoria": "Mantenimiento",
-    "subtipo": "Jardinería",
-    "apartamento": "---",
-    "monto": 35000.0,
-    "descripcion": "pintada de reja",
-    "documento": null,
-    "id": 6
-  },
-  {
-    "fecha": "2025-06-16",
     "categoria": "Servicios públicos",
     "subtipo": "Gas domiciliario",
     "apartamento": "102",
@@ -58,5 +48,15 @@
     "descripcion": "un cartucho para impresora",
     "documento": null,
     "id": 10
+  },
+  {
+    "id": 13,
+    "fecha": "2026-01-16",
+    "categoria": "Impuestos y tasas",
+    "subtipo": "Predial",
+    "apartamento": "---",
+    "monto": 500000.0,
+    "descripcion": "pago del impuesto predial 2026",
+    "documento": "C:\\Users\\Will\\building_manager_cursor\\manager\\app\\gastos_docs\\gasto_20260122_232238_Gerber, M. (2005). El mito del emprendedor. Paidós.pdf"
   }
 ]

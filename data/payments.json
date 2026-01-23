@@ -220,17 +220,6 @@
     "actualizado_en": "2025-07-29T03:36:08.984576"
   },
   {
-    "id": 38,
-    "id_inquilino": 48,
-    "nombre_inquilino": "manuela beltran",
-    "fecha_pago": "29/07/2025",
-    "monto": 900000.0,
-    "metodo": "Efectivo",
-    "observaciones": "",
-    "creado_en": "2025-07-29T03:37:54.084058",
-    "actualizado_en": "2025-07-29T03:37:54.084065"
-  },
-  {
     "id": 39,
     "id_inquilino": 49,
     "nombre_inquilino": "errika",
@@ -275,28 +264,6 @@
     "actualizado_en": "2025-07-29T03:58:41.649558"
   },
   {
-    "id": 43,
-    "id_inquilino": 49,
-    "nombre_inquilino": "errika",
-    "fecha_pago": "29/07/2025",
-    "monto": 460000.0,
-    "metodo": "Efectivo",
-    "observaciones": "",
-    "creado_en": "2025-07-29T04:08:50.769747",
-    "actualizado_en": "2025-07-29T04:08:50.769755"
-  },
-  {
-    "id": 44,
-    "id_inquilino": 50,
-    "nombre_inquilino": "Natalia paris",
-    "fecha_pago": "29/07/2025",
-    "monto": 300000.0,
-    "metodo": "Efectivo",
-    "observaciones": "",
-    "creado_en": "2025-07-29T04:13:22.142519",
-    "actualizado_en": "2025-07-29T04:13:22.142529"
-  },
-  {
     "id": 45,
     "id_inquilino": 50,
     "nombre_inquilino": "Natalia paris",
@@ -319,17 +286,6 @@
     "actualizado_en": "2025-07-29T04:16:53.950268"
   },
   {
-    "id": 47,
-    "id_inquilino": 50,
-    "nombre_inquilino": "Natalia paris",
-    "fecha_pago": "29/07/2025",
-    "monto": 320000.0,
-    "metodo": "Efectivo",
-    "observaciones": "",
-    "creado_en": "2025-07-29T04:31:37.842036",
-    "actualizado_en": "2025-07-29T04:31:37.842044"
-  },
-  {
     "id": 48,
     "id_inquilino": 51,
     "nombre_inquilino": "Stefani Ruiz",
@@ -341,14 +297,146 @@
     "actualizado_en": "2025-10-08T01:25:29.820035"
   },
   {
-    "id": 49,
-    "id_inquilino": 25,
-    "nombre_inquilino": "Adriana Pinto",
-    "fecha_pago": "08/10/2025",
-    "monto": 1200000.0,
+    "id": 50,
+    "id_inquilino": 1,
+    "nombre_inquilino": "William Muñoz",
+    "fecha_pago": "21/12/2025",
+    "monto": 500000.0,
+    "metodo": "Efectivo",
+    "observaciones": "Pago inicial - William Muñoz - Apartamento 101",
+    "creado_en": "2025-12-21T20:55:00.748810",
+    "actualizado_en": "2025-12-21T20:55:00.748821"
+  },
+  {
+    "id": 51,
+    "id_inquilino": 2,
+    "nombre_inquilino": "Stefani Ruiz",
+    "fecha_pago": "21/12/2025",
+    "monto": 1000000.0,
     "metodo": "Efectivo",
     "observaciones": "",
-    "creado_en": "2025-10-08T01:26:33.381140",
-    "actualizado_en": "2025-10-08T01:26:33.381148"
+    "creado_en": "2025-12-21T21:05:34.904396",
+    "actualizado_en": "2025-12-21T21:05:34.904406"
+  },
+  {
+    "id": 52,
+    "id_inquilino": 3,
+    "nombre_inquilino": "eduin",
+    "fecha_pago": "18/01/2026",
+    "monto": 550000.0,
+    "metodo": "Efectivo",
+    "observaciones": "Pago inicial - eduin - Apartamento 201",
+    "creado_en": "2026-01-18T21:06:09.247069",
+    "actualizado_en": "2026-01-18T21:06:09.247082"
+  },
+  {
+    "id": 53,
+    "id_inquilino": 4,
+    "nombre_inquilino": "ryan",
+    "fecha_pago": "18/01/2026",
+    "monto": 700000.0,
+    "metodo": "Efectivo",
+    "observaciones": "",
+    "creado_en": "2026-01-18T21:24:54.989159",
+    "actualizado_en": "2026-01-18T21:24:54.989171"
+  },
+  {
+    "id": 54,
+    "id_inquilino": 5,
+    "nombre_inquilino": "prasant",
+    "fecha_pago": "18/01/2026",
+    "monto": 400000.0,
+    "metodo": "Efectivo",
+    "observaciones": "",
+    "creado_en": "2026-01-18T21:31:39.201148",
+    "actualizado_en": "2026-01-18T21:31:39.201160"
+  },
+  {
+    "id": 55,
+    "id_inquilino": 6,
+    "nombre_inquilino": "dilson muñoz",
+    "fecha_pago": "18/01/2026",
+    "monto": 550000.0,
+    "metodo": "Efectivo",
+    "observaciones": "primer pago",
+    "creado_en": "2026-01-18T21:40:28.145896",
+    "actualizado_en": "2026-01-18T21:40:28.145908"
+  },
+  {
+    "id": 56,
+    "id_inquilino": 7,
+    "nombre_inquilino": "leidy salcedo",
+    "fecha_pago": "18/01/2026",
+    "monto": 1200000.0,
+    "metodo": "Efectivo",
+    "observaciones": "primer pago",
+    "creado_en": "2026-01-18T21:51:07.363988",
+    "actualizado_en": "2026-01-18T21:51:07.363996"
+  },
+  {
+    "id": 57,
+    "id_inquilino": 1,
+    "nombre_inquilino": "William Muñoz",
+    "fecha_pago": "18/01/2026",
+    "monto": 500000.0,
+    "metodo": "Efectivo",
+    "observaciones": "segundo pago",
+    "creado_en": "2026-01-18T22:25:04.400081",
+    "actualizado_en": "2026-01-18T22:25:04.400089"
+  },
+  {
+    "id": 58,
+    "id_inquilino": 2,
+    "nombre_inquilino": "Stefani Ruiz",
+    "fecha_pago": "18/01/2026",
+    "monto": 1000000.0,
+    "metodo": "Efectivo",
+    "observaciones": "segundo pago",
+    "creado_en": "2026-01-18T22:33:39.290327",
+    "actualizado_en": "2026-01-18T22:33:39.290333"
+  },
+  {
+    "id": 59,
+    "id_inquilino": 1,
+    "nombre_inquilino": "William Muñoz",
+    "fecha_pago": "17/02/2026",
+    "monto": 500000.0,
+    "metodo": "Efectivo",
+    "observaciones": "tercer pago",
+    "creado_en": "2026-01-18T22:38:28.282608",
+    "actualizado_en": "2026-01-18T22:38:28.282615"
+  },
+  {
+    "id": 60,
+    "id_inquilino": 8,
+    "nombre_inquilino": "Cristian",
+    "fecha_pago": "19/01/2026",
+    "monto": 300000.0,
+    "metodo": "Efectivo",
+    "observaciones": "primer pago",
+    "creado_en": "2026-01-19T21:42:45.763994",
+    "actualizado_en": "2026-01-19T21:42:45.764006"
+  },
+  {
+    "id": 61,
+    "id_inquilino": 8,
+    "nombre_inquilino": "Cristian",
+    "fecha_pago": "22/01/2026",
+    "monto": 300000.0,
+    "metodo": "Efectivo",
+    "observaciones": "segundo pago",
+    "creado_en": "2026-01-22T21:36:23.785141",
+    "actualizado_en": "2026-01-22T21:38:51.073006"
+  },
+  {
+    "id": 62,
+    "id_inquilino": 6,
+    "nombre_inquilino": "dilson muñoz",
+    "fecha_pago": "22/01/2026",
+    "monto": 550000.0,
+    "metodo": "Transferencia",
+    "observaciones": "segundo pago",
+    "creado_en": "2026-01-22T22:02:40.773167",
+    "actualizado_en": "2026-01-22T22:02:40.773177"
   }
 ]
