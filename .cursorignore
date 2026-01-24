@@ -1,0 +1,29 @@
+﻿# Archivos y carpetas a excluir del indexado de Cursor para mejorar rendimiento
+
+# Archivos PDF (no necesarios para el anÃ¡lisis de cÃ³digo)
+*.pdf
+
+# Carpetas con documentos generados
+recibos/
+fichas/
+gastos_docs/
+exports/
+
+# Archivos Python compilados
+__pycache__/
+*.py[cod]
+*.class
+*.so
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
