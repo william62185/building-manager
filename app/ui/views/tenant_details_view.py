@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 class TenantDetailsView(tk.Frame):
     """Vista de detalles de inquilino"""
     
-    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None):
+    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None, on_navigate_to_dashboard: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         # Recargar datos del inquilino desde el servicio para asegurar datos actualizados
@@ -47,6 +47,7 @@ class TenantDetailsView(tk.Frame):
         self.on_back = on_back
         self.on_edit = on_edit
         self.on_register_payment = on_register_payment
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         
         # Crear layout
         self._create_layout()
@@ -67,22 +68,16 @@ class TenantDetailsView(tk.Frame):
         header_frame = tk.Frame(self, **theme_manager.get_style("frame"))
         header_frame.pack(fill="x", pady=(0, Spacing.LG))
         
-        # Botón volver
-        nav_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
-        nav_frame.pack(side="left")
-        
-        btn_back = ModernButton(
-            nav_frame,
-            text="Volver",
-            icon=Icons.ARROW_LEFT,
-            style="secondary",
-            command=self._on_back_clicked
-        )
-        btn_back.pack(side="left")
-        
-        # Título con nombre del inquilino
+        # Título con nombre del inquilino (a la izquierda)
         title_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
-        title_frame.pack(side="left", fill="x", expand=True, padx=(Spacing.LG, 0))
+        title_frame.pack(side="left", fill="x", expand=True)
+        
+        # Frame para botones de navegación (a la derecha)
+        nav_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
+        nav_frame.pack(side="right")
+        
+        # Crear botones con el mismo estilo que otras vistas
+        self._create_navigation_buttons(nav_frame, self._on_back_clicked)
         
         # Nombre del inquilino
         name_label = tk.Label(
@@ -482,6 +477,100 @@ class TenantDetailsView(tk.Frame):
         """Maneja el clic en volver"""
         if self.on_back:
             self.on_back()
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow a través de la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+        
+        # Botón "Volver" (primero, más a la derecha)
+        btn_back = tk.Button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
+            command=on_back_command
+        )
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" (segundo, a la izquierda de Volver)
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
     
     def _on_edit_clicked(self):
         """Maneja el clic en editar"""

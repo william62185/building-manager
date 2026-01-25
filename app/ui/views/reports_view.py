@@ -13,6 +13,7 @@ from pathlib import Path
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard
+from manager.app.ui.components.icons import Icons
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.apartment_service import apartment_service
@@ -22,9 +23,10 @@ from manager.app.services.building_service import building_service
 class ReportsView(tk.Frame):
     """Vista completa de reportes del sistema"""
     
-    def __init__(self, parent, on_back: Callable = None):
+    def __init__(self, parent, on_back: Callable = None, on_navigate_to_dashboard: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         self.on_back = on_back
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         
         # Recargar datos antes de generar reportes
         self._reload_all_data()
@@ -59,13 +61,12 @@ class ReportsView(tk.Frame):
             fg="#2c3e50"
         ).pack(side="left", pady=15)
         
-        if self.on_back:
-            ModernButton(
-                header,
-                text="← Volver",
-                style="secondary",
-                command=self.on_back
-            ).pack(side="right", padx=15, pady=15)
+        # Frame para botones de navegación
+        buttons_frame = tk.Frame(header, bg="#f8f9fa")
+        buttons_frame.pack(side="right", padx=15, pady=15)
+        
+        # Crear botones con el mismo estilo que otras vistas
+        self._create_navigation_buttons(buttons_frame, self.on_back if self.on_back else lambda: None)
         
         # Contenedor principal sin scroll (ya no es necesario)
         main_container = tk.Frame(self, bg="#ffffff")
@@ -73,6 +74,95 @@ class ReportsView(tk.Frame):
         
         # Contenido de reportes directamente en el contenedor principal
         self._create_reports_content(main_container)
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver"
+        btn_back = tk.Button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
+            command=on_back_command
+        )
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                # Verificar si on_back es del main_window (navega al dashboard principal)
+                # Si no, buscar MainWindow en la jerarquía
+                widget = self.master
+                max_depth = 10
+                depth = 0
+                while widget and depth < max_depth:
+                    if (hasattr(widget, '_navigate_to') and 
+                        hasattr(widget, '_load_view') and 
+                        hasattr(widget, 'views_container')):
+                        try:
+                            widget._navigate_to("dashboard")
+                            return
+                        except Exception as e:
+                            print(f"Error al navegar: {e}")
+                            break
+                    widget = getattr(widget, 'master', None)
+                    depth += 1
+                
+                # Si no se encontró MainWindow, usar on_back como fallback
+                self.on_back()
+        
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
     
     def _create_reports_content(self, parent):
         """Crea el contenido de los reportes"""

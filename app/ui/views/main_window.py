@@ -360,20 +360,6 @@ class MainWindow:
         actions_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
         actions_frame.pack(side="right")
         
-        # Botón de notificaciones
-        notif_btn = tk.Button(
-            actions_frame,
-            text=f"{Icons.NOTIFICATIONS}",
-            font=("Segoe UI Symbol", 16),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            relief="solid",
-            bd=1,
-            width=3,
-            cursor="hand2"
-        )
-        notif_btn.pack(side="right", padx=(Spacing.SM, 0))
-        
         # Usuario actual
         user_frame = tk.Frame(actions_frame, **theme_manager.get_style("frame"))
         user_frame.pack(side="right", padx=(0, Spacing.MD))
@@ -798,7 +784,8 @@ class MainWindow:
         form_view = TenantFormView(
             self.views_container,
             on_back=lambda: self._navigate_to("tenants"),
-            on_save_success=self.refresh_dashboard  # Callback para actualizar dashboard
+            on_save_success=self.refresh_dashboard,  # Callback para actualizar dashboard
+            on_navigate_to_dashboard=lambda: self._navigate_to("dashboard")  # Callback directo para navegar al dashboard
         )
         form_view.pack(fill="both", expand=True)
     

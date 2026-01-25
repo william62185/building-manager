@@ -331,11 +331,12 @@ class DatePickerWidget(tk.Frame):
 class TenantFormView(tk.Frame):
     """Formulario profesional para inquilinos"""
     
-    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None, on_save_success: Callable = None):
+    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None, on_save_success: Callable = None, on_navigate_to_dashboard: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         self.on_back = on_back
         self.on_save_success = on_save_success
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         self.tenant_data = tenant_data or {}
         self.is_edit_mode = bool(tenant_data)
         self.validation_errors = {}
@@ -524,22 +525,110 @@ class TenantFormView(tk.Frame):
         title_label.configure(font=("Segoe UI", 14, "bold"))
         title_label.pack(side="left", pady=0)
         
-        # Botón volver - movido a la derecha
+        # Frame para botones de navegación
+        buttons_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura) - EXACTAMENTE como en otras vistas
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver"
         btn_back = tk.Button(
-            header_frame,
-            text="← Volver",
-            font=("Segoe UI", 10),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            bd=1,
-            relief="solid",
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
+            buttons_frame,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
             command=self._on_back_clicked
         )
-        btn_back.pack(side="right")
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow a través de la jerarquía de widgets
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            
+            while widget and depth < max_depth:
+                # Verificar si es MainWindow (tiene _navigate_to y _load_view)
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                
+                # Subir en la jerarquía
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Buscar desde el root window
+            try:
+                root = self.winfo_toplevel()
+                # Buscar MainWindow entre los hijos del root
+                for child in root.winfo_children():
+                    if (hasattr(child, '_navigate_to') and 
+                        hasattr(child, '_load_view') and 
+                        hasattr(child, 'views_container')):
+                        child._navigate_to("dashboard")
+                        return
+            except Exception as e:
+                print(f"Error en búsqueda desde root: {e}")
+            
+            # Si todo falla, mostrar mensaje
+            print("No se pudo encontrar MainWindow para navegar al dashboard")
+        
+        btn_dashboard = tk.Button(
+            buttons_frame,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
     
     def _create_form_content_direct(self):
         """Crea el contenido del formulario directamente sin scroll"""

@@ -21,7 +21,7 @@ class IntegrityValidator:
     def validate_file_exists(self, file_path: Path, description: str = "") -> bool:
         """Valida que un archivo exista"""
         if not file_path.exists():
-            self.errors.append(f"❌ Archivo faltante: {file_path.relative_to(self.project_root)} {description}")
+            self.errors.append(f"[ERROR] Archivo faltante: {file_path.relative_to(self.project_root)} {description}")
             return False
         return True
     
@@ -31,7 +31,7 @@ class IntegrityValidator:
             # Intentar importar
             spec = importlib.util.find_spec(module_path)
             if spec is None:
-                self.errors.append(f"❌ No se puede importar: {module_path} {description}")
+                self.errors.append(f"[ERROR] No se puede importar: {module_path} {description}")
                 return False
             
             # Intentar cargar el módulo
@@ -39,12 +39,12 @@ class IntegrityValidator:
             spec.loader.exec_module(module)
             return True
         except Exception as e:
-            self.errors.append(f"❌ Error al importar {module_path}: {str(e)} {description}")
+            self.errors.append(f"[ERROR] Error al importar {module_path}: {str(e)} {description}")
             return False
     
     def validate_critical_files(self):
         """Valida archivos críticos del proyecto"""
-        print("🔍 Validando archivos críticos...")
+        print("[VALIDACION] Validando archivos criticos...")
         
         critical_files = [
             # Servicios críticos
@@ -78,7 +78,7 @@ class IntegrityValidator:
     
     def validate_critical_imports(self):
         """Valida imports críticos"""
-        print("🔍 Validando imports críticos...")
+        print("[VALIDACION] Validando imports criticos...")
         
         critical_imports = [
             ("manager.app.services.app_config_service", "app_config_service"),
@@ -95,25 +95,25 @@ class IntegrityValidator:
     
     def validate_service_instances(self):
         """Valida que los servicios tengan instancias globales"""
-        print("🔍 Validando instancias de servicios...")
+        print("[VALIDACION] Validando instancias de servicios...")
         
         try:
             from manager.app.services.app_config_service import app_config_service
             if not hasattr(app_config_service, 'get_theme'):
-                self.errors.append("❌ app_config_service no tiene método get_theme")
+                self.errors.append("[ERROR] app_config_service no tiene metodo get_theme")
         except Exception as e:
-            self.errors.append(f"❌ Error al validar app_config_service: {str(e)}")
+            self.errors.append(f"[ERROR] Error al validar app_config_service: {str(e)}")
         
         try:
             from manager.app.services.backup_service import backup_service
             if not hasattr(backup_service, 'create_backup'):
-                self.errors.append("❌ backup_service no tiene método create_backup")
+                self.errors.append("[ERROR] backup_service no tiene metodo create_backup")
         except Exception as e:
-            self.errors.append(f"❌ Error al validar backup_service: {str(e)}")
+            self.errors.append(f"[ERROR] Error al validar backup_service: {str(e)}")
     
     def validate_settings_view_variables(self):
         """Valida que SettingsView tenga todas las variables necesarias"""
-        print("🔍 Validando variables de SettingsView...")
+        print("[VALIDACION] Validando variables de SettingsView...")
         
         try:
             # Intentar importar y verificar que la clase tenga los atributos necesarios
@@ -142,23 +142,23 @@ class IntegrityValidator:
     
     def validate_directory_structure(self):
         """Valida la estructura de directorios"""
-        print("🔍 Validando estructura de directorios...")
+        print("[VALIDACION] Validando estructura de directorios...")
         
         required_dirs = [
             self.manager_dir / "app" / "services",
             self.manager_dir / "app" / "ui" / "views",
             self.manager_dir / "app" / "ui" / "components",
-            self.project_root / "data",
+            self.manager_dir / "data",
         ]
         
         for dir_path in required_dirs:
             if not dir_path.exists():
-                self.errors.append(f"❌ Directorio faltante: {dir_path.relative_to(self.project_root)}")
+                self.errors.append(f"[ERROR] Directorio faltante: {dir_path.relative_to(self.project_root)}")
     
     def run_validation(self) -> bool:
         """Ejecuta todas las validaciones"""
         print("\n" + "=" * 80)
-        print("🔍 VALIDACIÓN DE INTEGRIDAD DEL PROYECTO")
+        print("[VALIDACION] VALIDACION DE INTEGRIDAD DEL PROYECTO")
         print("=" * 80 + "\n")
         
         self.validate_directory_structure()
@@ -169,28 +169,28 @@ class IntegrityValidator:
         
         # Mostrar resultados
         print("\n" + "=" * 80)
-        print("📊 RESULTADOS DE LA VALIDACIÓN")
+        print("[RESULTADOS] RESULTADOS DE LA VALIDACION")
         print("=" * 80 + "\n")
         
         if self.errors:
-            print(f"❌ Errores encontrados: {len(self.errors)}")
+            print(f"[ERROR] Errores encontrados: {len(self.errors)}")
             for error in self.errors:
                 print(f"   {error}")
             print()
         else:
-            print("✅ No se encontraron errores críticos\n")
+            print("[OK] No se encontraron errores criticos\n")
         
         if self.warnings:
-            print(f"⚠️  Advertencias: {len(self.warnings)}")
+            print(f"[ADVERTENCIA] Advertencias: {len(self.warnings)}")
             for warning in self.warnings:
                 print(f"   {warning}")
             print()
         
         if not self.errors:
-            print("✅ El proyecto parece estar íntegro y funcional")
+            print("[OK] El proyecto parece estar integro y funcional")
             return True
         else:
-            print("❌ El proyecto tiene problemas que deben corregirse")
+            print("[ERROR] El proyecto tiene problemas que deben corregirse")
             return False
 
 

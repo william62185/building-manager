@@ -221,7 +221,8 @@ class TenantsView(tk.Frame):
         form_view = TenantFormView(
             self,
             on_back=self._back_to_dashboard,
-            on_save_success=self.on_data_change
+            on_save_success=self.on_data_change,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         form_view.pack(fill="both", expand=True)
     
@@ -242,17 +243,13 @@ class TenantsView(tk.Frame):
             fg="#2c3e50"
         )
         title_label.pack(side="left", padx=10)
-        btn_back = tk.Button(
-            header_frame,
-            text="← Volver al Menú",
-            font=("Segoe UI", 10),
-            bg="#6c757d",
-            fg="white",
-            relief="flat",
-            padx=15,
-            command=self._back_to_dashboard
-        )
-        btn_back.pack(side="right", padx=10)
+        
+        # Frame para botones de navegación
+        buttons_frame = tk.Frame(header_frame, bg="#f8f9fa")
+        buttons_frame.pack(side="right", padx=10)
+        
+        # Crear botones con el mismo estilo que otras vistas
+        self._create_navigation_buttons_list_view(buttons_frame, self._back_to_dashboard)
         # =================== CONTAINER PRINCIPAL ===================
         main_container = tk.Frame(self, bg="#ffffff")
         main_container.pack(fill="both", expand=True, padx=20, pady=10)
@@ -722,7 +719,8 @@ class TenantsView(tk.Frame):
             tenant_data=tenant,
             on_back=self._back_to_list,
             on_edit=self._edit_tenant,
-            on_register_payment=self.on_register_payment_callback
+            on_register_payment=self.on_register_payment_callback,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         details_view.pack(fill="both", expand=True)
     
@@ -740,7 +738,8 @@ class TenantsView(tk.Frame):
             self,
             on_back=self._back_to_list,
             tenant_data=tenant,
-            on_save_success=self.on_data_change
+            on_save_success=self.on_data_change,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         form_view.pack(fill="both", expand=True)
     
@@ -761,7 +760,8 @@ class TenantsView(tk.Frame):
         
         reports_view = ReportsView(
             self,
-            on_back=self._back_to_dashboard
+            on_back=self._back_to_dashboard,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         reports_view.pack(fill="both", expand=True)
     
@@ -778,6 +778,67 @@ class TenantsView(tk.Frame):
         """Maneja el clic en volver al menú principal"""
         if self.on_navigate:
             self.on_navigate("dashboard")
+    
+    def _create_navigation_buttons_list_view(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente para la vista de lista"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver"
+        btn_back = tk.Button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
+            command=on_back_command
+        )
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            if self.on_navigate:
+                self.on_navigate("dashboard")
+        
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
 
     def _on_search_change(self, event=None):
         """Búsqueda en tiempo real"""
