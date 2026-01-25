@@ -1107,7 +1107,11 @@ class MainWindow:
         for widget in self.views_container.winfo_children():
             widget.destroy()
         from .register_expense_view import RegisterExpenseView
-        form = RegisterExpenseView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
+        form = RegisterExpenseView(
+            self.views_container, 
+            on_back=lambda: self._navigate_to("dashboard"),
+            on_navigate_to_dashboard=lambda: self._navigate_to("dashboard")
+        )
         form.pack(fill="both", expand=True)
     
     def _show_building_setup_view(self):
