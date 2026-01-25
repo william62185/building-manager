@@ -33,10 +33,22 @@ class PaymentsView(tk.Frame):
         # Header
         header = tk.Frame(self, **theme_manager.get_style("frame"))
         header.pack(fill="x", pady=(0, Spacing.LG))
-        btn_back = ModernButton(header, text="Volver", icon=Icons.ARROW_LEFT, style="secondary", command=self._on_back)
-        btn_back.pack(side="left")
+        
+        # Título a la izquierda
         title = tk.Label(header, text="Gestión de Pagos", **theme_manager.get_style("label_title"))
-        title.pack(side="left", padx=(Spacing.LG, 0))
+        title.pack(side="left", padx=(0, Spacing.LG))
+        
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        # Solo botón Dashboard (sin Volver porque es redundante)
+        def go_to_dashboard():
+            if self.on_back:
+                self.on_back()  # on_back ya navega al dashboard desde main_window
+        
+        btn_dashboard = ModernButton(buttons_frame, text="Dashboard", icon=Icons.APARTMENTS, style="secondary", command=go_to_dashboard)
+        btn_dashboard.pack(side="right")
         # Cards principales
         cards_frame = tk.Frame(self, **theme_manager.get_style("frame"))
         cards_frame.pack(pady=Spacing.XL)
@@ -68,8 +80,7 @@ class PaymentsView(tk.Frame):
     def _create_action_card(self, parent, icon, title, description, color, command):
         card = tk.Frame(parent, bg="white", bd=2, relief="raised", padx=18, pady=18, width=260, height=220)
         card.pack_propagate(False)  # Mantener tamaño fijo
-        card.bind("<Button-1>", lambda e: command())
-        card.configure(cursor="hand2")
+        
         # Ícono
         icon_label = tk.Label(card, text=icon, font=("Segoe UI", 28), fg=color, bg="white")
         icon_label.pack()
@@ -79,24 +90,51 @@ class PaymentsView(tk.Frame):
         # Descripción
         desc_label = tk.Label(card, text=description, font=("Segoe UI", 10), fg="#444", bg="white", wraplength=200, justify="center")
         desc_label.pack(pady=(0, 2))
+        
+        # Función para manejar clics - se ejecuta desde cualquier parte del card
+        def on_card_click(e):
+            # Prevenir propagación adicional si es necesario
+            e.widget.focus_set()  # Asegurar que el widget tenga foco
+            command()
+            return "break"  # Detener propagación del evento
+        
         # Hover effect
         def on_enter(e):
             card.configure(bg="#e3f2fd")
             icon_label.configure(bg="#e3f2fd")
             title_label.configure(bg="#e3f2fd")
             desc_label.configure(bg="#e3f2fd")
+        
         def on_leave(e):
             card.configure(bg="white")
             icon_label.configure(bg="white")
             title_label.configure(bg="white")
             desc_label.configure(bg="white")
-        card.bind("<Enter>", on_enter)
-        card.bind("<Leave>", on_leave)
-        for w in [icon_label, title_label, desc_label]:
-            w.bind("<Button-1>", lambda e: command())
-            w.bind("<Enter>", on_enter)
-            w.bind("<Leave>", on_leave)
-            w.configure(cursor="hand2")
+        
+        # Hacer TODA el área clickeable: card y todos los widgets hijos
+        # El card principal captura clics en áreas vacías
+        # Los widgets hijos capturan clics en su área específica
+        all_widgets = [card, icon_label, title_label, desc_label]
+        for widget in all_widgets:
+            widget.bind("<Button-1>", on_card_click)
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.configure(cursor="hand2")
+        
+        # Función recursiva para hacer clickeable cualquier widget hijo que se agregue después
+        def make_child_clickable(widget):
+            """Hace clickeable un widget y todos sus hijos recursivamente"""
+            widget.bind("<Button-1>", on_card_click)
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.configure(cursor="hand2")
+            for child in widget.winfo_children():
+                make_child_clickable(child)
+        
+        # Aplicar a todos los widgets existentes y futuros
+        for widget in all_widgets:
+            make_child_clickable(widget)
+        
         return card
 
     def _show_register_payment(self, preselected_tenant=None):
@@ -393,10 +431,33 @@ class PaymentsView(tk.Frame):
         # Limpiar vista y mostrar la vista profesional de edición/eliminación de pagos
         for widget in self.winfo_children():
             widget.destroy()
+        
+        # Función para navegar al dashboard principal
+        def go_to_dashboard():
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            # Fallback: usar on_back si está disponible
+            if self.on_back:
+                self.on_back()
+        
         edit_delete_view = EditDeletePaymentsView(
             self, 
             on_back=self._create_layout,
-            on_payment_saved=self.on_payment_saved
+            on_payment_saved=self.on_payment_saved,
+            on_navigate_to_dashboard=go_to_dashboard
         )
         edit_delete_view.pack(fill="both", expand=True)
 

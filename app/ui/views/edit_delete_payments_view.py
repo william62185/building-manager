@@ -10,12 +10,13 @@ from manager.app.services.tenant_service import TenantService
 
 class EditDeletePaymentsView(tk.Frame):
     """Vista profesional para editar/eliminar pagos (independiente, duplicado de registrar pago)"""
-    def __init__(self, parent, on_back=None, on_payment_saved=None):
+    def __init__(self, parent, on_back=None, on_payment_saved=None, on_navigate_to_dashboard=None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         self.payment_service = PaymentService()
         self.tenant_service = TenantService()
         self.on_back = on_back
         self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
         self.selected_tenant = None
         self.editing_payment = None
         self._create_layout()
@@ -26,10 +27,17 @@ class EditDeletePaymentsView(tk.Frame):
         # Header
         header = tk.Frame(self, **theme_manager.get_style("frame"))
         header.pack(fill="x", pady=(0, Spacing.LG))
-        btn_back = ModernButton(header, text="Volver", icon=Icons.ARROW_LEFT, style="secondary", command=self._on_back)
-        btn_back.pack(side="left")
+        
+        # Título a la izquierda
         title = tk.Label(header, text="Editar/Eliminar Pagos", **theme_manager.get_style("label_title"))
-        title.pack(side="left", padx=(Spacing.LG, 0))
+        title.pack(side="left", padx=(0, Spacing.LG))
+        
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        # Agregar botones Volver y Dashboard
+        self._create_navigation_buttons(buttons_frame, self._on_back)
         # Buscador de inquilino
         search_frame = tk.Frame(self, **theme_manager.get_style("frame"))
         search_frame.pack(fill="x", pady=(0, 10), padx=(2, 2))
@@ -258,6 +266,93 @@ class EditDeletePaymentsView(tk.Frame):
                 self._create_payments_list()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el pago.")
+
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver"
+        btn_back = tk.Button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
+            command=on_back_command
+        )
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow en la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                self.on_back()
+        
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
 
     def _on_back(self):
         if self.on_back:

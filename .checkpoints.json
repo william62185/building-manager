@@ -7,5 +7,14 @@
     "commit": "b3a78173c75e177ccadbecdd3cfe1922e1d7f7e8",
     "timestamp": "2026-01-25T00:06:18.698748",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Modulo Inquilinos Completo",
+    "description": "MÃ³dulo de inquilinos completamente funcional con botones Dashboard/Volver en todas las vistas, navegaciÃ³n corregida, formularios funcionales y vista de detalles completa",
+    "tag": "checkpoint-modulo-inquilinos-completo-20260125-232830",
+    "branch": "path-manager-20179",
+    "commit": "11726695742f36660c57de17a303e24ca13616c9",
+    "timestamp": "2026-01-25T23:28:30.392687",
+    "created_by": "checkpoint_manager"
   }
 ]

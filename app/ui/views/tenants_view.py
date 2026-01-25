@@ -65,21 +65,49 @@ class TenantsView(tk.Frame):
         title_frame = tk.Frame(self, **theme_manager.get_style("frame"))
         title_frame.pack(fill="x", pady=(0, Spacing.LG))
         
-        # Botón volver - movido al lado derecho
-        btn_back = tk.Button(
-            title_frame,
-            text="← Volver al Menú",
-            font=("Segoe UI", 10),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            bd=1,
-            relief="solid",
-            padx=8,
-            pady=4,
-            cursor="hand2",
-            command=self._on_back_clicked
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(title_frame, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para el botón
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Dashboard" con icono de casita (solo este botón, sin Volver porque es redundante)
+        def go_to_dashboard():
+            if self.on_navigate:
+                self.on_navigate("dashboard")
+        
+        btn_dashboard = tk.Button(
+            buttons_frame,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
         )
-        btn_back.pack(side="right")
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
         
         # Pregunta principal
         question_label = tk.Label(
