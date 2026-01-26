@@ -15,10 +15,11 @@ from .apartment_form_view import ApartmentFormView
 class ApartmentsListView(tk.Frame):
     """Vista para gestionar la lista de apartamentos"""
 
-    def __init__(self, parent, on_back: Callable, on_edit: Callable, initial_filters: Dict[str, Any] = None):
+    def __init__(self, parent, on_back: Callable, on_edit: Callable, initial_filters: Dict[str, Any] = None, on_navigate: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         self.on_back = on_back
         self.on_edit = on_edit
+        self.on_navigate = on_navigate  # Callback para navegar al dashboard principal
         self.all_apartments = []
         self._scroll_area_hover_count = 0 # Para un scroll robusto
         self.canvas = None
@@ -39,7 +40,13 @@ class ApartmentsListView(tk.Frame):
         header = tk.Frame(self, **theme_manager.get_style("frame"))
         header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
         tk.Label(header, text="Listado de Apartamentos", **theme_manager.get_style("label_title")).pack(side="left")
-        ModernButton(header, text="← Volver", style="secondary", command=self.on_back).pack(side="right")
+        
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        # Agregar botones Volver y Dashboard
+        self._create_navigation_buttons(buttons_frame, self.on_back)
 
         # Main container
         main_container = tk.Frame(self, **theme_manager.get_style("frame"))
@@ -334,4 +341,113 @@ class ApartmentsListView(tk.Frame):
         if self._scroll_area_hover_count <= 0:
             self._scroll_area_hover_count = 0
             # Use unbind_all on a root widget to be safe, e.g., self
-            self.unbind_all("<MouseWheel>") 
+            self.unbind_all("<MouseWheel>")
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        from manager.app.ui.components.icons import Icons
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver"
+        btn_back = tk.Button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            **button_config,
+            command=on_back_command
+        )
+        btn_back.pack(side="right", padx=(Spacing.SM, 0))
+        
+        # Hover effect para botón "Volver"
+        def on_enter_back(e):
+            btn_back.configure(bg=hover_bg)
+        
+        def on_leave_back(e):
+            btn_back.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_back.bind("<Enter>", on_enter_back)
+        btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if hasattr(self, 'on_navigate') and self.on_navigate is not None:
+                try:
+                    self.on_navigate("dashboard")
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar desde el root window (más confiable)
+            try:
+                root = self.winfo_toplevel()
+                # Buscar MainWindow entre los hijos del root
+                for child in root.winfo_children():
+                    if (hasattr(child, '_navigate_to') and 
+                        hasattr(child, '_load_view') and 
+                        hasattr(child, 'views_container')):
+                        try:
+                            child._navigate_to("dashboard")
+                            return
+                        except Exception as e:
+                            print(f"Error al navegar desde root: {e}")
+            except Exception as e:
+                print(f"Error en búsqueda desde root: {e}")
+            
+            # Prioridad 3: Buscar MainWindow en la jerarquía de widgets
+            # Empezar desde self.master y subir hasta encontrar MainWindow
+            widget = self.master
+            max_depth = 15
+            depth = 0
+            while widget and depth < max_depth:
+                # Verificar si es MainWindow (tiene _navigate_to y views_container)
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                
+                # Subir en la jerarquía
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 4: Si no se encontró MainWindow, usar on_back como fallback
+            if on_back_command:
+                on_back_command()
+        
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=go_to_dashboard
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard) 

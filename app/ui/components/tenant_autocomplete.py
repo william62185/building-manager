@@ -88,7 +88,7 @@ class TenantAutocompleteEntry(tk.Frame):
                 valor = float(valor)
             except Exception:
                 valor = 0
-            text = f"{t['nombre']} | Apt. {apt_number} | CC: {t['numero_documento']} | Día pago: {self._get_dia_pago(t)} | ${valor:,.0f}"
+            text = f"{t['nombre']} | {apt_number} | CC: {t['numero_documento']} | Día pago: {self._get_dia_pago(t)} | ${valor:,.0f}"
             label = tk.Label(self.suggestions, text=text, anchor="w", bg="#e3f2fd", fg="#1976d2", font=("Segoe UI", 10), padx=8, pady=2)
             label.pack(fill="x")
             label.bind("<Button-1>", lambda e, tenant=t: self._select_tenant(tenant))
@@ -114,7 +114,7 @@ class TenantAutocompleteEntry(tk.Frame):
             valor = float(valor)
         except Exception:
             valor = 0
-        text = f"{tenant['nombre']} | Apt. {apt_number} | CC: {tenant['numero_documento']} | Día pago: {self._get_dia_pago(tenant)} | ${valor:,.0f}"
+        text = f"{tenant['nombre']} | {apt_number} | CC: {tenant['numero_documento']} | Día pago: {self._get_dia_pago(tenant)} | ${valor:,.0f}"
         self.var.set(text)
         self._hide_suggestions()
         if self.on_select:
@@ -128,12 +128,26 @@ class TenantAutocompleteEntry(tk.Frame):
             return "-"
 
     def _get_apartment_number(self, tenant):
+        """Obtiene el número del apartamento con su tipo"""
         apt_id = tenant.get('apartamento')
         if apt_id is not None:
             try:
                 apt = apartment_service.get_apartment_by_id(int(apt_id))
-                if apt and 'number' in apt:
-                    return apt['number']
+                if apt:
+                    unit_type = apt.get('unit_type', 'Apartamento Estándar')
+                    unit_number = apt.get('number', 'N/A')
+                    
+                    # Formatear según el tipo
+                    if unit_type == "Local Comercial":
+                        return f"Local {unit_number}"
+                    elif unit_type == "Penthouse":
+                        return f"Penthouse {unit_number}"
+                    elif unit_type == "Depósito":
+                        return f"Depósito {unit_number}"
+                    elif unit_type == "Apartamento Estándar":
+                        return f"Apt. {unit_number}"
+                    else:
+                        return f"{unit_type} {unit_number}"
             except Exception:
                 pass
         return apt_id if apt_id is not None else 'N/A'

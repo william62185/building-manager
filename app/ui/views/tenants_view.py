@@ -486,7 +486,7 @@ class TenantsView(tk.Frame):
         return panel
     
     def _load_and_display_tenants(self):
-        """Carga y muestra todos los inquilinos"""
+        """Carga y muestra todos los inquilinos (excluyendo inactivos por defecto)"""
         try:
             # Recargar datos desde el archivo para asegurar datos actualizados
             tenant_service._load_data()
@@ -500,7 +500,9 @@ class TenantsView(tk.Frame):
             
             # Cargar inquilinos actualizados (después de recargar y recalcular)
             self.all_tenants = tenant_service.get_all_tenants()
-            self._display_tenants(self.all_tenants)
+            
+            # Aplicar filtros (esto excluirá inactivos por defecto si el estado es "Todos")
+            self._apply_filters()
         except Exception as e:
             print(f"Error al cargar inquilinos: {str(e)}")
             self.all_tenants = []
@@ -955,6 +957,9 @@ class TenantsView(tk.Frame):
             }
             target_status = status_mapping.get(status, status.lower())
             filtered = [t for t in filtered if t.get('estado_pago') == target_status]
+        else:
+            # Por defecto, cuando es "Todos", excluir inquilinos inactivos
+            filtered = [t for t in filtered if t.get('estado_pago') != 'inactivo']
         self._display_tenants(filtered)
 
     def _clear_filters(self):
@@ -967,7 +972,8 @@ class TenantsView(tk.Frame):
         self.rent_min.delete(0, tk.END)
         self.rent_max.delete(0, tk.END)
         if hasattr(self, 'all_tenants'):
-            self._display_tenants(self.all_tenants)
+            # Aplicar filtros para excluir inactivos por defecto
+            self._apply_filters()
 
     def _confirm_delete_tenant(self, tenant):
         nombre = tenant.get("nombre", "Inquilino")

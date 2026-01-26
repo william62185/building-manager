@@ -192,10 +192,6 @@ class ReportsView(tk.Frame):
         
         # Definir los reportes
         reports = [
-            ("📈 Reporte de Ocupación", 
-             "Muestra estadísticas de ocupación de apartamentos, porcentajes de ocupación y disponibilidad.",
-             "#2196F3", 
-             self._generate_occupation_report),
             ("💰 Reporte de Ingresos", 
              "Análisis de pagos recibidos, ingresos por período y proyecciones.",
              "#4CAF50", 
@@ -343,32 +339,6 @@ class ReportsView(tk.Frame):
     
     # ==================== GENERADORES DE REPORTES ====================
     
-    def _generate_occupation_report(self):
-        """Genera reporte de ocupación"""
-        try:
-            self._reload_all_data()
-            
-            apartments = apartment_service.get_all_apartments()
-            tenants = tenant_service.get_all_tenants()
-            
-            total_apartments = len(apartments)
-            occupied = sum(1 for apt in apartments if apt.get('status') == 'Ocupado')
-            available = sum(1 for apt in apartments if apt.get('status') == 'Disponible')
-            maintenance = sum(1 for apt in apartments if apt.get('status') == 'En Mantenimiento')
-            
-            occupation_rate = (occupied / total_apartments * 100) if total_apartments > 0 else 0
-            
-            # Crear ventana de reporte
-            self._show_report_window(
-                "Reporte de Ocupación",
-                self._format_occupation_report(
-                    total_apartments, occupied, available, maintenance, occupation_rate, apartments, tenants
-                ),
-                "occupation"
-            )
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte de ocupación: {str(e)}")
-    
     def _generate_income_report(self):
         """Genera reporte de ingresos"""
         try:
@@ -493,39 +463,6 @@ class ReportsView(tk.Frame):
     
     # ==================== FORMATEADORES DE REPORTES ====================
     
-    def _format_occupation_report(self, total, occupied, available, maintenance, rate, apartments, tenants):
-        """Formatea el reporte de ocupación"""
-        report = []
-        report.append("=" * 60)
-        report.append("REPORTE DE OCUPACIÓN")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        report.append("RESUMEN GENERAL:")
-        report.append(f"  • Total de apartamentos: {total}")
-        report.append(f"  • Ocupados: {occupied}")
-        report.append(f"  • Disponibles: {available}")
-        report.append(f"  • En mantenimiento: {maintenance}")
-        report.append(f"  • Tasa de ocupación: {rate:.2f}%")
-        report.append("")
-        report.append("DETALLE POR APARTAMENTO:")
-        report.append("-" * 60)
-        
-        for apt in apartments:
-            status = apt.get('status', 'N/A')
-            apt_num = apt.get('number', 'N/A')
-            tenant_name = "Sin asignar"
-            
-            # Buscar inquilino asignado
-            for tenant in tenants:
-                if str(tenant.get('apartamento', '')) == str(apt.get('id', '')):
-                    tenant_name = tenant.get('nombre', 'Sin asignar')
-                    break
-            
-            report.append(f"Apartamento {apt_num}: {status} - Inquilino: {tenant_name}")
-        
-        return "\n".join(report)
-    
     def _format_income_report(self, total, monthly, yearly, count, methods):
         """Formatea el reporte de ingresos"""
         report = []
@@ -611,7 +548,7 @@ class ReportsView(tk.Frame):
         return "\n".join(report)
     
     def _format_tenants_report(self, all_tenants, active, inactive):
-        """Formatea el reporte de inquilinos"""
+        """Formatea el reporte de inquilinos separando activos e inactivos"""
         report = []
         report.append("=" * 60)
         report.append("REPORTE DE INQUILINOS")
@@ -623,10 +560,9 @@ class ReportsView(tk.Frame):
         report.append(f"  • Inquilinos activos: {len(active)}")
         report.append(f"  • Inquilinos inactivos: {len(inactive)}")
         report.append("")
-        report.append("DETALLE DE INQUILINOS:")
-        report.append("-" * 60)
         
-        for tenant in all_tenants:
+        # Función auxiliar para formatear un inquilino
+        def format_tenant(tenant):
             status = tenant.get('estado_pago', 'N/A')
             status_map = {
                 'al_dia': 'Al Día',
@@ -646,20 +582,65 @@ class ReportsView(tk.Frame):
                     if not apt:
                         all_apts = apartment_service.get_all_apartments()
                         apt = next((a for a in all_apts if a.get('id') == apartment_id_int), None)
-                    if apt and 'number' in apt:
-                        apartment_display = apt.get('number', 'N/A')
+                    if apt:
+                        apt_number = apt.get('number', 'N/A')
+                        apt_type = apt.get('unit_type', 'Apartamento Estándar')
+                        if apt_type == "Apartamento Estándar":
+                            apartment_display = apt_number
+                        else:
+                            apartment_display = f"{apt_type} {apt_number}"
                     else:
                         apartment_display = str(apartment_id)
                 except Exception:
                     apartment_display = str(apartment_id)
             
-            report.append(f"Nombre: {tenant.get('nombre', 'N/A')}")
-            report.append(f"  • Apartamento: {apartment_display}")
-            report.append(f"  • Documento: {tenant.get('numero_documento', 'N/A')}")
-            report.append(f"  • Teléfono: {tenant.get('telefono', 'N/A')}")
-            report.append(f"  • Estado: {status_text}")
-            report.append(f"  • Arriendo: ${float(tenant.get('valor_arriendo', 0)):,.2f}")
+            lines = []
+            lines.append(f"Nombre: {tenant.get('nombre', 'N/A')}")
+            lines.append(f"  • Apartamento: {apartment_display}")
+            lines.append(f"  • Documento: {tenant.get('numero_documento', 'N/A')}")
+            lines.append(f"  • Teléfono: {tenant.get('telefono', 'N/A')}")
+            lines.append(f"  • Estado: {status_text}")
+            lines.append(f"  • Arriendo: ${float(tenant.get('valor_arriendo', 0)):,.2f}")
+            
+            # Si está inactivo, agregar información de desactivación
+            if status == 'inactivo':
+                motivo = tenant.get('motivo_desactivacion', 'N/A')
+                fecha_desactivacion = tenant.get('fecha_desactivacion', 'N/A')
+                if fecha_desactivacion != 'N/A':
+                    try:
+                        from datetime import datetime
+                        fecha_dt = datetime.fromisoformat(fecha_desactivacion)
+                        fecha_desactivacion = fecha_dt.strftime('%d/%m/%Y')
+                    except:
+                        pass
+                lines.append(f"  • Motivo de desactivación: {motivo}")
+                lines.append(f"  • Fecha de desactivación: {fecha_desactivacion}")
+            
+            lines.append("")
+            return "\n".join(lines)
+        
+        # SECCIÓN 1: INQUILINOS ACTIVOS
+        report.append("=" * 60)
+        report.append("INQUILINOS ACTIVOS")
+        report.append("=" * 60)
+        report.append("")
+        
+        if active:
+            for tenant in active:
+                report.append(format_tenant(tenant))
+        else:
+            report.append("No hay inquilinos activos.")
             report.append("")
+        
+        # SECCIÓN 2: INQUILINOS INACTIVOS
+        if inactive:
+            report.append("=" * 60)
+            report.append("INQUILINOS INACTIVOS")
+            report.append("=" * 60)
+            report.append("")
+            
+            for tenant in inactive:
+                report.append(format_tenant(tenant))
         
         return "\n".join(report)
     

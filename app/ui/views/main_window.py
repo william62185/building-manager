@@ -581,6 +581,17 @@ class MainWindow:
         """Crea el grid de acciones administrativas"""
         admin_frame = tk.Frame(self.views_container, **theme_manager.get_style("frame"))
         admin_frame.pack(fill="both", expand=True)
+        
+        # Header con botones de navegación
+        header_frame = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
+        header_frame.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.XL)
+        
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
+        buttons_frame.pack(side="right")
+        
+        # Agregar solo botón Dashboard (sin Volver porque es redundante)
+        self._create_navigation_buttons(buttons_frame, lambda: self._navigate_to("dashboard"), show_back_button=False)
 
         # Verificar si ya existe un edificio para la versión profesional
         from manager.app.services.building_service import building_service
@@ -624,13 +635,6 @@ class MainWindow:
                 "enabled": True
             },
             {
-                "icon": "🔔",
-                "title": "Notificaciones",
-                "color": "#f59e0b",
-                "action": lambda: self._show_placeholder_dialog("Gestión de Notificaciones", "Funcionalidad en desarrollo"),
-                "enabled": True
-            },
-            {
                 "icon": "⚙️",
                 "title": "Gestión de Usuarios",
                 "color": "#6366f1",
@@ -639,19 +643,30 @@ class MainWindow:
             }
         ]
         
-        # Crear filas de 3 tarjetas cada una
+        # Crear filas de 3 tarjetas cada una con tamaño uniforme usando grid
         num_columns = 3
+        num_rows = (len(actions_grid) + num_columns - 1) // num_columns  # Calcular número de filas
+        
+        # Contenedor para el grid con distribución uniforme
+        grid_container = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
+        grid_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
+        
+        # Configurar el grid para distribución uniforme
+        for col in range(num_columns):
+            grid_container.grid_columnconfigure(col, weight=1, uniform="col")
+        for row in range(num_rows):
+            grid_container.grid_rowconfigure(row, weight=1, uniform="row")
+        
+        row_num = 0
         for i in range(0, len(actions_grid), num_columns):
-            row_frame = tk.Frame(admin_frame, **theme_manager.get_style("frame"))
-            row_frame.pack(fill="x", pady=Spacing.LG, padx=Spacing.LG, anchor="n")
-            
             row_items = actions_grid[i:i+num_columns]
-            for item in row_items:
+            for col, item in enumerate(row_items):
                 card = self._create_admin_action_card(
-                    row_frame, item["icon"], item["title"], item["color"], 
+                    grid_container, item["icon"], item["title"], item["color"], 
                     item["action"], item.get("enabled", True), item.get("disabled_message", "")
                 )
-                card.pack(side="left", fill="both", expand=True, padx=(0, Spacing.LG))
+                card.grid(row=row_num, column=col, sticky="nsew", padx=(0, Spacing.LG) if col < len(row_items) - 1 else 0, pady=(0, Spacing.LG) if row_num < num_rows - 1 else 0)
+            row_num += 1
 
     def _create_placeholder_view(self, title: str, subtitle: str):
         """Crea una vista placeholder"""
@@ -822,7 +837,8 @@ class MainWindow:
         deactivate_view = DeactivateTenantView(
             self.views_container,
             on_back=lambda: self._navigate_to("administration"),
-            on_success=self._on_tenant_deactivated
+            on_success=self._on_tenant_deactivated,
+            on_navigate=self._navigate_to
         )
         deactivate_view.pack(fill="both", expand=True)
 
@@ -843,6 +859,8 @@ class MainWindow:
         """Callback cuando se desactiva un inquilino exitosamente"""
         # Actualizar dashboard si hay callback
         self.refresh_dashboard()
+        # Refrescar la vista de inquilinos si está activa
+        self.refresh_tenants_view()
         # Volver a administración
         self._navigate_to("administration")
 
@@ -854,8 +872,9 @@ class MainWindow:
         style["relief"] = "flat"
         style["highlightbackground"] = theme["border_light"]
         style["highlightthickness"] = 1
-        style["width"] = 400
-        style["height"] = 220
+        # Establecer tamaño mínimo para uniformidad, pero permitir que grid estire
+        # style["width"] = 400
+        # style["height"] = 220
         
         # Ajustar estilo según si está habilitada o no
         if enabled:
@@ -867,7 +886,8 @@ class MainWindow:
             color = "#999999"  # Gris para icono y texto deshabilitado
         
         card_frame = tk.Frame(parent, **style)
-        card_frame.pack_propagate(False)
+        card_frame.configure(width=300, height=200)
+        card_frame.pack_propagate(False)  # Mantener tamaño mínimo
         card_frame.configure(cursor=cursor)
         
         # Contenedor interno centrado con padding adecuado
@@ -980,6 +1000,66 @@ class MainWindow:
             card_frame.bind("<Enter>", show_disabled_tooltip)
         
         return card_frame
+    
+    def _create_navigation_buttons(self, parent, on_back_command, show_back_button=True):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        from manager.app.ui.components.icons import Icons
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Botón "Volver" (solo si show_back_button es True)
+        if show_back_button:
+            btn_back = tk.Button(
+                parent,
+                text=f"{Icons.ARROW_LEFT} Volver",
+                **button_config,
+                command=on_back_command
+            )
+            btn_back.pack(side="right", padx=(Spacing.SM, 0))
+            
+            # Hover effect para botón "Volver"
+            def on_enter_back(e):
+                btn_back.configure(bg=hover_bg)
+            
+            def on_leave_back(e):
+                btn_back.configure(bg=theme["btn_secondary_bg"])
+            
+            btn_back.bind("<Enter>", on_enter_back)
+            btn_back.bind("<Leave>", on_leave_back)
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        btn_dashboard = tk.Button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            **button_config,
+            command=lambda: self._navigate_to("dashboard")
+        )
+        btn_dashboard.pack(side="right")
+        
+        # Hover effect para botón "Dashboard"
+        def on_enter_dashboard(e):
+            btn_dashboard.configure(bg=hover_bg)
+        
+        def on_leave_dashboard(e):
+            btn_dashboard.configure(bg=theme["btn_secondary_bg"])
+        
+        btn_dashboard.bind("<Enter>", on_enter_dashboard)
+        btn_dashboard.bind("<Leave>", on_leave_dashboard)
     
     def _get_tenant_statistics(self):
         """Obtiene estadísticas de inquilinos"""

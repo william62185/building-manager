@@ -70,6 +70,17 @@ class BuildingService:
                 self._save_buildings()
                 return True
         return False
+    
+    def update_building(self, building_id: int, updates: Dict[str, Any]) -> bool:
+        """Actualiza múltiples campos de un edificio específico."""
+        for building in self._buildings:
+            if building.get('id') == building_id:
+                # Actualizar solo los campos proporcionados
+                for key, value in updates.items():
+                    building[key] = value
+                self._save_buildings()
+                return True
+        return False
 
     def create_building_from_wizard(self, name: str, floors_config: List[Dict[str, Any]], special_units: List[Dict[str, Any]]):
         """

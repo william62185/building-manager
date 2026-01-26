@@ -239,7 +239,7 @@ class TenantService:
             return False
     
     def recalculate_all_payment_statuses(self) -> Dict[str, int]:
-        """Recalcula el estado de pago de todos los inquilinos"""
+        """Recalcula el estado de pago de todos los inquilinos, excepto los desactivados manualmente"""
         try:
             # Recargar datos de pagos antes de recalcular estados
             from manager.app.services.payment_service import payment_service
@@ -258,6 +258,16 @@ class TenantService:
             
             for tenant in self.tenants:
                 old_status = tenant.get('estado_pago', 'al_dia')
+                
+                # NO recalcular estado si el inquilino fue desactivado manualmente
+                # (tiene fecha_desactivacion o motivo_desactivacion)
+                if tenant.get('fecha_desactivacion') or tenant.get('motivo_desactivacion'):
+                    # Mantener el estado inactivo y no recalcular
+                    if old_status == 'inactivo':
+                        status_changes['inactivo'] += 1
+                        continue
+                
+                # Recalcular estado solo para inquilinos no desactivados manualmente
                 new_status = self.calculate_payment_status(tenant.get('id'))
                 
                 if old_status != new_status:
