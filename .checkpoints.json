@@ -34,5 +34,14 @@
     "commit": "7d00715db4bdff7b547c26453607bd836c42a420",
     "timestamp": "2026-01-26T00:15:28.002725",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Formato unificado de cards de administraciÃ³n",
+    "description": "Unificado formato de cards de administraciÃ³n con cards de gastos",
+    "tag": "checkpoint-formato-unificado-de-cards-de-administraciã³n-20260126-225151",
+    "branch": "path-manager-20179",
+    "commit": "af8bfb76879a58a71ecbd0534f654e994281000f",
+    "timestamp": "2026-01-26T22:51:51.217944",
+    "created_by": "checkpoint_manager"
   }
 ]
