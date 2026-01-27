@@ -52,5 +52,14 @@
     "commit": "38495c59a9698e9220f6d1f881fa2dc2b64b460c",
     "timestamp": "2026-01-26T23:42:32.116909",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Dashboard y Boton Admin Completados",
+    "description": "MÃ©tricas del dashboard actualizadas: Total Inquilinos, Pagos Pendientes (calculado dinÃ¡micamente), Ingresos del Mes, Gastos del Mes, Saldo Neto del Mes. Cards del dashboard actualizados: reemplazado 'Generar Reporte' por 'Estado de OcupaciÃ³n', 'Pagos Pendientes' ahora abre reporte directamente. BotÃ³n Admin completamente desarrollado: Ver Perfil, Mi Actividad (con scroll y agrupaciÃ³n por fecha), Cerrar SesiÃ³n. Cambio de contraseÃ±a movido al mÃ³dulo de usuarios.",
+    "tag": "checkpoint-dashboard-y-boton-admin-completados-20260127-004311",
+    "branch": "path-manager-20179",
+    "commit": "1f9c1b1e36aede3dbfdad194e549277322060bd9",
+    "timestamp": "2026-01-27T00:43:11.232200",
+    "created_by": "checkpoint_manager"
   }
 ]
