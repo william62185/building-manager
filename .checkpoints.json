@@ -70,5 +70,14 @@
     "commit": "fd47862c83f2b1bb76563d90c946b7746e496dad",
     "timestamp": "2026-01-27T01:22:36.803359",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Instalador y Empaquetado Completado",
+    "description": "Instalador de Inno Setup funcionando correctamente. Rutas configuradas para usar AppData del usuario (evita problemas de permisos en Program Files). Runtime hook de PyInstaller implementado. Aplicación ejecutándose correctamente desde el instalador y desde desarrollo. Todos los servicios usando paths_config centralizado. ensure_dirs funcionando en todos los módulos.",
+    "tag": "checkpoint-instalador-y-empaquetado-completado-20260127-220556",
+    "branch": "path-manager-20179",
+    "commit": "4b1cda784297afa53de726607dc520a7c2a98c03",
+    "timestamp": "2026-01-28T22:06:23.120837",
+    "created_by": "checkpoint_manager"
   }
 ]
