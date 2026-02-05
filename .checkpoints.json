@@ -88,5 +88,14 @@
     "commit": "c75e16f36166c92beec767eb53ff607e9d26775f",
     "timestamp": "2026-01-29T23:10:49.750851",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Dashboard Cards Ajustados",
+    "description": "Ajustes completos de los cards del dashboard: tÃ­tulos visibles con color oscuro, iconos uniformes tamaÃ±o 28, espaciado reducido entre icono y texto, altura adecuada 220px, sin texto descriptivo",
+    "tag": "checkpoint-dashboard-cards-ajustados-20260205-131202",
+    "branch": "path-manager-20179",
+    "commit": "e823c2f2a01596b2d1aad815fac3b797316bf9bb",
+    "timestamp": "2026-02-05T13:12:02.195209",
+    "created_by": "checkpoint_manager"
   }
 ]
