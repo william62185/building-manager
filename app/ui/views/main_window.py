@@ -886,48 +886,55 @@ class MainWindow:
             color = "#999999"  # Gris para icono y texto deshabilitado
         
         card_frame = tk.Frame(parent, **style)
-        card_frame.configure(width=300, height=200)
+        card_frame.configure(width=300, height=270)  # Aumentar altura de 260 a 270
         card_frame.pack_propagate(False)  # Mantener tamaño mínimo
         card_frame.configure(cursor=cursor)
         
-        # Contenedor interno centrado con padding adecuado
+        # Contenedor interno con padding reducido en la parte superior
         inner_container = tk.Frame(card_frame, bg=style["bg"])
-        inner_container.pack(fill="both", expand=True)
+        inner_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=(Spacing.XS, Spacing.MD))  # Reducir padding superior
         
-        # Usar place para centrar el contenido verticalmente
+        # Contenedor del contenido (icono + título) - sin espaciador superior
         content_wrapper = tk.Frame(inner_container, bg=style["bg"])
-        content_wrapper.place(relx=0.5, rely=0.5, anchor="center")
+        content_wrapper.pack(pady=(0, 0))  # Sin padding superior adicional
         
-        # Sección superior para el icono con padding reducido
+        # Sección superior para el icono
         icon_frame = tk.Frame(content_wrapper, bg=style["bg"])
-        icon_frame.pack(pady=(0, Spacing.SM))
+        icon_frame.pack(pady=(0, Spacing.SM))  # Reducir espacio entre icono y título
         
-        # Icono grande y bien proporcionado
+        # Icono con tamaño uniforme para todos los cards - forzar tamaño uniforme
         icon_label = tk.Label(
             icon_frame,
             text=icon,
-            font=("Segoe UI Symbol", 42),
+            font=("Segoe UI Symbol", 28),  # Tamaño uniforme más pequeño para que todos se vean iguales
             fg=color,
-            bg=style["bg"]
+            bg=style["bg"],
+            width=3,  # Ancho fijo para uniformidad
+            height=2  # Alto fijo para uniformidad
         )
         icon_label.pack()
         
         # Sección inferior para el título
         title_frame = tk.Frame(content_wrapper, bg=style["bg"])
-        title_frame.pack(fill="x", padx=Spacing.MD)
+        title_frame.pack(fill="x")
         
-        # Título centrado y legible
+        # Título centrado y legible - usar color oscuro para mejor contraste
+        title_color = "#111827" if enabled else "#999999"  # Negro casi puro para texto habilitado, gris claro para deshabilitado
         title_label = tk.Label(
             title_frame,
             text=title,
-            font=("Segoe UI", 15, "bold"),
-            fg=color,
+            font=("Segoe UI", 14, "bold"),  # Mantener tamaño razonable
+            fg=title_color,
             bg=style["bg"],
             anchor="center",
             justify="center",
-            wraplength=300
+            wraplength=260
         )
         title_label.pack()
+        
+        # Espaciador inferior para centrar verticalmente
+        bottom_spacer = tk.Frame(inner_container, bg=style["bg"], height=1)
+        bottom_spacer.pack(fill="x", expand=True)
         
         # Si está deshabilitada, agregar mensaje de ayuda
         if not enabled and disabled_message:
@@ -939,7 +946,7 @@ class MainWindow:
                 bg=style["bg"],
                 anchor="center",
                 justify="center",
-                wraplength=300
+                wraplength=250
             )
             help_label.pack(pady=(Spacing.SM, 0))
         
@@ -949,26 +956,28 @@ class MainWindow:
                 hover_bg = "#f0f9ff"
                 card_frame.configure(bg=hover_bg)
                 inner_container.configure(bg=hover_bg)
+                bottom_spacer.configure(bg=hover_bg)
                 content_wrapper.configure(bg=hover_bg)
                 icon_frame.configure(bg=hover_bg)
                 title_frame.configure(bg=hover_bg)
                 icon_label.configure(bg=hover_bg)
-                title_label.configure(bg=hover_bg)
+                title_label.configure(bg=hover_bg, fg=title_color)  # Mantener color del texto visible
             
             def on_leave(e):
                 original_bg = style["bg"]
                 card_frame.configure(bg=original_bg)
                 inner_container.configure(bg=original_bg)
+                bottom_spacer.configure(bg=original_bg)
                 content_wrapper.configure(bg=original_bg)
                 icon_frame.configure(bg=original_bg)
                 title_frame.configure(bg=original_bg)
                 icon_label.configure(bg=original_bg)
-                title_label.configure(bg=original_bg)
+                title_label.configure(bg=original_bg, fg=title_color)  # Mantener color del texto visible
             
             card_frame.bind("<Enter>", on_enter)
             card_frame.bind("<Leave>", on_leave)
             
-            for w in [inner_container, content_wrapper, icon_frame, title_frame, icon_label, title_label]:
+            for w in [inner_container, bottom_spacer, content_wrapper, icon_frame, title_frame, icon_label, title_label]:
                 w.bind("<Button-1>", lambda e: action())
                 w.bind("<Enter>", on_enter)
                 w.bind("<Leave>", on_leave)

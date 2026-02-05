@@ -79,5 +79,14 @@
     "commit": "4b1cda784297afa53de726607dc520a7c2a98c03",
     "timestamp": "2026-01-28T22:06:23.120837",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Mejoras UI y filtros post-desarrollo",
+    "description": "Asistente edificio: campos direccion ciudad pais telefono email. Busqueda inquilinos: selector fecha, filtro arriendo, total activos. Inquilinos inactivos: limpiar y placeholder. Dashboard: Total Inquilinos solo activos. Apartamento: area opcional. Selector apartamento: scroll centrado tamano. Lista apartamentos: scroll sin pegarse. Configuracion: solo Dashboard.",
+    "tag": "checkpoint-mejoras-ui-y-filtros-post-desarrollo-20260129-231049",
+    "branch": "path-manager-20179",
+    "commit": "c75e16f36166c92beec767eb53ff607e9d26775f",
+    "timestamp": "2026-01-29T23:10:49.750851",
+    "created_by": "checkpoint_manager"
   }
 ]
