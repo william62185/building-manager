@@ -97,5 +97,14 @@
     "commit": "e823c2f2a01596b2d1aad815fac3b797316bf9bb",
     "timestamp": "2026-02-05T13:12:02.195209",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "Limpieza Carpeta App Duplicada",
+    "description": "Eliminada carpeta app duplicada fuera de manager. Verificado que el software solo usa manager/app/. Código duplicado removido, proyecto más limpio.",
+    "tag": "checkpoint-limpieza-carpeta-app-duplicada-20260205-132234",
+    "branch": "path-manager-20179",
+    "commit": "5c909b6e0076217759c7daa179708021b67eb5d6",
+    "timestamp": "2026-02-05T13:22:34",
+    "created_by": "checkpoint_manager"
   }
 ]
