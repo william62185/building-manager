@@ -115,5 +115,14 @@
     "commit": "8ab53556fca05209c45b388aa7695b270a4a6a78",
     "timestamp": "2026-02-20T12:00:00.000000",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "UI Refinada Dashboard Reportes y Titulo",
+    "description": "Titulo header con contorno sutil 0.5px gris claro, hover en cards Dashboard y Reportes con colores visibles, iconos de reportes y cards inferiores con color fuerte para contraste, sin recuadro blanco en titulo",
+    "tag": "checkpoint-ui-refinada-dashboard-reportes-y-titulo-20260223-112510",
+    "branch": "path-manager-20179",
+    "commit": "986c75db6a56cb4738f4d8b4855868c2f640e6db",
+    "timestamp": "2026-02-23T11:25:10",
+    "created_by": "checkpoint_manager"
   }
 ]
