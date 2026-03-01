@@ -133,5 +133,14 @@
     "commit": "66682ef8dd235343e35fbe6c1d82e16d548ff4cc",
     "timestamp": "2026-02-23T15:44:35.252024",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "UI Pagos: Reportes sin blanco, cards y hover completo",
+    "description": "Vista Editar/Eliminar Pagos y Reportes de Pagos con content_bg; cards con fondo CARD_BG; verde oscuro unificado; hover en toda el area del card",
+    "tag": "checkpoint-ui-pagos-reportes-sin-blanco-cards-y-hover-completo-20260220-160000",
+    "branch": "path-manager-20179",
+    "commit": "cb1abbf7f2292e2113c87f1784b7bde1f46ef2ef",
+    "timestamp": "2026-02-20T16:00:00",
+    "created_by": "checkpoint_manager"
   }
 ]
