@@ -151,5 +151,14 @@
     "commit": "0e0075e9c5a2fa67b8b2f9033ba10781943273a8",
     "timestamp": "2026-03-01T01:02:58.549101",
     "created_by": "checkpoint_manager"
+  },
+  {
+    "name": "UI inquilinos reportes y lista ordenada",
+    "description": "Modulo inquilinos: cards reportes centrado azul bordes hover boton cuadrado. Lista: mora, pendiente registro, al dia. Confirmacion exportacion como administracion.",
+    "tag": "checkpoint-ui-inquilinos-reportes-y-lista-ordenada-20260301-210556",
+    "branch": "path-manager-20179",
+    "commit": "4bdde06cc9ca398f0b484232f23fc64d7d086742",
+    "timestamp": "2026-03-01T21:05:56.747112",
+    "created_by": "checkpoint_manager"
   }
 ]
