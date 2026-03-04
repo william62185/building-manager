@@ -15,7 +15,7 @@
 2. **Ejecutar**
    - Abre la carpeta `dist/Building Manager Pro/`
    - Ejecuta `Building Manager Pro.exe`
-   - Los datos (JSON, PDFs, etc.) se crean en esa misma carpeta (`data/`, `recibos/`, `exports/`, etc.)
+   - **Datos en ejecutable empaquetado:** Los datos (JSON, PDFs, backups, exports) se crean en **`%APPDATA%\Building Manager Pro`** (p. ej. `C:\Users\<usuario>\AppData\Roaming\Building Manager Pro`), no en la carpeta del .exe. Ahí encontrarás `data/`, `backups/`, `gastos_docs/`, `exports/`, etc.
 
 ## Instalador Windows (Inno Setup)
 
@@ -28,6 +28,8 @@
    O ejecuta `python build_installer.py`; si encuentra Inno Setup, creará el instalador en `dist/`.
 
 4. El instalador estará en `dist/BuildingManagerPro_Setup_1.0.exe`.
+
+5. **Tras instalar:** Los datos de la aplicación (JSON, documentos, backups, exports) se guardan en **`%APPDATA%\Building Manager Pro`**, no en la carpeta de instalación. Así se evitan problemas de permisos (p. ej. en Program Files).
 
 ## Requisitos para construir
 

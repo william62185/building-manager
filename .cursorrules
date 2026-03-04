@@ -1,0 +1,64 @@
+# Reglas del proyecto Building Manager Pro
+
+## Idioma y comunicación
+- Responde siempre en **español**.
+- Explicaciones y mensajes al usuario en español; comentarios en código pueden estar en español o inglés según conveniencia.
+
+## Stack y arquitectura
+- **Lenguaje:** Python 3.
+- **UI:** Tkinter (tk, ttk). No introducir otros frameworks de UI (PyQt, etc.) sin que el usuario lo pida.
+- **Estructura:**
+  - Vistas: `manager/app/ui/views/` (y subcarpetas como `reports/`). Nombres: `*_view.py`.
+  - Componentes reutilizables: `manager/app/ui/components/` (theme_manager, modern_widgets, icons).
+  - Servicios / lógica de negocio: `manager.app.services/`. Nombres: `*_service.py`.
+  - Datos: JSON en directorio configurado por `manager.app.paths_config` / `DATA_DIR`.
+- Punto de entrada: `run.py`. La aplicación se ejecuta desde la raíz del proyecto.
+
+## Temas y colores (muy importante)
+- **Siempre** usar `theme_manager` y, cuando exista, `get_module_colors(module_name)` para colores de la UI. No inventar paletas nuevas.
+- **Colores por módulo (respetar en botones, cards, headers, iconos):**
+  - **Gastos:** rojo (ej. `#991b1b` / `#dc2626` para botones, `#fee2e2` fondo cards, hover `#fecaca`). Constantes locales típicas: `DARK_RED`, `CARD_BG`.
+  - **Pagos:** verde (ej. `#166534` / `#22c55e`, fondo cards `#dcfce7`, hover `#bbf7d0`). Constantes: `DARK_GREEN`, `CARD_BG`.
+  - **Reportes (menú lateral “Reportes”):** naranja (ej. `#f97316`, `#ea580c`, `#c2410c`). Cards: fondo tipo `#fed7aa`, hover `#fdba74`.
+  - **Administración:** morado (ej. `#8b5cf6`, `#7c3aed`). Usar en botones, headers y elementos propios del módulo.
+  - **Inquilinos:** azul distintivo (ej. `#1e40af` para títulos/iconos, fondos claros azulados). No confundir con el azul del menú lateral.
+- **Menú lateral (sidebar):** color azul oscuro (`#1e3a5f` fondo, `#2d4a6f` hover). **No modificar** estos colores salvo que el usuario lo pida explícitamente.
+- Espaciado: usar las constantes `Spacing` de `theme_manager` (XS, SM, MD, LG, XL, XXL) en lugar de números mágicos.
+
+## Convenciones de código
+- Seguir estilo coherente con el resto del proyecto (PEP 8 razonable, nombres descriptivos).
+- Vistas: clases que heredan de `tk.Frame`, reciben `parent`, y opcionalmente callbacks como `on_back`, `on_navigate_to_dashboard`.
+- Servicios: suelen exponer `get_*`, `_load_data()`, y archivos JSON en `DATA_DIR`. Recargar datos con `_load_data()` cuando sea necesario antes de generar reportes o listados.
+- No eliminar funcionalidad existente ni cambiar comportamiento de módulos que no estén en el alcance de la tarea, a menos que el usuario lo indique.
+
+## Reutilización de código
+- **Priorizar código reutilizable:** Al desarrollar nuevas funcionalidades, procurar que el código pueda usarse en futuras implementaciones. Extraer lógica común a funciones o helpers reutilizables; colocar componentes UI compartidos en `manager/app/ui/components/`; evitar duplicar patrones que ya existan en el proyecto (reutilizar o generalizar en lugar de copiar).
+- Antes de implementar algo nuevo, revisar si ya existe un componente, servicio o utilidad similar que se pueda extender o reutilizar en lugar de escribir código ad hoc.
+
+## UI y patrones
+- **UI compacta:** El desarrollo de la UI de ventanas, diálogos y elementos del software debe hacerse de forma **compacta**: evitar espaciados excesivos, alturas de ventana innecesarias y padding que deje huecos. Usar tamaños de ventana ajustados al contenido, espaciados moderados (p. ej. `Spacing.SM`, `Spacing.MD`) y no expandir contenedores si no hace falta, para que no se vea contenido de fondo ni se desperdicie espacio.
+- **Ventanas de reportes (exportación):** En las ventanas donde se muestra un reporte y se puede exportar, los botones del header deben ir **siempre en este orden de izquierda a derecha:** (1) **Exportar CSV**, (2) **Exportar TXT**, (3) **Cerrar**. Aplicar este orden en reportes de gastos, pagos, inquilinos, administración y reportes generales.
+- **Hover en botones de ventanas de reportes:** En toda ventana (Toplevel o modal) que muestre un reporte con los botones Exportar CSV, Exportar TXT y Cerrar en el header, se debe aplicar **hover suave** a los tres botones: (1) Crear cada botón con referencia (p. ej. `btn_csv`, `btn_txt`, `btn_close`). (2) Botones de exportar: color normal = `get_module_colors(module)["primary"]`, hover = `get_module_colors(module)["hover"]`; usar `bind("<Enter>", lambda e: btn.config(bg=hover_color))` y `bind("<Leave>", lambda e: btn.config(bg=normal_color))`. (3) Botón Cerrar: texto **"× Cerrar"** (símbolo × para que no se corte), `width=10`, color normal `#dc2626`, hover `#b91c1c`, mismos bind Enter/Leave. Aplicar en reportes de pagos, gastos, inquilinos, ocupación y vacancia, reportes generales y pagos pendientes (main_window).
+- **Cards de reportes:** En vistas de reportes (gastos, pagos, reportes generales), mantener el patrón ya usado: título, descripción (si aplica), botón “Generar Reporte”, hover consistente con el color del módulo. Revisar una vista similar antes de crear una nueva o cambiar el estilo.
+- **Diálogos de exportación/éxito:** Cuando se exporte o guarde un archivo (CSV, TXT, etc.), usar el patrón de diálogo de confirmación ya establecido en el proyecto (con opciones como “Abrir carpeta”, “Abrir archivo”, “Copiar ruta”, “Aceptar”) en lugar de un simple `messagebox.showinfo`.
+- **Codificación al exportar CSV y TXT:** Siempre usar **`encoding='utf-8-sig'`** al escribir archivos CSV o TXT de reportes (no usar solo `utf-8`). El BOM hace que Excel detecte UTF-8 y se eviten caracteres corruptos en tildes, ñ y símbolos al abrir el archivo.
+- **Ventanas modales:** Usar `Toplevel`, `transient(parent)` y `grab_set()` cuando se requiera un diálogo modal para evitar que la ventana principal reciba eventos.
+- **Hover en cards:** Si se implementa hover, aplicarlo al frame del card y a los hijos relevantes; si se abre un diálogo desde el card, al cerrar el diálogo restablecer el estado visual del card (p. ej. con `<Destroy>` o callback) para evitar que el hover quede “pegado”.
+
+## Flujo de trabajo
+- Antes de refactors grandes o cambios en muchas vistas, considerar si el usuario usa `checkpoint.py` (checkpoints con Git); no ejecutar checkpoints automáticamente salvo que lo pida.
+- No cambiar el tema global (p. ej. a modo oscuro) ni la sección de apariencia en configuración sin que el usuario lo solicite; el proyecto está fijado en tema claro.
+- Al tocar vistas que muestran datos (inquilinos, pagos, gastos, reportes), asegurar que se recarguen los datos necesarios (p. ej. `_reload_all_data()` o `service._load_data()`) para que la UI refleje el estado actual.
+
+## Seguridad
+- **Datos sensibles:** No hardcodear contraseñas, API keys ni datos personales en el código. Usar variables de entorno o configuración fuera del repositorio cuando aplique (ej. credenciales, rutas privadas).
+- **Entrada de usuario:** Validar y sanitizar toda entrada que provenga de formularios o campos de texto antes de guardarla o usarla (evitar inyección, caracteres problemáticos en JSON o en rutas).
+- **Archivos y rutas:** Al leer o escribir JSON, exportar archivos o abrir carpetas, no confiar en rutas que controle el usuario sin validar. Usar rutas normalizadas y restringidas (ej. `pathlib`, resolución dentro de directorios permitidos) para evitar path traversal u escritura fuera del directorio de datos.
+- **Dependencias:** No añadir paquetes pip ni modificar `requirements.txt` sin que el usuario lo pida. Si se añaden, que sean de fuentes conocidas y con versiones fijadas.
+- **Ejecución externa:** No ejecutar comandos del sistema (`os.system`, `subprocess`) con cadenas que incluyan entrada de usuario sin validar. Si ya se usa `subprocess` para “abrir carpeta” o “abrir archivo”, usar únicamente rutas generadas por la aplicación, no introducidas directamente por el usuario.
+
+## Qué evitar
+- No modificar el color del menú lateral (sidebar) salvo petición explícita.
+- No añadir dependencias nuevas (pip/requirements) sin que el usuario lo indique.
+- No duplicar lógica que ya exista en servicios o en `theme_manager`; reutilizar y referenciar archivos existentes.
+- No usar colores “genéricos” (verde, naranja, etc.) para un módulo que ya tiene un color distintivo definido arriba.

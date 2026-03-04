@@ -13,9 +13,10 @@ building_manager_cursor/
 │   │   │   ├── components/    # Componentes reutilizables
 │   │   │   └── views/         # Vistas principales
 │   │   └── main.py            # Punto de entrada
-│   └── data/                  # Archivos JSON de datos
+│   └── data/                  # Archivos JSON de datos (desarrollo)
 ├── run.py                     # Lanzador principal
-└── checkpoint.py              # Sistema de checkpoints
+├── build_installer.py         # Script de empaquetado (PyInstaller)
+└── pyi_rth_manager_paths.py   # Runtime hook PyInstaller (paths_config)
 ```
 
 ## 🔧 Servicios Críticos
@@ -125,7 +126,7 @@ building_manager_cursor/
 ## ⚠️ Problemas Comunes
 
 ### Error: "ModuleNotFoundError: No module named 'manager.app.services.backup_service'"
-**Solución:** El archivo `backup_service.py` no existe. Recrearlo desde el checkpoint.
+**Solución:** Verificar que exista `manager/app/services/backup_service.py`.
 
 ### Error: "AttributeError: 'SettingsView' object has no attribute 'theme_var'"
 **Solución:** Faltan variables en `__init__` de `SettingsView`. Verificar que todas las variables estén inicializadas.
@@ -133,37 +134,6 @@ building_manager_cursor/
 ### Error: "Colors.GRAY_600 no existe"
 **Solución:** Usar `theme.get("text_secondary")` en lugar de `Colors.GRAY_600`.
 
-## 🔄 Uso de Checkpoints
-
-### Crear checkpoint
-```bash
-python checkpoint.py create "Nombre del checkpoint" -d "Descripción"
-```
-
-### Listar checkpoints
-```bash
-python checkpoint.py list
-```
-
-### Restaurar checkpoint
-```bash
-python checkpoint.py restore 1
-# o
-python checkpoint.py restore "Nombre del checkpoint"
-```
-
-### Validar integridad
-```bash
-python validate_integrity.py
-```
-
-## 📅 Historial de Checkpoints Importantes
-
-- **v1.0-stable**: Versión funcional completa con todos los servicios
-- **v1.1-settings-complete**: Configuración completa restaurada
-- **v1.2-reports-clean**: Reportes limpiados (solo ocupación e inquilinos)
-
 ---
 
-**Última actualización:** 2025-01-24
-**Mantenido por:** Sistema de Checkpoints
+**Última actualización:** 2025-03-04
