@@ -4,14 +4,18 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
+
 class PaymentService:
-    DATA_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "payments.json"
+    DATA_FILE = DATA_DIR / "payments.json"
 
     def __init__(self):
         self._ensure_data_file()
         self._load_data()
 
     def _ensure_data_file(self):
+        ensure_dirs()
         if not self.DATA_FILE.exists():
             self.DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(self.DATA_FILE, 'w', encoding='utf-8') as f:
@@ -63,7 +67,6 @@ class PaymentService:
                 self._load_data()
                 # Actualizar el estado del inquilino específico (esto también recarga pagos)
                 tenant_service.update_payment_status(tenant_id)
-                print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id}")
             except Exception as e:
                 print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
                 import traceback
@@ -110,7 +113,6 @@ class PaymentService:
                 try:
                     from manager.app.services.tenant_service import tenant_service
                     tenant_service.update_payment_status(tenant_id)
-                    print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id} después de eliminar pago")
                 except Exception as e:
                     print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
             

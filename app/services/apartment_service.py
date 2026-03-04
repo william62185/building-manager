@@ -4,7 +4,10 @@ import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-APARTMENTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/apartments.json'))
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
+APARTMENTS_FILE = str(DATA_DIR / "apartments.json")
+
 
 def _natural_sort_key(s):
     """Clave de ordenamiento natural para cadenas como '101', '201', 'Penthouse'."""
@@ -25,6 +28,7 @@ class ApartmentService:
 
     def _load_data(self) -> (List[Dict[str, Any]], int, bool):
         """Carga, limpia y ordena los apartamentos desde el archivo JSON."""
+        ensure_dirs()
         cleanup_needed = False
         if not os.path.exists(self.apartments_file):
             return [], 1, False

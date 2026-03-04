@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
+from manager.app.paths_config import DATA_DIR, DOCUMENTOS_INQUILINOS_DIR, ensure_dirs, get_tenant_document_folder_name
 from manager.app.services.email_service import email_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.apartment_service import apartment_service
@@ -16,7 +17,7 @@ from datetime import datetime
 class NotificationService:
     """Servicio para gestión de notificaciones"""
     
-    DATA_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "notifications.json"
+    DATA_FILE = DATA_DIR / "notifications.json"
     
     # Plantillas de notificaciones
     TEMPLATES = {
@@ -113,6 +114,7 @@ Saludos cordiales,
     
     def _ensure_data_file(self):
         """Asegura que el archivo de datos existe"""
+        ensure_dirs()
         if not self.DATA_FILE.exists():
             self.DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(self.DATA_FILE, 'w', encoding='utf-8') as f:
@@ -279,36 +281,13 @@ Saludos cordiales,
                         break
                 
                 if payment:
-                    # Construir la ruta del PDF usando el mismo formato que se usa al generar el recibo
-                    nombre = payment.get("nombre_inquilino", tenant.get("nombre", tenant_name)).replace(" ", "_")
+                    # Ruta del recibo en la carpeta del inquilino (documentos_inquilinos/{cedula}_{nombre}/)
                     fecha = payment.get("fecha_pago", "").replace("/", "-")
-                    folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../recibos'))
-                    os.makedirs(folder, exist_ok=True)
-                    
-                    # Primera opción: usar nombre_inquilino del pago
-                    pdf_path = os.path.join(folder, f"recibo_pago_{nombre}_{fecha}.pdf")
-                    
-                    # Si no existe, intentar con el nombre del tenant directamente
-                    if not os.path.exists(pdf_path):
-                        nombre_tenant = tenant_name.replace(" ", "_")
-                        pdf_path_alt = os.path.join(folder, f"recibo_pago_{nombre_tenant}_{fecha}.pdf")
-                        if os.path.exists(pdf_path_alt):
-                            pdf_path = pdf_path_alt
-                    
-                    # Si aún no existe, intentar buscar cualquier PDF que coincida con la fecha
-                    if not os.path.exists(pdf_path):
-                        try:
-                            import glob
-                            pattern = os.path.join(folder, f"recibo_pago_*_{fecha}.pdf")
-                            matches = glob.glob(pattern)
-                            if matches:
-                                pdf_path = matches[0]
-                                for match in matches:
-                                    if nombre.lower() in os.path.basename(match).lower():
-                                        pdf_path = match
-                                        break
-                        except Exception:
-                            pass
+                    ensure_dirs()
+                    folder_name = get_tenant_document_folder_name(tenant)
+                    tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+                    tenant_dir.mkdir(parents=True, exist_ok=True)
+                    pdf_path = str(tenant_dir / f"recibo_{fecha}.pdf")
                     
                     # Si el PDF no existe, generarlo automáticamente
                     if not os.path.exists(pdf_path):

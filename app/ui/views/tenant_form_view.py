@@ -3,6 +3,8 @@ Formulario profesional para gestión de inquilinos
 Incluye validaciones, diseño moderno y manejo de estados
 """
 
+import os
+import shutil
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from typing import Dict, Any, Optional, Callable
@@ -12,10 +14,15 @@ from datetime import datetime, date
 from ..components.theme_manager import theme_manager, Spacing
 from ..components.icons import Icons
 from ..components.modern_widgets import (
-    ModernButton, ModernCard, ModernEntry, 
-    ModernBadge, ModernSeparator
+    ModernButton, ModernCard, ModernEntry,
+    ModernBadge, ModernSeparator, create_rounded_button, get_module_colors
 )
 from manager.app.services.tenant_service import tenant_service
+from manager.app.paths_config import (
+    DOCUMENTOS_INQUILINOS_DIR,
+    ensure_dirs,
+    get_tenant_document_folder_name,
+)
 
 class DatePickerWidget(tk.Frame):
     """Widget personalizado para selección de fechas con calendario"""
@@ -31,11 +38,7 @@ class DatePickerWidget(tk.Frame):
     
     def _create_widget(self):
         """Crea el widget de selección de fecha"""
-        # Campo de entrada para mostrar la fecha seleccionada
-        self.date_entry = tk.Entry(self, **theme_manager.get_style("entry"))
-        self.date_entry.pack(side="left", fill="x", expand=True)
-        
-        # Botón para abrir el calendario
+        # Botón para abrir el calendario (empaquetar primero para reservar espacio a la derecha)
         self.calendar_btn = tk.Button(
             self,
             text="📅",
@@ -49,6 +52,10 @@ class DatePickerWidget(tk.Frame):
             command=self._show_calendar
         )
         self.calendar_btn.pack(side="right", padx=(4, 0))
+        
+        # Campo de entrada para mostrar la fecha seleccionada (ocupa el espacio restante)
+        self.date_entry = tk.Entry(self, **theme_manager.get_style("entry"))
+        self.date_entry.pack(side="left", fill="x", expand=True)
     
     def _show_calendar(self):
         """Muestra el calendario en una ventana emergente"""
@@ -330,14 +337,19 @@ class DatePickerWidget(tk.Frame):
 
 class TenantFormView(tk.Frame):
     """Formulario profesional para inquilinos"""
-    
-    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None, on_save_success: Callable = None):
+
+    def __init__(self, parent, on_back: Callable = None, tenant_data: Dict[str, Any] = None, on_save_success: Callable = None, on_navigate_to_dashboard: Callable = None, reactivate_mode: bool = False):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._form_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._form_bg)
         
         self.on_back = on_back
         self.on_save_success = on_save_success
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         self.tenant_data = tenant_data or {}
         self.is_edit_mode = bool(tenant_data)
+        self.reactivate_mode = reactivate_mode  # Modo especial para reactivación
         self.validation_errors = {}
         
         # Variables para los campos
@@ -346,13 +358,26 @@ class TenantFormView(tk.Frame):
         # Crear layout
         self._create_layout()
         
-        # Cargar datos si es modo edición
-        if self.is_edit_mode:
+        # Cargar datos si es modo edición o reactivación
+        if self.is_edit_mode or self.reactivate_mode:
             self._load_tenant_data()
     
     def _init_form_variables(self):
         """Inicializa las variables del formulario"""
         self.form_fields = {}
+
+    def _get_entry_style(self):
+        """Estilo unificado para campos de entrada: fondo blanco, borde sutil, tema."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        return {
+            "bg": "white",
+            "fg": theme["text_primary"],
+            "font": ("Segoe UI", 10),
+            "highlightthickness": 1,
+            "highlightbackground": theme["border_light"],
+            "highlightcolor": theme["border_medium"],
+            "insertbackground": theme["text_primary"],
+        }
     
     def _clear_placeholder(self, event, placeholder_text):
         """Limpia el placeholder cuando se enfoca el campo"""
@@ -368,215 +393,275 @@ class TenantFormView(tk.Frame):
     
     def _create_inline_field(self, parent, label_text, field_name, placeholder_text="", field_type="entry", values=None, width=20):
         """Crea un campo inline con label al lado izquierdo - con ancho fijo para alineación"""
-        row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
-        row_frame.pack(fill="x", pady=(0, 2))
-        
-        # Label con fuente uniforme y más pequeña
+        theme = theme_manager.themes[theme_manager.current_theme]
+        row_frame = tk.Frame(parent, bg=self._form_bg)
+        row_frame.pack(fill="x", pady=(0, 1))
+
         label = tk.Label(
             row_frame,
             text=label_text,
-            width=20,  # Ancho del label
+            width=20,
             anchor="w",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
+            bg=self._form_bg,
+            fg=theme["text_primary"],
+            font=("Segoe UI", 9),
         )
         label.pack(side="left", padx=(0, Spacing.SM))
-        
-        # Campo con ancho uniforme para terminar en línea de alineación
+
         if field_type == "combobox":
             field = ttk.Combobox(
                 row_frame,
                 values=values or [],
                 state="readonly",
-                width=50  # Ajustado para alineación perfecta con textboxes
+                width=50,
             )
             if values:
                 field.set(values[0])
         else:
-            field = tk.Entry(
-                row_frame, 
-                width=35,  # Ancho uniforme para alineación final
-                **theme_manager.get_style("entry")
-            )
-        
-        field.pack(side="left")  # Sin expand para mantener ancho fijo
+            field = tk.Entry(row_frame, width=35, **self._get_entry_style())
+        field.pack(side="left")
         self.form_fields[field_name] = field
-        
         return row_frame
     
     def _create_dual_inline_field(self, parent, left_label, left_field, left_type="entry", left_values=None, 
                                  right_label="", right_field="", right_type="entry", right_values=None):
-        """Crea dos campos inline en la misma fila con alineación exacta según líneas rojas"""
-        row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
-        row_frame.pack(fill="x", pady=(0, 2))
-        
-        # Campo izquierdo - ancho uniforme para terminar en línea de alineación
+        """Crea dos campos inline en la misma fila con alineación exacta"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        row_frame = tk.Frame(parent, bg=self._form_bg)
+        row_frame.pack(fill="x", pady=(0, 1))
+
         left_label_widget = tk.Label(
             row_frame,
             text=left_label,
-            width=20,  # Ancho del label
+            width=20,
             anchor="w",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
+            bg=self._form_bg,
+            fg=theme["text_primary"],
+            font=("Segoe UI", 9),
         )
         left_label_widget.pack(side="left", padx=(0, Spacing.SM))
-        
+
         if left_type == "combobox":
             left_widget = ttk.Combobox(
                 row_frame,
                 values=left_values or [],
                 state="readonly",
-                width=50  # Ajustado para alineación perfecta con textboxes
+                width=50,
             )
-            # No seleccionar automáticamente el primer elemento para el parentesco del contacto de emergencia
             if left_values and left_field != "contacto_emergencia_parentesco":
                 left_widget.set(left_values[0])
         elif left_type == "datepicker":
             left_widget = DatePickerWidget(row_frame)
-            # Para datepicker configurar el ancho exacto del frame contenedor
-            left_widget.pack_configure(ipadx=0)  # Sin padding interno
-            # Configurar el Entry interno del DatePicker para que tenga 35 caracteres
-            left_widget.date_entry.configure(width=32)  # Mismo ancho que fecha fin de contrato
-            # Ajustar el botón del calendario para que sea igual de pequeño que el otro
+            left_widget.configure(bg=self._form_bg)
+            left_widget.pack_configure(ipadx=0)
+            left_widget.date_entry.configure(width=32, **self._get_entry_style())
+            left_widget.date_entry.configure(bg="white")
             left_widget.calendar_btn.configure(width=2)
         else:
-            left_widget = tk.Entry(
-                row_frame,
-                width=35,  # Mismo ancho que "Nombre Completo" - confirmado
-                **theme_manager.get_style("entry")
-            )
-        
+            left_widget = tk.Entry(row_frame, width=35, **self._get_entry_style())
+
         left_widget.pack(side="left")
         self.form_fields[left_field] = left_widget
-        
-        # Espaciado entre columnas para posicionar columna derecha
-        spacer = tk.Frame(row_frame, width=40, **theme_manager.get_style("frame"))
+
+        spacer = tk.Frame(row_frame, width=40, bg=self._form_bg)
         spacer.pack(side="left")
         spacer.pack_propagate(False)
-        
-        # Campo derecho - solo si se especifica
+
         if right_field:
             if right_type == "combobox":
                 right_widget = ttk.Combobox(
                     row_frame,
                     values=right_values or [],
                     state="readonly",
-                    width=50  # Ajustado para alineación perfecta con textboxes
+                    width=50,
                 )
-                # No seleccionar automáticamente el primer elemento para el parentesco del contacto de emergencia
                 if right_values and right_field != "contacto_emergencia_parentesco":
                     right_widget.set(right_values[0])
             elif right_type == "datepicker":
                 right_widget = DatePickerWidget(row_frame)
-                # Para datepicker configurar el ancho exacto del campo de entrada
-                right_widget.date_entry.configure(width=32)  # Restaurado al tamaño anterior
-                # También ajustar el botón del calendario para que sea más compacto
+                right_widget.configure(bg=self._form_bg)
+                right_widget.date_entry.configure(width=32, **self._get_entry_style())
+                right_widget.date_entry.configure(bg="white")
                 right_widget.calendar_btn.configure(width=2)
             else:
-                right_widget = tk.Entry(
-                    row_frame,
-                    width=35,  # Mismo tamaño que columna izquierda
-                    **theme_manager.get_style("entry")
-                )
-            
-            right_widget.pack(side="right")  # Alineado a la derecha
+                right_widget = tk.Entry(row_frame, width=35, **self._get_entry_style())
+
+            right_widget.pack(side="right")
             self.form_fields[right_field] = right_widget
-            
-            # Label derecho después del textbox
+
             right_label_widget = tk.Label(
                 row_frame,
                 text=right_label,
-                width=20,  # Ancho del label derecho aumentado para mostrar texto completo
+                width=20,
                 anchor="w",
-                bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-                fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-                font=("Segoe UI", 9)  # Fuente uniforme y más pequeña
+                bg=self._form_bg,
+                fg=theme["text_primary"],
+                font=("Segoe UI", 9),
             )
             right_label_widget.pack(side="right", padx=(0, Spacing.SM))
-        
+
         return row_frame
     
     def _create_layout(self):
         """Crea el layout principal del formulario"""
-        # Header con navegación - sin padding
         self._create_header()
-        
-        # Formulario principal directamente - sin scroll container
-        self._create_form_content_direct()
-        
-        # Botones de acción fijos en la parte inferior
+        # Botones abajo primero para reservar espacio y que siempre sean visibles
         self._create_action_buttons(self)
+        self._create_form_content_direct()
     
     def _create_header(self):
         """Crea el header con título y navegación"""
-        header_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        header_frame.pack(fill="x", pady=2)  # Padding mínimo
+        header_frame = tk.Frame(self, bg=self._form_bg)
+        header_frame.pack(fill="x", pady=2)
         
         # Título
-        title_text = "Editar Inquilino" if self.is_edit_mode else "Nuevo Inquilino"
+        if self.reactivate_mode:
+            title_text = "Reactivar Inquilino"
+        elif self.is_edit_mode:
+            title_text = "Editar Inquilino"
+        else:
+            title_text = "Nuevo Inquilino"
         title_label = tk.Label(
             header_frame,
             text=title_text,
             **theme_manager.get_style("label_title")
         )
-        title_label.configure(font=("Segoe UI", 14, "bold"))
+        title_label.configure(font=("Segoe UI", 14, "bold"), bg=self._form_bg)
         title_label.pack(side="left", pady=0)
         
-        # Botón volver - movido a la derecha
-        btn_back = tk.Button(
-            header_frame,
-            text="← Volver",
-            font=("Segoe UI", 10),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            bd=1,
-            relief="solid",
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
-            command=self._on_back_clicked
+        buttons_frame = tk.Frame(header_frame, bg=self._form_bg)
+        buttons_frame.pack(side="right")
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Colores azules para módulo de inquilinos
+        colors = get_module_colors("inquilinos")
+        blue_primary = colors["primary"]
+        blue_hover = colors["hover"]
+        blue_light = colors["light"]
+        blue_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow a través de la jerarquía de widgets
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            
+            while widget and depth < max_depth:
+                # Verificar si es MainWindow (tiene _navigate_to y _load_view)
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                
+                # Subir en la jerarquía
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Buscar desde el root window
+            try:
+                root = self.winfo_toplevel()
+                # Buscar MainWindow entre los hijos del root
+                for child in root.winfo_children():
+                    if (hasattr(child, '_navigate_to') and 
+                        hasattr(child, '_load_view') and 
+                        hasattr(child, 'views_container')):
+                        child._navigate_to("dashboard")
+                        return
+            except Exception as e:
+                print(f"Error en búsqueda desde root: {e}")
+            
+            # Si todo falla, mostrar mensaje
+            print("No se pudo encontrar MainWindow para navegar al dashboard")
+        
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            buttons_frame,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=blue_primary,
+            hover_bg=blue_light,
+            hover_fg=blue_text,
+            command=self._on_back_clicked,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
         )
-        btn_back.pack(side="right")
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard"
+        btn_dashboard = create_rounded_button(
+            buttons_frame,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=blue_primary,
+            fg_color="white",
+            hover_bg=blue_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
     
     def _create_form_content_direct(self):
         """Crea el contenido del formulario directamente sin scroll"""
-        # Contenedor principal con padding ultra-mínimo
-        main_container = tk.Frame(self, **theme_manager.get_style("frame"))
-        main_container.pack(fill="both", expand=True, padx=2, pady=0)  # Padding horizontal ultra-reducido
-        
-        # Todas las secciones en una sola columna - completamente compacto
+        main_container = tk.Frame(self, bg=self._form_bg)
+        main_container.pack(fill="both", expand=True, padx=Spacing.SM, pady=0)
+
         self._create_personal_info_section(main_container)
         self._create_housing_info_section(main_container)
         self._create_emergency_contact_section(main_container)
         self._create_documents_section(main_container)
     
     def _create_separator(self, parent):
-        """Crea un separador visual entre secciones"""
-        separator_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
-        separator_frame.pack(fill="x", pady=2)  # Reducido considerablemente
-        
-        line = tk.Frame(
-            separator_frame,
-            height=1,
-            bg=theme_manager.themes[theme_manager.current_theme]["border_light"]
-        )
+        """Separador visual entre secciones"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        separator_frame = tk.Frame(parent, bg=self._form_bg)
+        separator_frame.pack(fill="x", pady=2)
+        line = tk.Frame(separator_frame, height=1, bg=theme["border_light"])
         line.pack(fill="x")
+
+    def _create_section_header(self, parent, icon: str, title: str):
+        """Encabezado de sección con barra lateral de acento (módulo inquilinos)"""
+        colors = get_module_colors("inquilinos")
+        theme = theme_manager.themes[theme_manager.current_theme]
+        header_frame = tk.Frame(parent, bg=self._form_bg)
+        header_frame.pack(fill="x", pady=(4, 0))
+        # Barra vertical de acento
+        accent_bar = tk.Frame(header_frame, width=3, bg=colors["primary"])
+        accent_bar.pack(side="left", fill="y", padx=(0, Spacing.SM))
+        accent_bar.pack_propagate(False)
+        title_label = tk.Label(
+            header_frame,
+            text=f"{icon}  {title}",
+            bg=self._form_bg,
+            fg=theme["text_primary"],
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        )
+        title_label.pack(side="left")
     
     def _create_personal_info_section(self, parent):
         """Crea la sección de información personal"""
-        # Título de sección más pequeño
-        title_label = tk.Label(
-            parent,
-            text=f"{Icons.TENANT_PROFILE} Información Personal",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 12, "bold"),  # Fuente más pequeña
-            anchor="w"
-        )
-        title_label.pack(anchor="w", pady=(0, 1))
+        self._create_section_header(parent, Icons.TENANT_PROFILE, "Información Personal")
         
         # Nombre completo - layout inline con ancho estándar
         self._create_inline_field(parent, "Nombre Completo *", "nombre", "")
@@ -598,40 +683,45 @@ class TenantFormView(tk.Frame):
     
     def _create_housing_info_section(self, parent):
         """Crea la sección de información de vivienda"""
-        title_label = tk.Label(
-            parent,
-            text=f"{Icons.TENANT_ADDRESS} Información de Vivienda",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 12, "bold"),
-            anchor="w"
-        )
-        title_label.pack(anchor="w", pady=(0, 1))
+        self._create_section_header(parent, Icons.TENANT_ADDRESS, "Información de Vivienda")
 
-        # --- Campo de apartamento con botón de selección ---
-        apt_row = tk.Frame(parent, **theme_manager.get_style("frame"))
-        apt_row.pack(fill="x", pady=(0, 2))
-        label_style = theme_manager.get_style("label_body").copy()
-        label_style.pop("anchor", None)
-        tk.Label(apt_row, text="Número de Apartamento *", **label_style, width=22, anchor="w").pack(side="left")
+        apt_row = tk.Frame(parent, bg=self._form_bg)
+        apt_row.pack(fill="x", pady=(0, 1))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        colors = get_module_colors("inquilinos")
+        tk.Label(
+            apt_row,
+            text="Número de Apartamento *",
+            bg=self._form_bg,
+            fg=theme["text_primary"],
+            font=("Segoe UI", 9),
+            width=22,
+            anchor="w",
+        ).pack(side="left")
         self.selected_apartment_var = tk.StringVar()
-        self.selected_apartment_id = None  # Guardará el id real del apartamento
+        self.selected_apartment_id = None
         self.selected_building_id = None
         self.selected_building_name = None
-        self.apt_display = tk.Entry(apt_row, textvariable=self.selected_apartment_var, state="readonly", width=32, font=("Segoe UI", 10))
+        self.apt_display = tk.Entry(
+            apt_row,
+            textvariable=self.selected_apartment_var,
+            state="readonly",
+            width=32,
+            **self._get_entry_style(),
+        )
+        self.apt_display.configure(bg="white")
         self.apt_display.pack(side="left", padx=(0, 4))
-        select_btn = tk.Button(
+        select_btn = create_rounded_button(
             apt_row,
             text="Seleccionar...",
-            font=("Segoe UI", 9),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            relief="solid",
-            bd=1,
-            padx=6,
-            pady=2,
-            cursor="hand2",
-            command=self._open_apartment_selector_modal
+            bg_color=colors["light"],
+            fg_color=colors["text"],
+            hover_bg=colors["hover"],
+            hover_fg="white",
+            command=self._open_apartment_selector_modal,
+            padx=12,
+            pady=6,
+            radius=4,
         )
         select_btn.pack(side="left")
 
@@ -678,17 +768,8 @@ class TenantFormView(tk.Frame):
                     self.form_fields['valor_arriendo'].insert(0, base_rent)
     
     def _create_emergency_contact_section(self, parent):
-        """Crea la sección de contacto de emergencia - layout inline compacto"""
-        # Título de sección más pequeño
-        title_label = tk.Label(
-            parent,
-            text=f"{Icons.EMERGENCY_CONTACT} Contacto de Emergencia",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 12, "bold"),  # Fuente más pequeña
-            anchor="w"
-        )
-        title_label.pack(anchor="w", pady=(0, 1))
+        """Crea la sección de contacto de emergencia"""
+        self._create_section_header(parent, Icons.EMERGENCY_CONTACT, "Contacto de Emergencia")
         
         # Fila 1: Nombre y parentesco - usando función dual
         self._create_dual_inline_field(
@@ -702,95 +783,86 @@ class TenantFormView(tk.Frame):
         self._create_inline_field(parent, "Teléfono", "contacto_emergencia_telefono", "")
     
     def _create_documents_section(self, parent):
-        """Crea la sección de documentos - diseño horizontal compacto"""
-        # Título de sección más pequeño
-        title_label = tk.Label(
-            parent,
-            text=f"{Icons.TENANT_DOCUMENTS} Documentos",
-            bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            font=("Segoe UI", 12, "bold"),  # Fuente más pequeña
-            anchor="w"
-        )
-        title_label.pack(anchor="w", pady=(0, 1))
-        
-        # Contenedor horizontal para ambos documentos
-        docs_row = tk.Frame(parent, **theme_manager.get_style("frame"))
+        """Crea la sección de documentos"""
+        self._create_section_header(parent, Icons.TENANT_DOCUMENTS, "Documentos")
+
+        docs_row = tk.Frame(parent, bg=self._form_bg)
         docs_row.pack(fill="x")
-        
-        # Documento de identidad (lado izquierdo)
-        doc_id_frame = tk.Frame(docs_row, **theme_manager.get_style("frame"))
+
+        theme = theme_manager.themes[theme_manager.current_theme]
+        colors = get_module_colors("inquilinos")
+
+        doc_id_frame = tk.Frame(docs_row, bg=self._form_bg)
         doc_id_frame.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
-        
-        doc_id_label = tk.Label(
+
+        tk.Label(
             doc_id_frame,
             text="Documento de Identidad",
-            **theme_manager.get_style("label_body")
-        )
-        doc_id_label.pack(anchor="w", pady=(0, 2))
-        
-        doc_id_buttons = tk.Frame(doc_id_frame, **theme_manager.get_style("frame"))
-        doc_id_buttons.pack(fill="x")
-        
-        self.btn_upload_id = tk.Button(
-            doc_id_buttons,
-            text=f"{Icons.UPLOAD} Seleccionar",
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bg=self._form_bg,
+            fg=theme["text_primary"],
             font=("Segoe UI", 10),
-            relief="solid",
-            bd=1,
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
-            cursor="hand2",
-            command=lambda: self._upload_document("id")
+        ).pack(anchor="w", pady=(0, 1))
+
+        doc_id_buttons = tk.Frame(doc_id_frame, bg=self._form_bg)
+        doc_id_buttons.pack(fill="x")
+
+        self.btn_upload_id = create_rounded_button(
+            doc_id_buttons,
+            text=f"{Icons.UPLOAD}  Seleccionar",
+            bg_color=colors["light"],
+            fg_color=colors["text"],
+            hover_bg=colors["hover"],
+            hover_fg="white",
+            command=lambda: self._upload_document("id"),
+            padx=10,
+            pady=5,
+            radius=4,
         )
         self.btn_upload_id.pack(side="left", padx=(0, Spacing.XS))
-        
+
         self.id_file_label = tk.Label(
             doc_id_buttons,
             text="No seleccionado",
-            **theme_manager.get_style("label_body")
+            bg=self._form_bg,
+            fg=theme["text_secondary"],
+            font=("Segoe UI", 10),
         )
         self.id_file_label.pack(side="left")
-        
-        # Contrato (lado derecho)
-        contract_frame = tk.Frame(docs_row, **theme_manager.get_style("frame"))
+
+        contract_frame = tk.Frame(docs_row, bg=self._form_bg)
         contract_frame.pack(side="right", fill="x", expand=True, padx=(Spacing.SM, 0))
-        
-        contract_label = tk.Label(
+
+        tk.Label(
             contract_frame,
             text="Contrato de Arrendamiento",
-            **theme_manager.get_style("label_body")
-        )
-        contract_label.pack(anchor="w", pady=(0, 2))
-        
-        contract_buttons = tk.Frame(contract_frame, **theme_manager.get_style("frame"))
-        contract_buttons.pack(fill="x")
-        
-        self.btn_upload_contract = tk.Button(
-            contract_buttons,
-            text=f"{Icons.UPLOAD} Seleccionar",
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            bg=self._form_bg,
+            fg=theme["text_primary"],
             font=("Segoe UI", 10),
-            relief="solid",
-            bd=1,
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
-            cursor="hand2",
-            command=lambda: self._upload_document("contract")
+        ).pack(anchor="w", pady=(0, 1))
+
+        contract_buttons = tk.Frame(contract_frame, bg=self._form_bg)
+        contract_buttons.pack(fill="x")
+
+        self.btn_upload_contract = create_rounded_button(
+            contract_buttons,
+            text=f"{Icons.UPLOAD}  Seleccionar",
+            bg_color=colors["light"],
+            fg_color=colors["text"],
+            hover_bg=colors["hover"],
+            hover_fg="white",
+            command=lambda: self._upload_document("contract"),
+            padx=10,
+            pady=5,
+            radius=4,
         )
         self.btn_upload_contract.pack(side="left", padx=(0, Spacing.XS))
-        
+
         self.contract_file_label = tk.Label(
             contract_buttons,
             text="No seleccionado",
-            **theme_manager.get_style("label_body")
+            bg=self._form_bg,
+            fg=theme["text_secondary"],
+            font=("Segoe UI", 10),
         )
         self.contract_file_label.pack(side="left")
         
@@ -802,61 +874,66 @@ class TenantFormView(tk.Frame):
     
     def _create_action_buttons(self, parent):
         """Crea los botones de acción del formulario"""
-        actions_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
-        actions_frame.pack(fill="x", side="bottom", pady=(2, 0))
-        
-        # Separador
+        theme = theme_manager.themes[theme_manager.current_theme]
+        colors = get_module_colors("inquilinos")
+        actions_frame = tk.Frame(parent, bg=self._form_bg)
+        actions_frame.pack(fill="x", side="bottom", pady=(4, 0))
+
         ModernSeparator(actions_frame)
-        
-        # Botones
-        buttons_frame = tk.Frame(actions_frame, **theme_manager.get_style("frame"))
+
+        buttons_frame = tk.Frame(actions_frame, bg=self._form_bg)
         buttons_frame.pack(pady=(2, 0))
-        
-        # Botón cancelar
-        btn_cancel = tk.Button(
+
+        btn_cancel = create_rounded_button(
             buttons_frame,
-            text=f"{Icons.CANCEL} Cancelar",
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            font=("Segoe UI", 10),
-            relief="solid",
-            bd=1,
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
-            cursor="hand2",
-            command=self._on_back_clicked
+            text=f"{Icons.CANCEL}  Cancelar",
+            bg_color=theme["bg_secondary"],
+            fg_color=theme["text_primary"],
+            hover_bg=theme["bg_tertiary"],
+            hover_fg=theme["text_primary"],
+            command=self._on_back_clicked,
+            padx=16,
+            pady=8,
+            radius=4,
         )
         btn_cancel.pack(side="right", padx=(Spacing.SM, 0))
-        
-        # Botón guardar
-        save_text = "Actualizar" if self.is_edit_mode else "Guardar"
-        btn_save = tk.Button(
+
+        if self.reactivate_mode:
+            save_text = "Reactivar"
+            save_bg = colors["primary"]
+            save_fg = "white"
+            save_hover = colors["hover"]
+        elif self.is_edit_mode:
+            save_text = "Actualizar"
+            save_bg = colors["primary"]
+            save_fg = "white"
+            save_hover = colors["hover"]
+        else:
+            save_text = "Guardar"
+            save_bg = colors["primary"]
+            save_fg = "white"
+            save_hover = colors["hover"]
+
+        btn_save = create_rounded_button(
             buttons_frame,
-            text=f"{Icons.SAVE} {save_text}",
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_primary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_primary_fg"],
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            bd=0,
-            width=10,
-            height=1,
-            padx=4,
-            pady=2,
-            cursor="hand2",
-            command=self._save_tenant
+            text=f"{Icons.SAVE}  {save_text}",
+            bg_color=save_bg,
+            fg_color=save_fg,
+            hover_bg=save_hover,
+            hover_fg="white",
+            command=self._save_tenant,
+            padx=18,
+            pady=8,
+            radius=4,
         )
         btn_save.pack(side="right")
-        
-        # Mensaje de campos requeridos
+
         required_label = tk.Label(
             buttons_frame,
             text="* Campos requeridos",
-            **theme_manager.get_style("label_body")
-        )
-        required_label.configure(
-            fg=theme_manager.themes[theme_manager.current_theme]["text_secondary"]
+            bg=self._form_bg,
+            fg=theme["text_secondary"],
+            font=("Segoe UI", 10),
         )
         required_label.pack(side="left")
     
@@ -978,7 +1055,7 @@ class TenantFormView(tk.Frame):
             self.selected_files[doc_type] = filename
             
             # Actualizar label
-            file_name = filename.split("/")[-1]
+            file_name = os.path.basename(filename)
             if doc_type == "id":
                 self.id_file_label.configure(text=file_name)
             else:
@@ -996,7 +1073,10 @@ class TenantFormView(tk.Frame):
             'fecha_ingreso': 'Fecha de ingreso'
         }
         for field, label in required_fields.items():
-            value = self.form_fields[field].get()
+            if field == 'apartamento':
+                value = self.selected_apartment_id or (self.selected_apartment_var.get().strip() if getattr(self, 'selected_apartment_var', None) and self.selected_apartment_var.get() else None)
+            else:
+                value = self.form_fields[field].get()
             if isinstance(value, str):
                 value = value.strip()
             if not value:
@@ -1074,6 +1154,9 @@ class TenantFormView(tk.Frame):
                     value = value.strip()
                 if not value:
                     self.validation_errors[field] = f"{label} es requerido"
+            elif field == 'apartamento':
+                if not self.selected_apartment_id and not (getattr(self, 'selected_apartment_var', None) and self.selected_apartment_var.get() and self.selected_apartment_var.get().strip()):
+                    self.validation_errors[field] = f"{label} es requerido"
         if 'fecha_ingreso' in self.form_fields and 'fecha_ingreso' not in self.validation_errors:
             date_str = self.form_fields['fecha_ingreso'].get()
             if isinstance(date_str, str):
@@ -1097,42 +1180,89 @@ class TenantFormView(tk.Frame):
         tenant_data.setdefault('archivos', {})
         tenant_data.setdefault('has_documents', False)
         
-        # Calcular automáticamente el estado de pago basado en el historial real
-        # Para inquilinos nuevos, se establecerá como 'pendiente_registro' inicialmente
-        # y se recalculará cuando se registren pagos
-        tenant_data.setdefault('estado_pago', 'pendiente_registro')
         try:
-            if self.is_edit_mode:
+            from manager.app.services.apartment_service import apartment_service
+            
+            if self.reactivate_mode:
+                # Modo reactivación: actualizar datos y reactivar
+                tenant_id = self.tenant_data.get("id")
+                
+                # Actualizar los datos del inquilino
+                result = tenant_service.update_tenant(tenant_id, tenant_data)
+                
+                # Eliminar campos de desactivación y cambiar estado
+                tenant_service._load_data()
+                for i, t in enumerate(tenant_service.tenants):
+                    if t.get("id") == tenant_id:
+                        # Eliminar las claves de desactivación si existen
+                        if "motivo_desactivacion" in tenant_service.tenants[i]:
+                            del tenant_service.tenants[i]["motivo_desactivacion"]
+                        if "fecha_desactivacion" in tenant_service.tenants[i]:
+                            del tenant_service.tenants[i]["fecha_desactivacion"]
+                        # Cambiar estado a activo
+                        tenant_service.tenants[i]["estado_pago"] = "al_dia"
+                        tenant_service.tenants[i]["updated_at"] = datetime.now().isoformat()
+                        tenant_service._save_data()
+                        break
+                
+                # Marcar apartamento como ocupado
+                apt_id = tenant_data.get('apartamento')
+                if apt_id:
+                    try:
+                        apt_id_int = int(apt_id) if isinstance(apt_id, str) else apt_id
+                        apt = apartment_service.get_apartment_by_id(apt_id_int)
+                        if apt:
+                            apartment_service.update_apartment(apt_id_int, {"status": "Ocupado"})
+                    except (ValueError, TypeError):
+                        pass
+                
+                action = "reactivado"
+                
+            elif self.is_edit_mode:
                 tenant_id = self.tenant_data.get("id")
                 result = tenant_service.update_tenant(tenant_id, tenant_data)
                 action = "actualizado"
             else:
+                # Calcular automáticamente el estado de pago basado en el historial real
+                # Para inquilinos nuevos, se establecerá como 'pendiente_registro' inicialmente
+                # y se recalculará cuando se registren pagos
+                tenant_data.setdefault('estado_pago', 'pendiente_registro')
                 result = tenant_service.create_tenant(tenant_data)
                 action = "guardado"
-            # --- Actualizar estado del apartamento a 'Ocupado' ---
-            from manager.app.services.apartment_service import apartment_service
-            apt_id = tenant_data.get('apartamento')
-            if apt_id:
-                apartment_service.update_apartment(apt_id, {"status": "Ocupado"})
+            
+            # --- Actualizar estado del apartamento a 'Ocupado' (si no es reactivación, ya se hizo arriba) ---
+            if not self.reactivate_mode:
+                apt_id = tenant_data.get('apartamento')
+                if apt_id:
+                    apartment_service.update_apartment(apt_id, {"status": "Ocupado"})
+            
             if result:
                 # Obtener el número real del apartamento
+                apt_id = tenant_data.get('apartamento')
                 apt_number = apt_id
                 if apt_id:
                     try:
-                        apt = apartment_service.get_apartment_by_id(int(apt_id))
+                        apt_id_int = int(apt_id) if isinstance(apt_id, str) else apt_id
+                        apt = apartment_service.get_apartment_by_id(apt_id_int)
                         if apt and 'number' in apt:
                             apt_number = apt['number']
                     except Exception:
                         pass
                 
                 # Mostrar mensaje de éxito
-                messagebox.showinfo(
-                    "Éxito",
-                    f"Inquilino {action} correctamente.\n\nNombre: {tenant_data['nombre']}\nApartamento: {apt_number}"
-                )
+                if self.reactivate_mode:
+                    messagebox.showinfo(
+                        "Éxito",
+                        f"Inquilino reactivado correctamente.\n\nNombre: {tenant_data['nombre']}\nApartamento: {apt_number}"
+                    )
+                else:
+                    messagebox.showinfo(
+                        "Éxito",
+                        f"Inquilino {action} correctamente.\n\nNombre: {tenant_data['nombre']}\nApartamento: {apt_number}"
+                    )
                 
-                # Preguntar si quiere registrar el pago (solo para inquilinos nuevos)
-                if not self.is_edit_mode:
+                # Preguntar si quiere registrar el pago (solo para inquilinos nuevos, no en reactivación)
+                if not self.is_edit_mode and not self.reactivate_mode:
                     self._ask_for_payment_registration(result, apt_number)
                 
                 if self.on_save_success:
@@ -1142,6 +1272,8 @@ class TenantFormView(tk.Frame):
                 messagebox.showerror("Error", "No se pudo guardar el inquilino")
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _ask_for_payment_registration(self, tenant_data, apt_number):
         """Pregunta al usuario si quiere registrar el pago del inquilino"""
@@ -1234,7 +1366,7 @@ Esto te permitirá:
             )
     
     def _collect_form_data(self) -> Dict[str, Any]:
-        """Recopila todos los datos del formulario"""
+        """Recopila todos los datos del formulario y copia documentos a la carpeta del inquilino."""
         data = {}
         for field_name, field_widget in self.form_fields.items():
             if hasattr(field_widget, 'get'):
@@ -1246,14 +1378,39 @@ Esto te permitirá:
                     data[field_name] = ""
                 else:
                     data[field_name] = value
-        # Agregar archivos seleccionados
-        if hasattr(self, 'selected_files'):
-            data['archivos'] = self.selected_files.copy()
-        else:
-            data['archivos'] = {"id": None, "contract": None}
         # --- Ajuste: guardar el ID real del apartamento ---
         data['apartamento'] = self.selected_apartment_id
+        # Copiar documentos a documentos_inquilinos/{cedula}_{primer_nombre}/ y guardar rutas relativas
+        if hasattr(self, 'selected_files'):
+            data['archivos'] = self._build_archivos_and_copy(data)
+        else:
+            data['archivos'] = {"id": None, "contract": None}
         return data
+
+    def _build_archivos_and_copy(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Copia los archivos seleccionados a la carpeta del inquilino y devuelve archivos con rutas relativas."""
+        archivos = {"id": None, "contract": None}
+        folder_name = get_tenant_document_folder_name(data)
+        ensure_dirs()
+        tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+        for key, dest_name in (("id", "cedula.pdf"), ("contract", "contrato.pdf")):
+            src = self.selected_files.get(key) if hasattr(self, 'selected_files') else None
+            if not src or not str(src).strip():
+                continue
+            src_path = os.path.normpath(str(src))
+            if not os.path.isabs(src_path):
+                archivos[key] = src
+                continue
+            if not os.path.isfile(src_path):
+                continue
+            dest_path = tenant_dir / dest_name
+            try:
+                shutil.copy2(src_path, str(dest_path))
+                archivos[key] = f"{folder_name}/{dest_name}"
+            except Exception as e:
+                messagebox.showwarning("Documentos", f"No se pudo copiar {dest_name}: {e}")
+        return archivos
     
     def _show_validation_errors(self):
         """Muestra los errores de validación"""
@@ -1273,56 +1430,101 @@ Esto te permitirá:
 
 # --- MODAL DE SELECCIÓN DE APARTAMENTO ---
 class ApartmentSelectorModal(tk.Toplevel):
+    MAX_UNITS_PER_ROW = 4  # Unidades por fila para layout simétrico
+
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Seleccionar Apartamento")
-        self.geometry("1050x700")
+        self.minsize(400, 400)
         self.transient(parent)
         self.grab_set()
         self.result = None
         self.selected_btn = None
         self.selected_info = None
         self._build_ui()
+        self._center_and_resize()
         self.wait_window(self)
+
+    def _center_and_resize(self):
+        """Centra la ventana y la amplía hasta justo encima de la barra de tareas."""
+        self.update_idletasks()
+        win_w = 540
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        # Margen generoso para barra de tareas y espacio visual (ventana completa y proporcionada)
+        margin_bottom = 150
+        win_h = max(400, min(screen_h - margin_bottom, 880))
+        x = max(0, (screen_w - win_w) // 2)
+        y = max(0, (screen_h - win_h) // 2)
+        self.geometry(f"{win_w}x{win_h}+{x}+{y}")
 
     def _build_ui(self):
         from manager.app.services.building_service import building_service
         from manager.app.services.apartment_service import apartment_service
         from manager.app.ui.components.theme_manager import theme_manager
-        tk.Label(self, text="Selecciona un apartamento o unidad:", font=("Segoe UI", 13, "bold")).pack(pady=10)
-        frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Título fijo arriba
+        tk.Label(self, text="Selecciona un apartamento o unidad:", font=("Segoe UI", 13, "bold")).pack(pady=(10, 6))
+        # Área con scroll para que se vean todos los pisos y no se corte la ventana
+        scroll_container = tk.Frame(self)
+        scroll_container.pack(fill="both", expand=True, padx=10, pady=(0, 4))
+        canvas = tk.Canvas(scroll_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
+        inner_frame = tk.Frame(canvas)
+        inner_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas_win_id = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        def _on_canvas_configure(e):
+            canvas.itemconfig(canvas_win_id, width=e.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
         buildings = building_service.get_all_buildings()
         apartments = apartment_service.get_all_apartments()
-        # Agrupar apartamentos por edificio
         apts_by_building = {}
         for b in buildings:
             apts_by_building[b['id']] = [a for a in apartments if a.get('building_id') == b['id']]
         for b in buildings:
-            b_frame = tk.LabelFrame(frame, text=b['name'], font=("Segoe UI", 11, "bold"), padx=10, pady=10)
-            b_frame.pack(side="left", fill="y", expand=True, padx=10)
+            b_frame = tk.LabelFrame(inner_frame, text=b['name'], font=("Segoe UI", 11, "bold"), padx=10, pady=10)
+            b_frame.pack(fill="x", padx=10, pady=(0, 10))
             apts = apts_by_building.get(b['id'], [])
-            # Agrupar por piso para visualización tipo matriz
-            pisos = sorted(set(a.get('floor') for a in apts if a.get('floor') is not None), key=lambda x: int(x) if str(x).isdigit() else str(x))
+            def _sort_floor(x):
+                s = str(x)
+                return (0, int(s)) if s.isdigit() else (1, s)
+            pisos = sorted(set(a.get('floor') for a in apts if a.get('floor') is not None), key=_sort_floor)
             for piso in pisos:
                 piso_frame = tk.Frame(b_frame)
-                piso_frame.pack(fill="x", pady=2)
+                piso_frame.pack(fill="x", pady=4)
                 tk.Label(piso_frame, text=f"Piso {piso}", font=("Segoe UI", 9, "bold"), anchor="w").pack(anchor="w")
                 row = tk.Frame(piso_frame)
                 row.pack(fill="x")
-                for apt in [a for a in apts if a.get('floor') == piso]:
+                apts_piso = [a for a in apts if str(a.get('floor')) == str(piso)]
+                for col in range(self.MAX_UNITS_PER_ROW):
+                    row.grid_columnconfigure(col, weight=1, uniform="apt")
+                for i, apt in enumerate(apts_piso):
+                    row_idx = i // self.MAX_UNITS_PER_ROW
+                    col_idx = i % self.MAX_UNITS_PER_ROW
+                    row.grid_rowconfigure(row_idx, weight=0)
                     estado = apt.get('status', 'Disponible')
                     tipo = apt.get('unit_type', 'Apartamento Estándar')
                     display = f"{tipo} {apt.get('number','')}" if tipo != 'Apartamento Estándar' else str(apt.get('number',''))
                     color = "#43a047" if estado == "Disponible" else ("#e53935" if estado == "Ocupado" else "#bdbdbd")
-                    btn = tk.Button(row, text=display, width=14, height=2, bg=color, fg="white" if estado!="Disponible" else "#fff", font=("Segoe UI", 10, "bold"), relief="raised")
+                    btn = tk.Button(row, text=display, width=12, height=2, bg=color, fg="white", font=("Segoe UI", 9, "bold"), relief="raised")
                     btn['state'] = "normal" if estado == "Disponible" else "disabled"
-                    btn.pack(side="left", padx=3, pady=2)
+                    btn.grid(row=row_idx, column=col_idx, padx=2, pady=2, sticky="ew")
                     if estado == "Disponible":
-                        btn.bind("<Button-1>", lambda e, apt=apt, b=b, d=display: self._select_apartment(apt, b, d, btn))
-        # Botones de acción
+                        # Capturar también el botón actual en la lambda para evitar que
+                        # todas las selecciones apunten al último botón creado (p. ej. Penthouse).
+                        btn.bind(
+                            "<Button-1>",
+                            lambda e, apt=apt, b=b, d=display, btn=btn: self._select_apartment(apt, b, d, btn),
+                        )
+        # Botón Cancelar fijo abajo con espacio suficiente para que se vea completo
         action_frame = tk.Frame(self)
-        action_frame.pack(fill="x", pady=10)
+        action_frame.pack(side="bottom", fill="x", pady=(12, 20), padx=14)
         tk.Button(action_frame, text="Cancelar", command=self.destroy, width=12).pack(side="right", padx=10)
 
     def _select_apartment(self, apt, building, display, btn):

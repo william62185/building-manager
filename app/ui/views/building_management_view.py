@@ -9,30 +9,38 @@ from collections import Counter
 from manager.app.services.building_service import building_service
 from manager.app.services.apartment_service import apartment_service
 from manager.app.ui.components.theme_manager import theme_manager, Spacing, Colors
-from manager.app.ui.components.modern_widgets import ModernButton
+from manager.app.ui.components.icons import Icons
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 
 class BuildingManagementView(tk.Frame):
     """Vista para la gestión de edificios."""
 
-    def __init__(self, parent, on_back: Callable):
-        super().__init__(parent, **theme_manager.get_style("frame"))
+    def __init__(self, parent, on_back: Callable, main_window_ref=None):
+        super().__init__(parent)
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.on_back = on_back
+        self.main_window_ref = main_window_ref
         self._create_layout()
         self._load_and_display_buildings()
 
     def _create_layout(self):
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         # Header
-        header = tk.Frame(self, **theme_manager.get_style("frame"))
+        header = tk.Frame(self, bg=cb)
         header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
         
-        # Título dinámico según si hay edificio o no
         building_count = building_service.get_building_count()
         title_text = "Gestión del Edificio" if building_count > 0 else "Gestión de Edificios"
-        tk.Label(header, text=title_text, **theme_manager.get_style("label_title")).pack(side="left")
-        ModernButton(header, text="← Volver", style="secondary", command=self.on_back).pack(side="right")
+        tk.Label(header, text=title_text, font=("Segoe UI", 16, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left")
+        
+        buttons_frame = tk.Frame(header, bg=cb)
+        buttons_frame.pack(side="right")
+        self._create_navigation_buttons(buttons_frame, self.on_back)
 
-        # List container
-        self.list_container = tk.Frame(self, **theme_manager.get_style("frame"))
+        self.list_container = tk.Frame(self, bg=cb)
         self.list_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
 
     def _load_and_display_buildings(self):
@@ -42,8 +50,10 @@ class BuildingManagementView(tk.Frame):
 
         buildings = building_service.get_all_buildings()
 
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         if not buildings:
-            tk.Label(self.list_container, text="No hay edificios registrados.", **theme_manager.get_style("label_body")).pack(pady=Spacing.XL)
+            tk.Label(self.list_container, text="No hay edificios registrados.", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(pady=Spacing.XL)
             return
 
         for building in buildings:
@@ -51,20 +61,44 @@ class BuildingManagementView(tk.Frame):
 
     def _create_building_card(self, parent, building: dict):
         """Crea una tarjeta para un edificio con sus acciones y detalles."""
-        card = tk.Frame(parent, **theme_manager.get_style("card"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        card_bg = "#f3e8ff"  # Morado claro, coherente con el módulo de administración (sin fondo blanco)
+        card = tk.Frame(parent, bg=card_bg, relief="flat", bd=1)
         card.pack(fill="x", pady=(0, Spacing.MD), padx=Spacing.SM)
 
-        # Contenedor principal para alinear info a la izquierda y botones a la derecha
-        main_content = tk.Frame(card, **theme_manager.get_style("card_content"))
+        main_content = tk.Frame(card, bg=card_bg)
         main_content.pack(fill="x", padx=Spacing.MD, pady=Spacing.MD)
 
-        # Frame para la información (izquierda)
-        info_frame = tk.Frame(main_content, **theme_manager.get_style("card_content"))
+        info_frame = tk.Frame(main_content, bg=card_bg)
         info_frame.pack(side="left", fill="x", expand=True)
 
         # Nombre del edificio
         building_name = building.get('name', 'Nombre no disponible')
-        tk.Label(info_frame, text=f"🏢 {building_name}", font=("Segoe UI", 14, "bold"), anchor="w").pack(fill="x")
+        tk.Label(info_frame, text=f"🏢 {building_name}", font=("Segoe UI", 14, "bold"), anchor="w", bg=card_bg, fg=theme["text_primary"]).pack(fill="x")
+
+        # Información de ubicación (si existe)
+        address = building.get('address', '')
+        city = building.get('city', '')
+        country = building.get('country', '')
+        
+        location_parts = []
+        if address:
+            location_parts.append(address)
+        if city:
+            location_parts.append(city)
+        if country:
+            location_parts.append(country)
+        
+        if location_parts:
+            location_text = " | ".join(location_parts)
+            tk.Label(
+                info_frame,
+                text=f"📍 {location_text}",
+                font=("Segoe UI", 9),
+                fg=theme.get("text_secondary", Colors.TEXT_SECONDARY),
+                bg=card_bg,
+                anchor="w"
+            ).pack(fill="x", pady=(Spacing.XS, 0))
 
         # --- Detalles dinámicos del edificio ---
         building_id = building.get('id')
@@ -92,21 +126,21 @@ class BuildingManagementView(tk.Frame):
             info_frame, 
             text=details_text, 
             font=("Segoe UI", 9), 
-            fg=Colors.GRAY_600,
+            fg=theme.get("text_secondary", Colors.TEXT_SECONDARY),
+            bg=card_bg,
             anchor="w"
         ).pack(fill="x", pady=(Spacing.XS, 0))
 
-        # Frame para botones de acción (derecha)
-        actions_frame = tk.Frame(main_content, **theme_manager.get_style("card_content"))
+        actions_frame = tk.Frame(main_content, bg=card_bg)
         actions_frame.pack(side="right", anchor="e")
 
         ModernButton(
             actions_frame, 
-            text="Renombrar", 
+            text="Editar Detalles", 
             icon="✏️",
-            style="info",
+            style="purple",  # Morado para mantener tonalidad morada del módulo de administración
             small=True,
-            command=lambda b=building: self._open_rename_dialog(b)
+            command=lambda b=building: self._open_edit_dialog(b)
         ).pack(side="left", padx=Spacing.SM)
         
         # En la versión profesional, no permitimos eliminar el edificio
@@ -120,43 +154,148 @@ class BuildingManagementView(tk.Frame):
         #     command=lambda b=building: self._delete_building(b)
         # ).pack(side="left", padx=Spacing.SM)
 
-    def _open_rename_dialog(self, building: dict):
-        """Abre un diálogo para renombrar un edificio."""
+    def _open_edit_dialog(self, building: dict):
+        """Abre un diálogo completo para editar los detalles de un edificio."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = theme.get("content_bg", theme["bg_primary"])
         dialog = tk.Toplevel(self)
-        dialog.title("Renombrar Edificio")
-        dialog.geometry("350x150")
+        dialog.title("Editar Detalles del Edificio")
+        dialog.geometry("500x450")
         dialog.transient(self)
         dialog.grab_set()
-        dialog.configure(bg=theme_manager.themes[theme_manager.current_theme]['bg_primary'])
+        dialog.configure(bg=cb)
 
-        container = tk.Frame(dialog, **theme_manager.get_style("frame"))
-        container.pack(expand=True, fill="both", padx=Spacing.LG, pady=Spacing.LG)
+        main_container = tk.Frame(dialog, bg=cb)
+        main_container.pack(expand=True, fill="both", padx=Spacing.LG, pady=Spacing.LG)
 
-        tk.Label(container, text=f"Nuevo nombre para '{building.get('name')}':", **theme_manager.get_style("label_body")).pack(pady=(0, Spacing.SM))
+        tk.Label(
+            main_container, 
+            text=f"Editar: {building.get('name', 'Edificio')}", 
+            font=("Segoe UI", 14, "bold"),
+            bg=cb,
+            fg=theme["text_primary"]
+        ).pack(pady=(0, Spacing.MD))
 
-        name_var = tk.StringVar(value=building.get('name'))
-        entry = ttk.Entry(container, textvariable=name_var, font=("Segoe UI", 12))
-        entry.pack(fill="x")
-        entry.focus_set()
+        form_frame = tk.Frame(main_container, bg=cb)
+        form_frame.pack(fill="both", expand=True)
 
-        buttons_frame = tk.Frame(container, **theme_manager.get_style("frame"))
-        buttons_frame.pack(pady=Spacing.LG)
+        # Variables del formulario
+        name_var = tk.StringVar(value=building.get('name', ''))
+        address_var = tk.StringVar(value=building.get('address', ''))
+        city_var = tk.StringVar(value=building.get('city', ''))
+        country_var = tk.StringVar(value=building.get('country', ''))
+        phone_var = tk.StringVar(value=building.get('phone', ''))
+        email_var = tk.StringVar(value=building.get('email', ''))
+
+        # Campos del formulario
+        fields = [
+            ("Nombre del Edificio:", name_var, True),
+            ("Dirección:", address_var, False),
+            ("Ciudad:", city_var, False),
+            ("País:", country_var, False),
+            ("Teléfono:", phone_var, False),
+            ("Email:", email_var, False),
+        ]
+
+        for label_text, var, required in fields:
+            row = tk.Frame(form_frame, bg=cb)
+            row.pack(fill="x", pady=(0, Spacing.SM))
+            
+            label = tk.Label(row, text=label_text, width=18, anchor="w", bg=cb, fg=theme["text_primary"])
+            label.pack(side="left", padx=(0, Spacing.SM))
+            
+            entry = ttk.Entry(row, textvariable=var, font=("Segoe UI", 10), width=30)
+            entry.pack(side="left", fill="x", expand=True)
+            
+            if required:
+                tk.Label(row, text="*", fg="red", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(Spacing.XS, 0))
+
+        buttons_frame = tk.Frame(main_container, bg=cb)
+        buttons_frame.pack(pady=(Spacing.MD, 0))
 
         def save_and_close():
+            # Validar nombre (requerido)
             new_name = name_var.get().strip()
             if not new_name:
-                messagebox.showerror("Error", "El nombre no puede estar vacío.", parent=dialog)
+                messagebox.showerror("Error", "El nombre del edificio es obligatorio.", parent=dialog)
                 return
             
-            if building_service.update_building_name(building.get('id'), new_name):
-                messagebox.showinfo("Éxito", "El edificio ha sido renombrado.", parent=self)
-                self._load_and_display_buildings() # Refrescar la lista
+            # Preparar actualizaciones
+            updates = {
+                'name': new_name,
+                'address': address_var.get().strip(),
+                'city': city_var.get().strip(),
+                'country': country_var.get().strip(),
+                'phone': phone_var.get().strip(),
+                'email': email_var.get().strip()
+            }
+            
+            if building_service.update_building(building.get('id'), updates):
+                messagebox.showinfo("Éxito", "Los detalles del edificio han sido actualizados.", parent=self)
+                self._load_and_display_buildings()  # Refrescar la lista
                 dialog.destroy()
             else:
-                messagebox.showerror("Error", "No se pudo renombrar el edificio.", parent=dialog)
+                messagebox.showerror("Error", "No se pudieron actualizar los detalles del edificio.", parent=dialog)
 
-        ModernButton(buttons_frame, text="Guardar", command=save_and_close).pack(side="left")
-        ModernButton(buttons_frame, text="Cancelar", style="secondary", command=dialog.destroy).pack(side="left", padx=Spacing.SM)
+        ModernButton(buttons_frame, text="Guardar", style="purple", command=save_and_close).pack(side="left", padx=(0, Spacing.SM))  # Morado para mantener tonalidad morada del módulo
+        ModernButton(buttons_frame, text="Cancelar", style="secondary", command=dialog.destroy).pack(side="left")
+        
+        # Enfocar el primer campo al abrir
+        dialog.after(100, lambda: form_frame.winfo_children()[0].winfo_children()[1].focus_set())
+
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo moderno y colores morados del módulo de administración"""
+        # Colores morados para módulo de administración
+        colors = get_module_colors("administración")
+        purple_primary = colors["primary"]
+        purple_hover = colors["hover"]
+        purple_light = colors["light"]
+        purple_text = colors["text"]
+        
+        theme = theme_manager.themes[theme_manager.current_theme]
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color=theme.get("btn_secondary_bg", "#f3f4f6"),
+            fg_color=purple_primary,
+            hover_bg=purple_light,
+            hover_fg=purple_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color=theme.get("border_medium", "#d1d5db")
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            if self.main_window_ref and hasattr(self.main_window_ref, '_navigate_to'):
+                self.main_window_ref._navigate_to("dashboard")
+            else:
+                # Fallback: buscar la ventana principal a través de la jerarquía
+                widget = self.master
+                while widget:
+                    if hasattr(widget, '_navigate_to'):
+                        widget._navigate_to("dashboard")
+                        return
+                    widget = getattr(widget, 'master', None)
+        
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=purple_primary,
+            fg_color="white",
+            hover_bg=purple_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
 
     def _delete_building(self, building: dict):
         """Lógica para eliminar un edificio (futura implementación)."""

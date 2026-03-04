@@ -14,7 +14,7 @@ from pathlib import Path
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
-from manager.app.ui.components.modern_widgets import ModernButton
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
 
@@ -382,10 +382,14 @@ class RegisterExpenseView(tk.Frame):
         ]
     }
     
-    def __init__(self, parent, on_back: Optional[Callable] = None, expense: Optional[Dict[str, Any]] = None, compact: bool = False):
+    def __init__(self, parent, on_back: Optional[Callable] = None, expense: Optional[Dict[str, Any]] = None, compact: bool = False, on_navigate_to_dashboard: Optional[Callable] = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.expense_service = ExpenseService()
         self.on_back = on_back
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
         self.expense = expense  # Si se proporciona, es modo edición
         self.selected_document_path = None
         self.compact_mode = compact  # Modo compacto para edición
@@ -398,52 +402,54 @@ class RegisterExpenseView(tk.Frame):
     
     def _create_layout(self):
         """Crea el layout principal del formulario"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
         
         # Header (solo en modo no compacto, o más pequeño en compacto)
         if not self.compact_mode:
-            header = tk.Frame(self, **theme_manager.get_style("frame"))
+            header = tk.Frame(self, bg=cb)
             header.pack(fill="x", pady=(0, Spacing.MD))
             
-            btn_back = ModernButton(
-                header,
-                text="Volver",
-                icon=Icons.ARROW_LEFT,
-                style="secondary",
-                command=self._on_back
-            )
-            btn_back.pack(side="left")
-            
+            # Título a la izquierda
             title_text = "Editar Gasto" if self.expense else "Registrar Nuevo Gasto"
             title = tk.Label(
                 header,
                 text=title_text,
-                **theme_manager.get_style("label_title")
+                font=("Segoe UI", 16, "bold"),
+                bg=cb,
+                fg=theme["text_primary"]
             )
-            title.pack(side="left", padx=(Spacing.LG, 0))
+            title.pack(side="left", padx=(0, Spacing.LG))
+            
+            # Frame para botones de navegación (alineados a la derecha)
+            buttons_frame = tk.Frame(header, bg=cb)
+            buttons_frame.pack(side="right")
+            
+            # Agregar botones Volver y Dashboard
+            self._create_navigation_buttons(buttons_frame, self._on_back)
         
-        # Contenedor principal (sin scroll)
-        main_container = tk.Frame(self, **theme_manager.get_style("frame"))
-        # En modo compacto, usar menos padding
-        container_padx = Spacing.SM if self.compact_mode else Spacing.LG
-        container_pady = (0, Spacing.SM) if self.compact_mode else (0, Spacing.MD)
+        # Contenedor principal (sin scroll) - sin fondo blanco
+        main_container = tk.Frame(self, bg=cb)
+        container_padx = 4 if self.compact_mode else Spacing.LG
+        container_pady = (0, 2) if self.compact_mode else (0, Spacing.MD)
         main_container.pack(fill="both", expand=True, padx=container_padx, pady=container_pady)
         
-        # Formulario
-        form_card = tk.Frame(main_container, **theme_manager.get_style("card"))
-        # En modo compacto, usar menos padding
-        card_padx = Spacing.SM if self.compact_mode else Spacing.MD
-        card_pady = 2 if self.compact_mode else Spacing.SM
+        # Formulario con mismo fondo que contenido
+        form_card = tk.Frame(main_container, bg=cb)
+        card_padx = 4 if self.compact_mode else Spacing.MD
+        card_pady = 1 if self.compact_mode else Spacing.SM
         form_card.pack(fill="both", expand=True, padx=card_padx, pady=card_pady)
         
         self._build_expense_form(form_card)
     
     def _build_expense_form(self, parent):
         """Construye el formulario de gasto"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         # Variables del formulario
-        # Convertir fecha de formato YYYY-MM-DD a DD/MM/YYYY si viene del servicio
         if self.expense and self.expense.get('fecha'):
             try:
                 fecha_obj = datetime.strptime(self.expense.get('fecha'), "%Y-%m-%d")
@@ -470,50 +476,35 @@ class RegisterExpenseView(tk.Frame):
             value=self.expense.get('descripcion', '') if self.expense else ''
         )
         
-        # Si hay documento existente
         existing_document = self.expense.get('documento') if self.expense else None
         self.selected_document_path = existing_document if existing_document else None
         
-        # Contenedor del formulario
-        form_container = tk.Frame(parent, **theme_manager.get_style("frame"))
-        # Usar espaciados más pequeños en modo compacto
-        container_padx = 4 if self.compact_mode else Spacing.MD
-        container_pady = 4 if self.compact_mode else Spacing.MD
-        # En modo compacto, permitir que se expanda para mostrar todo
+        form_container = tk.Frame(parent, bg=cb)
+        container_padx = 2 if self.compact_mode else Spacing.MD
+        container_pady = 2 if self.compact_mode else Spacing.MD
         if self.compact_mode:
             form_container.pack(fill="both", expand=True, padx=container_padx, pady=container_pady)
         else:
             form_container.pack(fill="x", padx=container_padx, pady=container_pady)
         
-        # Definir label_width al inicio para usarlo en todo el formulario
         label_width = 20 if self.compact_mode else 25
         row_pady = 1 if self.compact_mode else 4
         
-        # Título de sección (más pequeño en modo compacto)
-        section_style = theme_manager.get_style("label_body").copy()
-        if self.compact_mode:
-            section_style["font"] = ("Segoe UI", 12, "bold")
-        else:
-            section_style["font"] = ("Segoe UI", 14, "bold")
+        section_font = ("Segoe UI", 12, "bold") if self.compact_mode else ("Segoe UI", 14, "bold")
         section_title = tk.Label(
             form_container,
             text="Información del Gasto",
-            **section_style
+            font=section_font,
+            bg=cb,
+            fg=theme["text_primary"]
         )
-        title_pady = (0, 2) if self.compact_mode else (0, Spacing.SM)
+        title_pady = (0, 1) if self.compact_mode else (0, Spacing.SM)
         section_title.pack(anchor="w", pady=title_pady)
         
-        # Fila 1: Fecha con selector de calendario
-        row1 = tk.Frame(form_container, **theme_manager.get_style("frame"))
+        row1 = tk.Frame(form_container, bg=cb)
         row1.pack(fill="x", pady=row_pady)
         
-        tk.Label(
-            row1,
-            text="Fecha del gasto:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+        tk.Label(row1, text="Fecha del gasto:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
         # Crear el DatePickerWidget
         self.date_picker = DatePickerWidget(row1)
@@ -548,20 +539,29 @@ class RegisterExpenseView(tk.Frame):
         self.date_picker._select_date = wrapped_select_date
         self.date_picker._select_today = wrapped_select_today
         
-        # Fila 2: Categoría
-        row2 = tk.Frame(form_container, **theme_manager.get_style("frame"))
+        # Orden: Apartamento, Categoría, Subtipo
+        row2 = tk.Frame(form_container, bg=cb)
         row2.pack(fill="x", pady=row_pady)
         
-        tk.Label(
+        tk.Label(row2, text="Apartamento:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
+        
+        apartment_options = ["--- (General)"] + [apt.get('number', 'N/A') for apt in self.apartments]
+        apartamento_combo = ttk.Combobox(
             row2,
-            text="Categoría:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+            textvariable=self.apartamento_var,
+            values=apartment_options,
+            width=30,
+            state="readonly"
+        )
+        apartamento_combo.pack(side="left", padx=(0, Spacing.SM))
+        
+        row3 = tk.Frame(form_container, bg=cb)
+        row3.pack(fill="x", pady=row_pady)
+        
+        tk.Label(row3, text="Categoría:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
         categoria_combo = ttk.Combobox(
-            row2,
+            row3,
             textvariable=self.categoria_var,
             values=list(self.EXPENSE_CATEGORIES.keys()),
             width=30,
@@ -570,20 +570,13 @@ class RegisterExpenseView(tk.Frame):
         categoria_combo.pack(side="left", padx=(0, Spacing.SM))
         categoria_combo.bind("<<ComboboxSelected>>", self._on_categoria_changed)
         
-        # Fila 3: Subtipo (dinámico según categoría)
-        row3 = tk.Frame(form_container, **theme_manager.get_style("frame"))
-        row3.pack(fill="x", pady=row_pady)
+        row4 = tk.Frame(form_container, bg=cb)
+        row4.pack(fill="x", pady=row_pady)
         
-        tk.Label(
-            row3,
-            text="Subtipo:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+        tk.Label(row4, text="Subtipo:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
         self.subtipo_combo = ttk.Combobox(
-            row3,
+            row4,
             textvariable=self.subtipo_var,
             width=30,
             state="readonly"
@@ -594,29 +587,6 @@ class RegisterExpenseView(tk.Frame):
         if self.categoria_var.get():
             self._update_subtipos()
         
-        # Fila 4: Apartamento
-        row4 = tk.Frame(form_container, **theme_manager.get_style("frame"))
-        row4.pack(fill="x", pady=row_pady)
-        
-        tk.Label(
-            row4,
-            text="Apartamento:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
-        
-        # Opciones de apartamento: "General" (para gastos del edificio) + lista de apartamentos
-        apartment_options = ["--- (General)"] + [apt.get('number', 'N/A') for apt in self.apartments]
-        apartamento_combo = ttk.Combobox(
-            row4,
-            textvariable=self.apartamento_var,
-            values=apartment_options,
-            width=30,
-            state="readonly"
-        )
-        apartamento_combo.pack(side="left", padx=(0, Spacing.SM))
-        
         # Fila 5: Monto
         row5 = self._create_form_row(
             form_container,
@@ -625,19 +595,12 @@ class RegisterExpenseView(tk.Frame):
             width=20
         )
         
-        # Fila 6: Descripción
-        row6 = tk.Frame(form_container, **theme_manager.get_style("frame"))
+        row6 = tk.Frame(form_container, bg=cb)
         row6.pack(fill="x", pady=row_pady)
         
-        tk.Label(
-            row6,
-            text="Descripción:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM), anchor="n", pady=(1, 0) if self.compact_mode else (2, 0))
+        tk.Label(row6, text="Descripción:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM), anchor="n", pady=(1, 0) if self.compact_mode else (2, 0))
         
-        desc_frame = tk.Frame(row6, **theme_manager.get_style("frame"))
+        desc_frame = tk.Frame(row6, bg=cb)
         desc_frame.pack(side="left", fill="x", expand=True)
         
         desc_height = 1 if self.compact_mode else 2
@@ -652,27 +615,21 @@ class RegisterExpenseView(tk.Frame):
         desc_entry.insert("1.0", self.descripcion_var.get())
         self.descripcion_text = desc_entry
         
-        # Fila 7: Documento adjunto
-        row7 = tk.Frame(form_container, **theme_manager.get_style("frame"))
+        row7 = tk.Frame(form_container, bg=cb)
         row7.pack(fill="x", pady=row_pady)
         
-        tk.Label(
-            row7,
-            text="Documento adjunto:",
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+        tk.Label(row7, text="Documento adjunto:", width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
-        doc_frame = tk.Frame(row7, **theme_manager.get_style("frame"))
+        doc_frame = tk.Frame(row7, bg=cb)
         doc_frame.pack(side="left", fill="x", expand=True)
         
         self.doc_label = tk.Label(
             doc_frame,
             text="Ningún archivo seleccionado" if not self.selected_document_path else os.path.basename(self.selected_document_path),
             font=("Segoe UI", 9),
-            fg="#666" if not self.selected_document_path else "#1976d2",
-            anchor="w"
+            fg=theme.get("text_secondary", "#666") if not self.selected_document_path else "#1976d2",
+            anchor="w",
+            bg=cb
         )
         self.doc_label.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
         
@@ -696,45 +653,42 @@ class RegisterExpenseView(tk.Frame):
             )
             btn_remove_doc.pack(side="left")
         
-        # Botones de acción (asegurar que sean visibles)
-        buttons_frame = tk.Frame(form_container, **theme_manager.get_style("frame"))
-        buttons_pady = (6, 4) if self.compact_mode else (Spacing.MD, 0)
+        buttons_frame = tk.Frame(form_container, bg=cb)
+        buttons_pady = (4, 2) if self.compact_mode else (Spacing.MD, 0)
         buttons_frame.pack(fill="x", pady=buttons_pady)
         
-        # En modo edición, cambiar el texto del botón
         button_text = "Actualizar Gasto" if self.expense else "Guardar Gasto"
         btn_save = ModernButton(
             buttons_frame,
             text=button_text,
             icon=Icons.SAVE,
-            style="primary",
-            command=self._save_expense
+            style="danger",
+            command=self._save_expense,
+            small=self.compact_mode
         )
         btn_save.pack(side="left", padx=(0, Spacing.SM))
-        
+
         btn_clear = ModernButton(
             buttons_frame,
             text="Cancelar" if self.expense else "Limpiar",
             icon=Icons.CANCEL,
             style="secondary",
-            command=self._clear_form if not self.expense else self._on_back
+            command=self._clear_form if not self.expense else self._on_back,
+            fg="#000000",
+            small=self.compact_mode
         )
         btn_clear.pack(side="left")
     
     def _create_form_row(self, parent, label_text, variable, width=20):
         """Crea una fila del formulario con label y entry"""
-        row = tk.Frame(parent, **theme_manager.get_style("frame"))
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
+        row = tk.Frame(parent, bg=cb)
         row_pady = 1 if self.compact_mode else 4
         row.pack(fill="x", pady=row_pady)
         
         label_width = 20 if self.compact_mode else 25
-        tk.Label(
-            row,
-            text=label_text,
-            width=label_width,
-            anchor="w",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+        tk.Label(row, text=label_text, width=label_width, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
         entry = tk.Entry(
             row,
@@ -910,8 +864,9 @@ class RegisterExpenseView(tk.Frame):
         
         try:
             # Crear carpeta de documentos si no existe
-            docs_folder = Path(__file__).resolve().parent.parent.parent / "gastos_docs"
-            docs_folder.mkdir(exist_ok=True)
+            from manager.app.paths_config import GASTOS_DOCS_DIR, ensure_dirs
+            ensure_dirs()
+            docs_folder = GASTOS_DOCS_DIR
             
             # Generar nombre único para el archivo
             original_name = os.path.basename(self.selected_document_path)
@@ -929,6 +884,95 @@ class RegisterExpenseView(tk.Frame):
             messagebox.showerror("Error", f"Error al guardar el documento: {str(e)}")
             return None
     
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Colores rojos para módulo de gastos
+        colors = get_module_colors("gastos")
+        red_primary = colors["primary"]
+        red_hover = colors["hover"]
+        red_light = colors["light"]
+        red_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow en la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                self.on_back()
+        
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=red_primary,
+            hover_bg=red_light,
+            hover_fg=red_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard"
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=red_primary,
+            fg_color="white",
+            hover_bg=red_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
+
     def _on_back(self):
         """Maneja el botón de volver"""
         if self.on_back:

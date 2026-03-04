@@ -153,16 +153,50 @@ class BuildingSetupView(tk.Frame):
         header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
         tk.Label(header, text="Asistente de Configuración del Edificio", **theme_manager.get_style("label_title")).pack(side="left")
 
-        # Step content
-        self.step_container = tk.Frame(self, **theme_manager.get_style("frame"))
-        self.step_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
-        
-        self.render_current_step()
+        # Área con scroll para el contenido del paso (evita que los botones se corran)
+        scroll_outer = tk.Frame(self, **theme_manager.get_style("frame"))
+        scroll_outer.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.SM))
 
-        # Navigation buttons
+        self._wizard_canvas = tk.Canvas(scroll_outer, highlightthickness=0, **theme_manager.get_style("frame"))
+        canvas = self._wizard_canvas
+        scrollbar = ttk.Scrollbar(scroll_outer)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.configure(command=canvas.yview)
+
+        self.step_container = tk.Frame(canvas, **theme_manager.get_style("frame"))
+        canvas_window = canvas.create_window((0, 0), window=self.step_container, anchor="nw")
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        def _on_step_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_canvas_configure)
+        self.step_container.bind("<Configure>", _on_step_configure)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_mousewheel(_):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_mousewheel(_):
+            canvas.unbind_all("<MouseWheel>")
+
+        canvas.bind("<Enter>", _bind_mousewheel)
+        canvas.bind("<Leave>", _unbind_mousewheel)
+
+        # Botones de navegación fijos abajo
         self.nav_frame = tk.Frame(self, **theme_manager.get_style("frame"))
         self.nav_frame.pack(side="bottom", fill="x", padx=Spacing.MD, pady=Spacing.MD)
+
+        self.render_current_step()
         self.update_nav_buttons()
+        # Asegurar scrollregion tras render
+        self.after(50, lambda: canvas.configure(scrollregion=canvas.bbox("all")))
 
     def render_current_step(self):
         """Renderiza el contenido del paso actual."""
@@ -193,7 +227,7 @@ class BuildingSetupView(tk.Frame):
         if self.current_step < 3: # Actualizar cuando haya más pasos
             ModernButton(self.nav_frame, text="Siguiente →", command=self._next_step).pack(side="right")
         else:
-            ModernButton(self.nav_frame, text="Finalizar y Guardar", icon="💾", command=self._finish_setup).pack(side="right")
+            ModernButton(self.nav_frame, text="Finalizar y Guardar", icon="💾", style="purple", command=self._finish_setup).pack(side="right")  # Morado para mantener tonalidad morada del módulo
     
     def _prev_step(self):
         if self.current_step > 0:
@@ -218,9 +252,14 @@ class BuildingSetupView(tk.Frame):
         
         try:
             building_service.create_building_from_wizard(
-                name=self.wizard_data['building_name_var'].get(),
+                name=self.wizard_data['building_name_var'].get().strip(),
                 floors_config=self.wizard_data['floors_config'],
-                special_units=self.wizard_data.get('special_units', [])
+                special_units=self.wizard_data.get('special_units', []),
+                address=self.wizard_data.get('address_var', tk.StringVar()).get().strip(),
+                city=self.wizard_data.get('city_var', tk.StringVar()).get().strip(),
+                country=self.wizard_data.get('country_var', tk.StringVar()).get().strip(),
+                phone=self.wizard_data.get('phone_var', tk.StringVar()).get().strip(),
+                email=self.wizard_data.get('email_var', tk.StringVar()).get().strip(),
             )
             messagebox.showinfo("Éxito", "La estructura del edificio ha sido creada y los apartamentos han sido generados.")
             self.on_back()
@@ -286,19 +325,53 @@ class BuildingSetupView(tk.Frame):
         tk.Label(self.step_container, text=welcome_text, justify="center", wraplength=500).pack()
 
     def _step1_name_and_floors(self):
-        """Paso 1: Definir nombre del edificio y número de pisos."""
+        """Paso 1: Definir nombre del edificio, cantidad de pisos y datos de contacto/ubicación."""
         container = tk.Frame(self.step_container, **theme_manager.get_style("frame"))
         container.pack(pady=Spacing.XL)
 
-        # Building Name
-        tk.Label(container, text="Nombre del Edificio:", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", pady=Spacing.SM)
-        self.wizard_data['building_name_var'] = tk.StringVar()
-        ttk.Entry(container, textvariable=self.wizard_data['building_name_var'], width=40).grid(row=0, column=1, padx=Spacing.MD)
+        row = 0
 
-        # Floor Count
-        tk.Label(container, text="Cantidad de Pisos:", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", pady=Spacing.SM)
+        # Nombre del Edificio (obligatorio)
+        tk.Label(container, text="Nombre del Edificio:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['building_name_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['building_name_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
+        tk.Label(container, text="*", fg="red", font=("Segoe UI", 10, "bold")).grid(row=row, column=2, sticky="w")
+        row += 1
+
+        # Cantidad de Pisos
+        tk.Label(container, text="Cantidad de Pisos:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
         self.wizard_data['floor_count_var'] = tk.StringVar()
-        ttk.Entry(container, textvariable=self.wizard_data['floor_count_var'], width=10).grid(row=1, column=1, padx=Spacing.MD, sticky="w")
+        ttk.Entry(container, textvariable=self.wizard_data['floor_count_var'], width=10).grid(row=row, column=1, padx=Spacing.MD, sticky="w")
+        row += 1
+
+        # Dirección
+        tk.Label(container, text="Dirección:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['address_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['address_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
+        row += 1
+
+        # Ciudad
+        tk.Label(container, text="Ciudad:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['city_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['city_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
+        row += 1
+
+        # País
+        tk.Label(container, text="País:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['country_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['country_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
+        row += 1
+
+        # Teléfono
+        tk.Label(container, text="Teléfono:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['phone_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['phone_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
+        row += 1
+
+        # Email
+        tk.Label(container, text="Email:", **theme_manager.get_style("label_body")).grid(row=row, column=0, sticky="w", pady=Spacing.SM)
+        self.wizard_data['email_var'] = tk.StringVar()
+        ttk.Entry(container, textvariable=self.wizard_data['email_var'], width=40).grid(row=row, column=1, padx=Spacing.MD)
 
     def _step2_apartments_per_floor(self):
         """Paso 2: Definir cuántos apartamentos hay por piso."""
@@ -329,6 +402,18 @@ class BuildingSetupView(tk.Frame):
         tk.Label(summary_frame, text=f"Nombre: {self.wizard_data['building_name_var'].get()}", font=("Segoe UI", 11)).pack(anchor="w")
         total_apts = sum(f['apartment_count'] for f in self.wizard_data['floors_config'])
         tk.Label(summary_frame, text=f"Total de Apartamentos: {total_apts}", font=("Segoe UI", 11)).pack(anchor="w")
+        # Mostrar ubicación/contacto si se completaron
+        addr = self.wizard_data.get('address_var', tk.StringVar()).get().strip()
+        city = self.wizard_data.get('city_var', tk.StringVar()).get().strip()
+        country = self.wizard_data.get('country_var', tk.StringVar()).get().strip()
+        if addr or city or country:
+            loc = " | ".join(x for x in [addr, city, country] if x)
+            tk.Label(summary_frame, text=f"Ubicación: {loc}", font=("Segoe UI", 11)).pack(anchor="w")
+        phone = self.wizard_data.get('phone_var', tk.StringVar()).get().strip()
+        email = self.wizard_data.get('email_var', tk.StringVar()).get().strip()
+        if phone or email:
+            contact = " | ".join(x for x in [phone, email] if x)
+            tk.Label(summary_frame, text=f"Contacto: {contact}", font=("Segoe UI", 11)).pack(anchor="w")
 
         # Special Units Frame
         special_units_frame = tk.LabelFrame(self.step_container, text="Añadir Unidades Especiales (Opcional)", padx=10, pady=10)
@@ -349,6 +434,15 @@ class BuildingSetupView(tk.Frame):
 
         ModernButton(special_units_frame, text="+ Añadir otra unidad", style="info", small=True, command=self._add_special_unit_row).pack(pady=Spacing.SM)
 
+    # Opciones de tipo de unidad especial para el combobox
+    SPECIAL_UNIT_TYPES = (
+        "Apartamento Estándar",
+        "Local comercial",
+        "Penthouse",
+        "Depósito/Bodega",
+        "Otro",
+    )
+
     def _add_special_unit_row(self):
         row_frame = tk.Frame(self.special_units_container)
         row_frame.pack(fill="x", pady=Spacing.XS)
@@ -358,7 +452,17 @@ class BuildingSetupView(tk.Frame):
         floor_var = tk.StringVar()
         
         ttk.Entry(row_frame, textvariable=name_var).pack(side="left", expand=True, fill="x", padx=(0, Spacing.SM))
-        ttk.Entry(row_frame, textvariable=type_var).pack(side="left", expand=True, fill="x", padx=(0, Spacing.SM))
+        type_combo = ttk.Combobox(
+            row_frame,
+            textvariable=type_var,
+            values=list(self.SPECIAL_UNIT_TYPES),
+            state="readonly",
+            width=22,
+        )
+        type_combo.pack(side="left", expand=True, fill="x", padx=(0, Spacing.SM))
         ttk.Entry(row_frame, textvariable=floor_var, width=10).pack(side="left")
         
-        self.special_units_entries.append({'name_var': name_var, 'type_var': type_var, 'floor_var': floor_var}) 
+        self.special_units_entries.append({'name_var': name_var, 'type_var': type_var, 'floor_var': floor_var})
+        # Actualizar scroll para que se vea la nueva fila
+        if hasattr(self, "_wizard_canvas") and self._wizard_canvas.winfo_exists():
+            self.after(100, lambda: self._wizard_canvas.configure(scrollregion=self._wizard_canvas.bbox("all"))) 

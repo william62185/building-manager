@@ -51,6 +51,7 @@ class ThemeManager:
     """Gestor de temas para la aplicación"""
     
     def __init__(self):
+        # Tema fijo en claro (sin selector de apariencia ni modo oscuro)
         self.current_theme = "light"
         self.themes = {
             "light": {
@@ -58,6 +59,13 @@ class ThemeManager:
                 "bg_primary": Colors.BG_PRIMARY,
                 "bg_secondary": Colors.BG_SECONDARY,
                 "bg_tertiary": Colors.BG_TERTIARY,
+                # Menú lateral: azul oscuro (no modificar; se mantiene como estaba)
+                "sidebar_bg": "#1e3a5f",
+                "sidebar_hover": "#2d4a6f",
+                "sidebar_fg": "#ffffff",
+                "sidebar_fg_secondary": "#94a3b8",
+                "content_bg": "#d0ca98",   # oliva más vivo (misma fuerza que el título, sin palidez)
+                "header_bg": "#b86a5c",    # terracotta con misma viveza/saturación que el navy del menú
                 
                 # Textos
                 "text_primary": Colors.TEXT_PRIMARY,
@@ -146,6 +154,91 @@ class ThemeManager:
         """Cambia el tema actual"""
         if theme_name in self.themes:
             self.current_theme = theme_name
+    
+    def apply_theme_to_widget(self, widget, theme_name: str = None):
+        """Aplica el tema a un widget y sus hijos recursivamente"""
+        if theme_name is None:
+            theme_name = self.current_theme
+        
+        if theme_name not in self.themes:
+            return
+        
+        theme = self.themes[theme_name]
+        
+        try:
+            if not widget.winfo_exists():
+                return
+        except (tk.TclError, AttributeError):
+            return
+        
+        try:
+            # Aplicar tema según el tipo de widget
+            widget_type = widget.winfo_class()
+            
+            # Colores de tema light y dark para comparación
+            light_colors = {
+                "bg": [Colors.BG_PRIMARY, Colors.BG_SECONDARY, Colors.BG_TERTIARY, "#ffffff", "#f9fafb", "#f3f4f6"],
+                "fg": [Colors.TEXT_PRIMARY, Colors.TEXT_SECONDARY, Colors.TEXT_LIGHT, "#1f2937", "#6b7280", "#9ca3af"]
+            }
+            dark_colors = {
+                "bg": ["#1f2937", "#111827", "#374151"],
+                "fg": ["#f9fafb", "#d1d5db", "#9ca3af"]
+            }
+            
+            if widget_type in ["Frame", "Toplevel", "Tk"]:
+                current_bg = widget.cget("bg")
+                # Determinar qué color de fondo usar basado en el color actual
+                if current_bg in [Colors.BG_SECONDARY, "#f9fafb", "#111827"]:
+                    # Es un sidebar o elemento con bg_secondary
+                    widget.configure(bg=theme["bg_secondary"])
+                elif current_bg in [Colors.BG_TERTIARY, "#f3f4f6", "#374151"]:
+                    # Es un elemento con bg_tertiary
+                    widget.configure(bg=theme["bg_tertiary"])
+                else:
+                    # Por defecto usar bg_primary
+                    widget.configure(bg=theme["bg_primary"])
+            elif widget_type == "Label":
+                try:
+                    current_bg = widget.cget("bg")
+                    current_fg = widget.cget("fg")
+                    
+                    # Determinar qué color de fondo usar
+                    if current_bg in [Colors.BG_SECONDARY, "#f9fafb", "#111827"]:
+                        widget.configure(bg=theme["bg_secondary"])
+                    elif current_bg in [Colors.BG_TERTIARY, "#f3f4f6", "#374151"]:
+                        widget.configure(bg=theme["bg_tertiary"])
+                    elif current_bg in light_colors["bg"] or current_bg in dark_colors["bg"]:
+                        widget.configure(bg=theme["bg_primary"])
+                    
+                    # Cambiar texto si es un color de tema
+                    if current_fg in light_colors["fg"] or current_fg in dark_colors["fg"]:
+                        # Determinar si es texto primario o secundario
+                        if current_fg in [Colors.TEXT_PRIMARY, "#1f2937", "#f9fafb"]:
+                            widget.configure(fg=theme["text_primary"])
+                        elif current_fg in [Colors.TEXT_SECONDARY, "#6b7280", "#d1d5db"]:
+                            widget.configure(fg=theme["text_secondary"])
+                        else:
+                            widget.configure(fg=theme["text_primary"])
+                except:
+                    pass
+            elif widget_type == "Button":
+                try:
+                    current_bg = widget.cget("bg")
+                    # Solo cambiar botones secundarios
+                    if current_bg in light_colors["bg"] or current_bg in dark_colors["bg"]:
+                        widget.configure(bg=theme["btn_secondary_bg"], fg=theme["btn_secondary_fg"])
+                except:
+                    pass
+            
+            # Aplicar recursivamente a los hijos
+            try:
+                for child in widget.winfo_children():
+                    self.apply_theme_to_widget(child, theme_name)
+            except (tk.TclError, AttributeError):
+                pass
+        except (tk.TclError, AttributeError):
+            # Ignorar errores en widgets destruidos o sin configuración
+            pass
 
 
 # Instancia global del gestor de temas

@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 from datetime import datetime
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
+from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
 from manager.app.services.payment_service import PaymentService
@@ -18,6 +19,9 @@ class PaymentsView(tk.Frame):
     """Vista profesional para gestión de pagos de inquilinos"""
     def __init__(self, parent, on_back=None, preselected_tenant=None, on_payment_saved=None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.payment_service = PaymentService()
         self.tenant_service = TenantService()
         self.on_back = on_back
@@ -30,22 +34,39 @@ class PaymentsView(tk.Frame):
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
+        self.configure(bg=self._content_bg)
+        bg_view = self._content_bg
         # Header
-        header = tk.Frame(self, **theme_manager.get_style("frame"))
+        header = tk.Frame(self, bg=bg_view)
         header.pack(fill="x", pady=(0, Spacing.LG))
-        btn_back = ModernButton(header, text="Volver", icon=Icons.ARROW_LEFT, style="secondary", command=self._on_back)
-        btn_back.pack(side="left")
-        title = tk.Label(header, text="Gestión de Pagos", **theme_manager.get_style("label_title"))
-        title.pack(side="left", padx=(Spacing.LG, 0))
-        # Cards principales
-        cards_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        cards_frame.pack(pady=Spacing.XL)
+        
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header, bg=bg_view)
+        buttons_frame.pack(side="right")
+        
+        # Agregar solo botón Dashboard (sin Volver porque es redundante)
+        self._create_navigation_buttons(buttons_frame, self._on_back, show_back_button=False)
+        
+        # Pregunta principal
+        theme = theme_manager.themes[theme_manager.current_theme]
+        question_label = tk.Label(
+            self,
+            text="¿Qué deseas hacer?",
+            font=("Segoe UI", 14),
+            fg=theme["text_primary"],
+            bg=bg_view
+        )
+        question_label.pack(pady=(0, Spacing.XL))
+        
+        # Cards principales (fondo igual al de la vista para que se vea transparente)
+        cards_frame = tk.Frame(self, bg=bg_view)
+        cards_frame.pack(pady=Spacing.LG)
         self._create_action_card(
             cards_frame,
             icon=Icons.PAYMENT_RECEIVED,
             title="Registrar nuevo pago",
             description="Registra un nuevo pago de arriendo para cualquier inquilino.",
-            color="#1976d2",
+            color="#166534",  # verde oscuro - paleta verde armoniosa
             command=self._show_register_payment
         ).pack(side="left", padx=Spacing.LG)
         self._create_action_card(
@@ -53,7 +74,7 @@ class PaymentsView(tk.Frame):
             icon=Icons.EDIT,
             title="Editar/Eliminar pago",
             description="Consulta, edita o elimina pagos registrados previamente.",
-            color="#388e3c",
+            color="#166534",  # mismo color que Registrar nuevo pago para consistencia
             command=self._show_edit_delete_payments
         ).pack(side="left", padx=Spacing.LG)
         self._create_action_card(
@@ -61,43 +82,127 @@ class PaymentsView(tk.Frame):
             icon=Icons.REPORTS,
             title="Reportes",
             description="Visualiza reportes y estadísticas de pagos.",
-            color="#fbc02d",
+            color="#166534",  # mismo color que Registrar nuevo pago para consistencia
             command=self._show_reports
         ).pack(side="left", padx=Spacing.LG)
 
     def _create_action_card(self, parent, icon, title, description, color, command):
-        card = tk.Frame(parent, bg="white", bd=2, relief="raised", padx=18, pady=18, width=260, height=220)
+        """Crea una card de acción con hover effects - mismo estilo que módulo inquilinos"""
+        # Color verde más intenso para el fondo base de las tarjetas (similar al hover anterior)
+        light_green_bg = "#dcfce7"  # green-100 - verde claro más intenso para mejor contraste con iconos verdes
+        
+        card = tk.Frame(parent, bg=light_green_bg, bd=2, relief="raised", width=260, height=220)
         card.pack_propagate(False)  # Mantener tamaño fijo
-        card.bind("<Button-1>", lambda e: command())
-        card.configure(cursor="hand2")
+        
+        # Contenedor principal con padding uniforme para centrar verticalmente
+        content_frame = tk.Frame(card, bg=light_green_bg)
+        content_frame.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
+        
+        # Frame espaciador superior para centrar el contenido
+        top_spacer = tk.Frame(content_frame, bg=light_green_bg, height=1)
+        top_spacer.pack(fill="x", expand=True)
+        
+        # Contenedor del contenido (icono, título)
+        content_container = tk.Frame(content_frame, bg=light_green_bg)
+        content_container.pack()
+        
         # Ícono
-        icon_label = tk.Label(card, text=icon, font=("Segoe UI", 28), fg=color, bg="white")
-        icon_label.pack()
+        icon_label = tk.Label(content_container, text=icon, font=("Segoe UI", 28), fg=color, bg=light_green_bg)
+        icon_label.pack(pady=(0, Spacing.MD))
+        
         # Título
-        title_label = tk.Label(card, text=title, font=("Segoe UI", 14, "bold"), fg=color, bg="white")
-        title_label.pack(pady=(8, 2))
-        # Descripción
-        desc_label = tk.Label(card, text=description, font=("Segoe UI", 10), fg="#444", bg="white", wraplength=200, justify="center")
-        desc_label.pack(pady=(0, 2))
-        # Hover effect
+        title_label = tk.Label(content_container, text=title, font=("Segoe UI", 14, "bold"), fg="#000000", bg=light_green_bg)
+        title_label.pack()
+        
+        # Textos descriptivos eliminados según solicitud del usuario
+        
+        # Frame espaciador inferior para centrar el contenido
+        bottom_spacer = tk.Frame(content_frame, bg=light_green_bg, height=1)
+        bottom_spacer.pack(fill="x", expand=True)
+        
+        # Función para manejar clics - se ejecuta desde cualquier parte del card
+        def on_card_click(e):
+            # Prevenir propagación adicional si es necesario
+            e.widget.focus_set()  # Asegurar que el widget tenga foco
+            command()
+            return "break"  # Detener propagación del evento
+        
+        # Hover effect (más intenso que el fondo base)
         def on_enter(e):
-            card.configure(bg="#e3f2fd")
-            icon_label.configure(bg="#e3f2fd")
-            title_label.configure(bg="#e3f2fd")
-            desc_label.configure(bg="#e3f2fd")
+            hover_color = "#bbf7d0"  # green-200 - verde más intenso para hover
+            card.configure(bg=hover_color)
+            content_frame.configure(bg=hover_color)
+            top_spacer.configure(bg=hover_color)
+            content_container.configure(bg=hover_color)
+            bottom_spacer.configure(bg=hover_color)
+            icon_label.configure(bg=hover_color)
+            title_label.configure(bg=hover_color)
+        
         def on_leave(e):
-            card.configure(bg="white")
-            icon_label.configure(bg="white")
-            title_label.configure(bg="white")
-            desc_label.configure(bg="white")
-        card.bind("<Enter>", on_enter)
-        card.bind("<Leave>", on_leave)
-        for w in [icon_label, title_label, desc_label]:
-            w.bind("<Button-1>", lambda e: command())
-            w.bind("<Enter>", on_enter)
-            w.bind("<Leave>", on_leave)
-            w.configure(cursor="hand2")
+            card.configure(bg=light_green_bg)
+            content_frame.configure(bg=light_green_bg)
+            top_spacer.configure(bg=light_green_bg)
+            content_container.configure(bg=light_green_bg)
+            bottom_spacer.configure(bg=light_green_bg)
+            icon_label.configure(bg=light_green_bg)
+            title_label.configure(bg=light_green_bg)
+        
+        # Hacer TODO el card clickeable - bind a todos los elementos
+        # Esto asegura que cualquier parte del card responda al clic
+        all_widgets = [card, content_frame, top_spacer, content_container, bottom_spacer, icon_label, title_label]
+        for widget in all_widgets:
+            widget.bind("<Button-1>", on_card_click)
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.configure(cursor="hand2")
+        
         return card
+    
+    def _create_navigation_buttons(self, parent, on_back_command, show_back_button=True):
+        """Crea los botones Volver y Dashboard con estilo moderno y colores verdes del módulo de pagos"""
+        # Colores verdes para módulo de pagos
+        colors = get_module_colors("pagos")
+        green_primary = colors["primary"]
+        green_hover = colors["hover"]
+        green_light = colors["light"]
+        green_text = colors["text"]
+        
+        # Botón "Volver" (solo si show_back_button es True)
+        if show_back_button:
+            btn_back = create_rounded_button(
+                parent,
+                text=f"{Icons.ARROW_LEFT} Volver",
+                bg_color="white",
+                fg_color=green_primary,
+                hover_bg=green_light,
+                hover_fg=green_text,
+                command=on_back_command,
+                padx=16,
+                pady=8,
+                radius=4,
+                border_color="#000000"
+            )
+            btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            if self.on_back:
+                self.on_back()  # on_back ya navega al dashboard desde main_window
+        
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=green_primary,
+            fg_color="white",
+            hover_bg=green_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
 
     def _show_register_payment(self, preselected_tenant=None):
         # Cambiar el título global de la ventana
@@ -108,28 +213,38 @@ class PaymentsView(tk.Frame):
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
+        self.configure(bg=self._content_bg)
+        theme = theme_manager.themes[theme_manager.current_theme]
         # Header con búsqueda y botón volver en la misma línea
-        header = tk.Frame(self, **theme_manager.get_style("frame"))
+        header = tk.Frame(self, bg=self._content_bg)
         header.pack(fill="x", pady=(0, 10), padx=(2, 2))
         # Frame izquierdo: búsqueda y limpiar
-        left_header = tk.Frame(header, **theme_manager.get_style("frame"))
+        left_header = tk.Frame(header, bg=self._content_bg)
         left_header.pack(side="left", fill="x", expand=True)
-        label_style = theme_manager.get_style("label_body").copy()
-        label_style["font"] = ("Segoe UI", 14, "bold")
-        tk.Label(left_header, text="Buscar inquilino:", **label_style).pack(side="left")
+        tk.Label(
+            left_header,
+            text="Buscar inquilino:",
+            font=("Segoe UI", 14, "bold"),
+            bg=self._content_bg,
+            fg=theme["text_primary"]
+        ).pack(side="left")
         self.tenants = self.tenant_service.get_all_tenants()
         self.tenant_autocomplete = TenantAutocompleteEntry(
             left_header,
             self.tenants,
             on_select=self._on_register_tenant_selected,
-            width=70
+            width=35,
+            entry_pady=8,
+            entry_font=("Segoe UI", 12),
+            bg=self._content_bg
         )
-        self.tenant_autocomplete.pack(side="left", padx=(2, 0))
-        btn_clear = ModernButton(left_header, text="Limpiar búsqueda", icon=Icons.CANCEL, style="warning", command=self._clear_tenant_search, small=True)
-        btn_clear.pack(side="left", padx=(2, 0))
-        # Frame derecho: botón volver
-        btn_back = ModernButton(header, text="Volver", icon=Icons.ARROW_LEFT, style="secondary", command=self._restore_global_title)
-        btn_back.pack(side="right", pady=(0, 0))
+        self.tenant_autocomplete.pack(side="left", fill="x", expand=True, padx=(2, 0))
+        btn_clear = ModernButton(left_header, text="Limpiar búsqueda", icon=Icons.CANCEL, style="warning", command=self._clear_tenant_search, small=True, fg="#000000")
+        btn_clear.pack(side="left", padx=(2, Spacing.MD))
+        # Frame derecho: botones de navegación
+        buttons_frame = tk.Frame(header, bg=self._content_bg)
+        buttons_frame.pack(side="right", pady=(0, 0))
+        self._create_navigation_buttons(buttons_frame, self._restore_global_title)
         # Inicializar variables del formulario antes de construir el formulario
         self.fecha_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
         self.monto_var = tk.StringVar()
@@ -144,15 +259,26 @@ class PaymentsView(tk.Frame):
             match = next((t for t in self.tenants if t.get('id') == tenant_id), None)
             self.selected_tenant = match if match else preselected_tenant
         # Sección central: formulario de pago (padding mínimo)
-        self.form_frame = tk.Frame(self, **theme_manager.get_style("card"))
+        self.form_frame = tk.Frame(self, bg=self._content_bg)
         self.form_frame.pack(fill="x", padx=2, pady=(0, 2))
         self._build_register_payment_form()
         # Sección inferior: listado de pagos con scroll profesional
         self._create_payments_list_with_scroll()
-        # Si hay un inquilino preseleccionado, autocompletar el campo
+        # Si hay un inquilino preseleccionado, autocompletar el campo y filtrar la tabla por ese inquilino
         if self.selected_tenant:
             self.tenant_autocomplete._select_tenant(self.selected_tenant)
-        self._display_register_payments(self._get_all_payments())
+            pagos = [p for p in self._get_all_payments() if p.get('id_inquilino') == self.selected_tenant.get('id')]
+            self._display_register_payments(pagos)
+        else:
+            self._display_register_payments(self._get_all_payments())
+        # Posicionar cursor en el cuadro de búsqueda al abrir la vista
+        self.after(150, self._focus_search_entry_register)
+
+    def _focus_search_entry_register(self):
+        """Coloca el foco en el cuadro de búsqueda de inquilino (vista Registrar nuevo pago)."""
+        if hasattr(self, "tenant_autocomplete") and hasattr(self.tenant_autocomplete, "entry"):
+            if self.tenant_autocomplete.entry.winfo_exists():
+                self.tenant_autocomplete.entry.focus_set()
 
     def _restore_global_title(self):
         try:
@@ -164,31 +290,52 @@ class PaymentsView(tk.Frame):
     def _build_register_payment_form(self):
         for widget in self.form_frame.winfo_children():
             widget.destroy()
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         row_opts = {'padx': (0, 8), 'pady': 2}
         # Fecha
-        row1 = tk.Frame(self.form_frame, **theme_manager.get_style("frame"))
+        row1 = tk.Frame(self.form_frame, bg=cb)
         row1.pack(fill="x", pady=1)
-        tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=22, anchor="w").pack(side="left", **row_opts)
+        tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         tk.Entry(row1, textvariable=self.fecha_var, width=18).pack(side="left", **row_opts)
         # Monto
-        row2 = tk.Frame(self.form_frame, **theme_manager.get_style("frame"))
+        row2 = tk.Frame(self.form_frame, bg=cb)
         row2.pack(fill="x", pady=1)
-        tk.Label(row2, text="Monto:", width=22, anchor="w").pack(side="left", **row_opts)
+        tk.Label(row2, text="Monto:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         tk.Entry(row2, textvariable=self.monto_var, width=18).pack(side="left", **row_opts)
         # Método
-        row3 = tk.Frame(self.form_frame, **theme_manager.get_style("frame"))
+        row3 = tk.Frame(self.form_frame, bg=cb)
         row3.pack(fill="x", pady=1)
-        tk.Label(row3, text="Método:", width=22, anchor="w").pack(side="left", **row_opts)
+        tk.Label(row3, text="Método:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         metodo_combo = ttk.Combobox(row3, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=16)
         metodo_combo.pack(side="left", **row_opts)
         # Observaciones
-        row4 = tk.Frame(self.form_frame, **theme_manager.get_style("frame"))
+        row4 = tk.Frame(self.form_frame, bg=cb)
         row4.pack(fill="x", pady=1)
-        tk.Label(row4, text="Observaciones:", width=22, anchor="w").pack(side="left", **row_opts)
+        tk.Label(row4, text="Observaciones:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         tk.Entry(row4, textvariable=self.obs_var, width=40).pack(side="left", **row_opts)
-        # Botón guardar alineado a la IZQUIERDA
-        btn_save = tk.Button(self.form_frame, text="Registrar Pago", command=self._save_register_payment)
+        # Botón guardar alineado a la IZQUIERDA - Verde para mantener tonalidad verde del módulo
+        btn_save = tk.Button(
+            self.form_frame,
+            text="Registrar Pago",
+            command=self._save_register_payment,
+            bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
+            fg="#000000",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
         btn_save.pack(pady=(4, 0), anchor="w")
+        
+        # Hover effect para botón registrar
+        def on_enter_save(e):
+            btn_save.configure(bg="#16a34a")  # green-600 - verde más oscuro para hover
+        def on_leave_save(e):
+            btn_save.configure(bg="#22c55e")  # green-500 - verde original
+        btn_save.bind("<Enter>", on_enter_save)
+        btn_save.bind("<Leave>", on_leave_save)
 
     def _clear_tenant_search(self):
         self.tenant_autocomplete.set_tenants(self.tenants)
@@ -215,32 +362,27 @@ class PaymentsView(tk.Frame):
     def _display_register_payments(self, payments):
         for widget in self.list_frame.winfo_children():
             widget.destroy()
-        # Frame de tabla (encabezado + filas)
-        table_frame = tk.Frame(self.list_frame, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
+        bg_alt = theme.get("bg_tertiary", "#f0f4fa")
+        columns = getattr(self, '_table_columns', [
+            ("Inquilino", 22), ("Fecha de pago", 14), ("Monto", 14), ("Método", 12), ("Observaciones", 38)
+        ])
+        # Solo filas de datos (el encabezado está fijo en list_header_frame)
+        table_frame = tk.Frame(self.list_frame, bg=cb)
         table_frame.pack(fill="x", pady=(0, 2))
-        columns = [
-            ("Inquilino", 22),
-            ("Fecha de pago", 14),
-            ("Monto", 14),
-            ("Método", 12),
-            ("Observaciones", 38)
-        ]
-        # Encabezado
-        for idx, (col, width) in enumerate(columns):
-            tk.Label(table_frame, text=col, font=("Segoe UI", 10, "bold"), width=width, anchor="w", bg="#f5f5f5").grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
+        for idx in range(len(columns)):
             table_frame.grid_columnconfigure(idx, weight=1)
         if not payments:
-            tk.Label(table_frame, text="No hay pagos registrados.", font=("Segoe UI", 11), fg="#666").grid(row=1, column=0, columnspan=len(columns), pady=10, sticky="w")
+            tk.Label(table_frame, text="No hay pagos registrados.", font=("Segoe UI", 11), fg=theme["text_secondary"], bg=cb).grid(row=0, column=0, columnspan=len(columns), pady=10, sticky="w")
             return
-        zebra_colors = ("#ffffff", "#f0f4fa")
-        for row_idx, payment in enumerate(payments, start=1):
+        zebra_colors = (cb, bg_alt)
+        for row_idx, payment in enumerate(payments):
             bg_color = zebra_colors[row_idx % 2]
-            # Frame de fondo para toda la fila
             row_bg = tk.Frame(table_frame, bg=bg_color)
             row_bg.grid(row=row_idx, column=0, columnspan=len(columns), sticky="nsew")
             nombre = payment.get('nombre_inquilino', '')
             apto = ''
-            # Buscar apartamento real del inquilino
             for t in self.tenants:
                 if t['id'] == payment['id_inquilino']:
                     apt_id = t.get('apartamento', '')
@@ -321,13 +463,14 @@ class PaymentsView(tk.Frame):
         self.obs_var.set("")
 
     def _generate_payment_receipt_pdf(self, pago):
-        import os
-        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../recibos'))
-        os.makedirs(folder, exist_ok=True)
-        nombre = pago.get("nombre_inquilino", "Inquilino").replace(" ", "_")
+        from manager.app.paths_config import DOCUMENTOS_INQUILINOS_DIR, ensure_dirs, get_tenant_document_folder_name
+        ensure_dirs()
+        tenant = self.selected_tenant or {}
+        folder_name = get_tenant_document_folder_name(tenant)
+        tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+        tenant_dir.mkdir(parents=True, exist_ok=True)
         fecha = pago.get("fecha_pago", "").replace("/", "-")
-        filename = f"recibo_pago_{nombre}_{fecha}.pdf"
-        filepath = os.path.join(folder, filename)
+        filepath = str(tenant_dir / f"recibo_{fecha}.pdf")
         c = canvas.Canvas(filepath, pagesize=letter)
         width, height = letter
         # Logo placeholder
@@ -393,10 +536,33 @@ class PaymentsView(tk.Frame):
         # Limpiar vista y mostrar la vista profesional de edición/eliminación de pagos
         for widget in self.winfo_children():
             widget.destroy()
+        
+        # Función para navegar al dashboard principal
+        def go_to_dashboard():
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            # Fallback: usar on_back si está disponible
+            if self.on_back:
+                self.on_back()
+        
         edit_delete_view = EditDeletePaymentsView(
             self, 
             on_back=self._create_layout,
-            on_payment_saved=self.on_payment_saved
+            on_payment_saved=self.on_payment_saved,
+            on_navigate_to_dashboard=go_to_dashboard
         )
         edit_delete_view.pack(fill="both", expand=True)
 
@@ -406,12 +572,34 @@ class PaymentsView(tk.Frame):
         for widget in self.winfo_children():
             widget.destroy()
         
+        # Función para navegar al dashboard principal
+        def go_to_dashboard():
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            # Fallback: usar on_back si está disponible
+            if self.on_back:
+                self.on_back()
+        
         # Importar e instanciar la vista de reportes de pagos
         from manager.app.ui.views.payment_reports_view import PaymentReportsView
         
         reports_view = PaymentReportsView(
             self,
-            on_back=self._create_layout
+            on_back=self._create_layout,
+            on_navigate_to_dashboard=go_to_dashboard
         )
         reports_view.pack(fill="both", expand=True)
 
@@ -444,17 +632,39 @@ class PaymentsView(tk.Frame):
         # Elimina frames previos si existen
         if hasattr(self, 'list_container'):
             self.list_container.destroy()
-        # Contenedor para canvas y scrollbar
-        self.list_container = tk.Frame(self, **theme_manager.get_style("card"))
+        if hasattr(self, 'list_header_frame'):
+            self.list_header_frame.destroy()
+        cb = self._content_bg
+        # Encabezado fijo (no se mueve con el scroll)
+        columns = [
+            ("Inquilino", 22),
+            ("Fecha de pago", 14),
+            ("Monto", 14),
+            ("Método", 12),
+            ("Observaciones", 38)
+        ]
+        self._table_columns = columns
+        header_bg = "#dcfce7"
+        header_fg = "#166534"
+        self.list_header_frame = tk.Frame(self, bg=header_bg)
+        self.list_header_frame.pack(fill="x", padx=2, pady=(0, 0))
+        for idx, (col, width) in enumerate(columns):
+            tk.Label(
+                self.list_header_frame, text=col, font=("Segoe UI", 10, "bold"),
+                width=width, anchor="w", bg=header_bg, fg=header_fg
+            ).grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
+            self.list_header_frame.grid_columnconfigure(idx, weight=1)
+        # Contenedor para canvas y scrollbar (solo filas de datos)
+        self.list_container = tk.Frame(self, bg=cb)
         self.list_container.pack(fill="both", expand=True, padx=2, pady=(0, 2))
         # Canvas y scrollbar
-        self.list_canvas = tk.Canvas(self.list_container, borderwidth=0, highlightthickness=0)
+        self.list_canvas = tk.Canvas(self.list_container, bg=cb, borderwidth=0, highlightthickness=0)
         self.list_canvas.pack(side="left", fill="both", expand=True)
         self.list_scrollbar = tk.Scrollbar(self.list_container, orient="vertical", command=self.list_canvas.yview)
         self.list_scrollbar.pack(side="right", fill="y")
         self.list_canvas.configure(yscrollcommand=self.list_scrollbar.set)
         # Frame interno
-        self.list_frame = tk.Frame(self.list_canvas, **theme_manager.get_style("card"))
+        self.list_frame = tk.Frame(self.list_canvas, bg=cb)
         self.list_window = self.list_canvas.create_window((0, 0), window=self.list_frame, anchor="nw")
         # Ajustar ancho del frame interno al del canvas
         def _on_canvas_configure(event):
@@ -539,9 +749,28 @@ class PaymentModal(tk.Toplevel):
                 if t['id'] == self.preselected_tenant['id']:
                     self.tenant_autocomplete._select_tenant(t)
                     break
-        # Botón guardar
-        btn_save = tk.Button(frame, text="Guardar", command=self._save)
+        # Botón guardar - Verde para mantener tonalidad verde del módulo
+        btn_save = tk.Button(
+            frame, 
+            text="Guardar", 
+            command=self._save,
+            bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
         btn_save.pack(pady=(20, 0))
+        
+        # Hover effect para botón guardar
+        def on_enter_save(e):
+            btn_save.configure(bg="#16a34a")  # green-600 - verde más oscuro para hover
+        def on_leave_save(e):
+            btn_save.configure(bg="#22c55e")  # green-500 - verde original
+        btn_save.bind("<Enter>", on_enter_save)
+        btn_save.bind("<Leave>", on_leave_save)
 
     def _on_tenant_selected(self, tenant):
         if not hasattr(self, '_form_ready') or not self._form_ready:
@@ -648,9 +877,28 @@ class PaymentsManagerWindow(tk.Toplevel):
         # Observaciones
         tk.Label(self.form_frame, text="Observaciones:").pack(anchor="w")
         tk.Entry(self.form_frame, textvariable=self.obs_var).pack(fill="x", pady=(0, 6))
-        # Botón guardar
-        btn_save = tk.Button(self.form_frame, text="Registrar Pago", command=self._save_payment)
+        # Botón guardar - Verde para mantener tonalidad verde del módulo
+        btn_save = tk.Button(
+            self.form_frame, 
+            text="Registrar Pago", 
+            command=self._save_payment,
+            bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
         btn_save.pack(pady=(10, 0))
+        
+        # Hover effect para botón registrar
+        def on_enter_save(e):
+            btn_save.configure(bg="#16a34a")  # green-600 - verde más oscuro para hover
+        def on_leave_save(e):
+            btn_save.configure(bg="#22c55e")  # green-500 - verde original
+        btn_save.bind("<Enter>", on_enter_save)
+        btn_save.bind("<Leave>", on_leave_save)
 
     def _on_tenant_selected(self, tenant):
         self.selected_tenant = tenant

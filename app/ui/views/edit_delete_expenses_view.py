@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any, Callable
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
-from manager.app.ui.components.modern_widgets import ModernButton
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.tenant_service import TenantService
@@ -18,23 +18,29 @@ from manager.app.services.tenant_service import TenantService
 # Importar RegisterExpenseView para acceder a EXPENSE_CATEGORIES
 from manager.app.ui.views.register_expense_view import RegisterExpenseView
 
+# Placeholder del cuadro de búsqueda (una sola constante para comparar y restaurar)
+SEARCH_PLACEHOLDER = "Buscar por nombre de inquilino o número de apartamento..."
+
 
 class EditDeleteExpensesView(tk.Frame):
     """Vista profesional para editar/eliminar gastos"""
     
-    def __init__(self, parent, on_back: Optional[Callable] = None):
+    def __init__(self, parent, on_back: Optional[Callable] = None, on_navigate_to_dashboard: Optional[Callable] = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.expense_service = ExpenseService()
         self.tenant_service = TenantService()
         self.on_back = on_back
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         self.editing_expense = None
         self.filter_category = None
         self.filter_apartment = None
         self.filter_year = None
         self.filter_month = None
-        self.search_text = ""  # Texto de búsqueda
+        self.search_text = ""
         
-        # Recargar apartamentos e inquilinos
         apartment_service._load_data()
         self.apartments = apartment_service.get_all_apartments()
         self.tenants = self.tenant_service.get_all_tenants()
@@ -43,91 +49,82 @@ class EditDeleteExpensesView(tk.Frame):
     
     def _create_layout(self):
         """Crea el layout principal"""
-        # Limpiar vista
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
         for widget in self.winfo_children():
             widget.destroy()
         
-        # Header
-        header = tk.Frame(self, **theme_manager.get_style("frame"))
-        header.pack(fill="x", pady=(0, Spacing.LG))
-        
-        btn_back = ModernButton(
-            header,
-            text="Volver",
-            icon=Icons.ARROW_LEFT,
-            style="secondary",
-            command=self._on_back
-        )
-        btn_back.pack(side="left")
+        header = tk.Frame(self, bg=cb)
+        header.pack(fill="x", pady=(0, Spacing.SM))
         
         title = tk.Label(
             header,
             text="Editar/Eliminar Gastos",
-            **theme_manager.get_style("label_title")
+            font=("Segoe UI", 16, "bold"),
+            bg=cb,
+            fg=theme["text_primary"]
         )
-        title.pack(side="left", padx=(Spacing.LG, 0))
+        title.pack(side="left", padx=(0, Spacing.LG))
         
-        # Contenedor fijo para filtros y búsqueda (no se mueve con scroll)
-        fixed_container = tk.Frame(self, **theme_manager.get_style("frame"))
-        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.MD))
+        buttons_frame = tk.Frame(header, bg=cb)
+        buttons_frame.pack(side="right")
         
-        # Búsqueda inteligente
-        search_frame = tk.Frame(fixed_container, **theme_manager.get_style("frame"))
-        search_frame.pack(fill="x", pady=(0, Spacing.SM))
+        self._create_navigation_buttons(buttons_frame, self._on_back)
         
-        tk.Label(
-            search_frame,
-            text="Búsqueda:",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, Spacing.SM))
+        fixed_container = tk.Frame(self, bg=cb)
+        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
+        
+        search_frame = tk.Frame(fixed_container, bg=cb)
+        search_frame.pack(fill="x", pady=(0, 2))
+        
+        tk.Label(search_frame, text="Búsqueda:", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
         self.search_var = tk.StringVar()
         self.search_var.trace("w", lambda *args: self._on_search_change())
-        search_entry = tk.Entry(
+        self.search_entry = tk.Entry(
             search_frame,
             textvariable=self.search_var,
-            width=40,
-            font=("Segoe UI", 10)
+            width=55,
+            font=("Segoe UI", 10),
+            bg=cb
         )
-        search_entry.pack(side="left", padx=(0, Spacing.SM))
-        search_entry.insert(0, "Buscar por nombre de inquilino o número de apartamento...")
-        search_entry.configure(fg="#999")
+        self.search_entry.pack(side="left", padx=(0, Spacing.SM))
+        self.search_var.set(SEARCH_PLACEHOLDER)
+        self.search_entry.configure(fg="#999")
+        
+        def _clear_placeholder_and_show_input():
+            if self.search_var.get().strip() == SEARCH_PLACEHOLDER:
+                self.search_var.set("")
+            self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
         
         def on_search_focus_in(event):
-            current_text = search_entry.get()
-            if current_text == "Buscar por nombre de inquilino o número de apartamento...":
-                search_entry.delete(0, tk.END)
-                search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
+            if self.search_var.get().strip() == SEARCH_PLACEHOLDER:
+                self.search_var.set("")
+            self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
+        
+        def on_search_keypress(event):
+            # Si el contenido es solo el placeholder, limpiar antes de que se inserte la tecla (evita mezcla)
+            if self.search_var.get() == SEARCH_PLACEHOLDER:
+                self.search_var.set("")
+                self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
         
         def on_search_focus_out(event):
-            if not search_entry.get().strip():
-                search_entry.delete(0, tk.END)
-                search_entry.insert(0, "Buscar por nombre de inquilino o número de apartamento...")
-                search_entry.configure(fg="#999")
+            if not self.search_var.get().strip():
+                self.search_var.set(SEARCH_PLACEHOLDER)
+                self.search_entry.configure(fg="#999")
         
-        search_entry.bind("<FocusIn>", on_search_focus_in)
-        search_entry.bind("<FocusOut>", on_search_focus_out)
+        self.search_entry.bind("<FocusIn>", on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", on_search_focus_out)
+        self.search_entry.bind("<KeyPress>", on_search_keypress)
+        # Posicionar cursor en el cuadro de búsqueda al abrir la vista
+        self.after(150, self._focus_search_entry)
         
-        # Filtros
-        filters_frame = tk.Frame(fixed_container, **theme_manager.get_style("frame"))
-        filters_frame.pack(fill="x", pady=(0, Spacing.MD))
+        filters_frame = tk.Frame(fixed_container, bg=cb)
+        filters_frame.pack(fill="x", pady=(0, 4))
         
-        # Título de filtros
-        filters_style = theme_manager.get_style("label_body").copy()
-        filters_style["font"] = ("Segoe UI", 11, "bold")
-        filters_title = tk.Label(
-            filters_frame,
-            text="Filtros:",
-            **filters_style
-        )
-        filters_title.pack(side="left", padx=(0, Spacing.SM))
+        tk.Label(filters_frame, text="Filtros:", font=("Segoe UI", 11, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         
-        # Filtro por categoría
-        tk.Label(
-            filters_frame,
-            text="Categoría:",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, 4))
+        tk.Label(filters_frame, text="Categoría:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.category_filter_var = tk.StringVar()
         self.category_filter_var.trace("w", lambda *args: self._apply_filters())
@@ -141,12 +138,7 @@ class EditDeleteExpensesView(tk.Frame):
         category_combo.set("Todas")
         category_combo.pack(side="left", padx=(0, Spacing.SM))
         
-        # Filtro por apartamento
-        tk.Label(
-            filters_frame,
-            text="Apartamento:",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, 4))
+        tk.Label(filters_frame, text="Apartamento:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.apartment_filter_var = tk.StringVar()
         self.apartment_filter_var.trace("w", lambda *args: self._apply_filters())
@@ -161,12 +153,7 @@ class EditDeleteExpensesView(tk.Frame):
         apartment_combo.set("Todos")
         apartment_combo.pack(side="left", padx=(0, Spacing.SM))
         
-        # Filtro por año
-        tk.Label(
-            filters_frame,
-            text="Año:",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, 4))
+        tk.Label(filters_frame, text="Año:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.year_filter_var = tk.StringVar()
         self.year_filter_var.trace("w", lambda *args: self._apply_filters())
@@ -182,12 +169,7 @@ class EditDeleteExpensesView(tk.Frame):
         year_combo.set("Todos")
         year_combo.pack(side="left", padx=(0, Spacing.SM))
         
-        # Filtro por mes
-        tk.Label(
-            filters_frame,
-            text="Mes:",
-            **theme_manager.get_style("label_body")
-        ).pack(side="left", padx=(0, 4))
+        tk.Label(filters_frame, text="Mes:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.month_filter_var = tk.StringVar()
         self.month_filter_var.trace("w", lambda *args: self._apply_filters())
@@ -203,34 +185,35 @@ class EditDeleteExpensesView(tk.Frame):
         month_combo.set("Todos")
         month_combo.pack(side="left", padx=(0, Spacing.SM))
         
-        # Botón limpiar filtros
         btn_clear_filters = ModernButton(
             filters_frame,
             text="Limpiar filtros",
             icon=Icons.CANCEL,
-            style="warning",
+            style="danger",
             command=self._clear_filters,
-            small=True
+            small=True,
+            fg="#000000"
         )
         btn_clear_filters.pack(side="left", padx=(Spacing.MD, 0))
         
-        # Contenedor para el formulario de edición (dentro del área fija)
-        self.edit_placeholder = tk.Frame(fixed_container, **theme_manager.get_style("card"))
-        # Asegurar que el contenedor pueda expandirse para mostrar todo el contenido
-        self.edit_placeholder.pack_forget()  # Oculto inicialmente
+        self.edit_placeholder = tk.Frame(fixed_container, bg=cb)
+        self.edit_placeholder.pack_forget()
         
-        # Separador visual fijo
-        separator = tk.Frame(self, height=2, bg="#e0e0e0")
-        separator.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.SM))
+        separator = tk.Frame(self, height=2, bg=theme.get("border_light", "#e0e0e0"))
+        separator.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
         
         # Listado de gastos (área scrolleable)
         self._create_expenses_list()
     
+    def _focus_search_entry(self):
+        """Coloca el foco en el cuadro de búsqueda al abrir la vista Editar/Eliminar gastos."""
+        if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
+            self.search_entry.focus_set()
+    
     def _on_search_change(self):
         """Maneja cambios en el campo de búsqueda"""
         search_value = self.search_var.get()
-        placeholder = "Buscar por nombre de inquilino o número de apartamento..."
-        if search_value == placeholder or not search_value.strip():
+        if search_value == SEARCH_PLACEHOLDER or not search_value.strip():
             self.search_text = ""
         else:
             self.search_text = search_value.strip().lower()
@@ -278,19 +261,20 @@ class EditDeleteExpensesView(tk.Frame):
         self._create_expenses_list()
     
     def _clear_filters(self):
-        """Limpia todos los filtros"""
+        """Limpia todos los filtros y restaura el placeholder de búsqueda sin mezclarlo con texto."""
         self.category_filter_var.set("Todas")
         self.apartment_filter_var.set("Todos")
         self.year_filter_var.set("Todos")
         self.month_filter_var.set("Todos")
-        self.search_var.set("Buscar por nombre de inquilino o número de apartamento...")
+        self.search_var.set(SEARCH_PLACEHOLDER)
+        if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
+            self.search_entry.configure(fg="#999")
         self.filter_category = None
         self.filter_apartment = None
         self.filter_year = None
         self.filter_month = None
         self.search_text = ""
         
-        # Ocultar formulario de edición si está visible
         self.editing_expense = None
         for widget in self.edit_placeholder.winfo_children():
             widget.destroy()
@@ -303,53 +287,61 @@ class EditDeleteExpensesView(tk.Frame):
         if hasattr(self, 'list_container'):
             self.list_container.destroy()
         
-        # Contenedor con scroll
-        self.list_container = tk.Frame(self, **theme_manager.get_style("card"))
-        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.LG))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
+        bg_alt = theme.get("bg_tertiary", "#f0f4fa")
+        header_bg = "#fee2e2"
+        header_fg = "#991b1b"
         
-        # Columnas (definir antes para usar en encabezado y contenido)
+        self.list_container = tk.Frame(self, bg=cb)
+        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.SM))
+        
         columns = [
             ("ID", 5),
-            ("Fecha", 12),
-            ("Categoría", 15),
-            ("Subtipo", 15),
+            ("Fecha", 14),
+            ("Categoría", 18),
+            ("Subtipo", 18),
             ("Apartamento", 12),
-            ("Monto", 12),
-            ("Descripción", 25),
-            ("Acciones", 10)
+            ("Monto", 14),
+            ("Descripción", 32),
+            ("Acciones", 12)
         ]
         
-        # ENCABEZADO FIJO (fuera del scroll)
-        header_container = tk.Frame(self.list_container, bg="#f5f5f5", relief="solid", bd=1)
-        header_container.pack(fill="x", pady=(0, 0))
-        
-        header = tk.Frame(header_container, bg="#f5f5f5")
-        header.pack(fill="x")
-        
+        sep_color = theme.get("border_light", "#d1d5db")
+        # Un solo grid: encabezado y cuerpo comparten las mismas columnas para alineación exacta
+        table_grid = tk.Frame(self.list_container, bg=cb)
+        table_grid.pack(fill="both", expand=True)
+        for i in range(8):
+            table_grid.grid_columnconfigure(i, weight=1)
+        table_grid.grid_columnconfigure(8, weight=0, minsize=17)
+        # Fila 0: encabezado (columnas 0-7)
+        header_frame = tk.Frame(table_grid, bg=header_bg)
+        header_frame.grid(row=0, column=0, columnspan=8, sticky="nsew")
+        for idx in range(8):
+            header_frame.grid_columnconfigure(idx, weight=1)
+        col_anchors = ["w", "w", "w", "w", "w", "w", "w", "c"]  # Monto a la izquierda como el resto
         for idx, (col, width) in enumerate(columns):
-            tk.Label(
-                header,
-                text=col,
-                font=("Segoe UI", 10, "bold"),
-                width=width,
-                anchor="w",
-                bg="#f5f5f5"
-            ).grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
-            header.grid_columnconfigure(idx, weight=1)
-        
-        # Contenedor para canvas y scrollbar
-        scroll_container = tk.Frame(self.list_container, **theme_manager.get_style("frame"))
-        scroll_container.pack(fill="both", expand=True)
-        
-        canvas = tk.Canvas(scroll_container, borderwidth=0, highlightthickness=0)
+            anc = col_anchors[idx] if idx < len(col_anchors) else "w"
+            tk.Label(header_frame, text=col, font=("Segoe UI", 10, "bold"), width=width, anchor=anc, bg=header_bg, fg=header_fg).grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
+        scrollbar_header_placeholder = tk.Frame(table_grid, width=17, bg=header_bg)
+        scrollbar_header_placeholder.grid(row=0, column=8, sticky="ns")
+        scrollbar_header_placeholder.pack_propagate(False)
+        # Fila 1: línea separadora
+        header_sep = tk.Frame(table_grid, height=2, bg=sep_color)
+        header_sep.grid(row=1, column=0, columnspan=8, sticky="ew")
+        header_sep.grid_propagate(False)
+        tk.Frame(table_grid, width=17, bg=cb).grid(row=1, column=8)
+        # Fila 2: canvas (columnas 0-7) + scrollbar (columna 8)
+        table_grid.grid_rowconfigure(2, weight=1)
+        canvas_holder = tk.Frame(table_grid, bg=cb)
+        canvas_holder.grid(row=2, column=0, columnspan=8, sticky="nsew")
+        canvas = tk.Canvas(canvas_holder, bg=cb, borderwidth=0, highlightthickness=0)
         canvas.pack(side="left", fill="both", expand=True)
-        
-        scrollbar = tk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
-        scrollbar.pack(side="right", fill="y")
+        scrollbar = tk.Scrollbar(table_grid, orient="vertical", command=canvas.yview)
+        scrollbar.grid(row=2, column=8, sticky="ns")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # Frame interno para el contenido (SOLO las filas de datos, sin encabezado)
-        content_frame = tk.Frame(canvas, **theme_manager.get_style("card"))
+        content_frame = tk.Frame(canvas, bg=cb)
         list_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
         
         def _on_frame_configure(event):
@@ -358,9 +350,8 @@ class EditDeleteExpensesView(tk.Frame):
         content_frame.bind("<Configure>", _on_frame_configure)
         
         def _on_canvas_configure(event):
-            canvas_width = event.width
-            if canvas_width > 0:
-                canvas.itemconfig(list_window, width=canvas_width)
+            if event.width > 0:
+                canvas.itemconfig(list_window, width=event.width)
         
         canvas.bind("<Configure>", _on_canvas_configure)
         
@@ -430,7 +421,7 @@ class EditDeleteExpensesView(tk.Frame):
             expenses = [e for e in expenses if e.get("categoria") == self.filter_category]
         
         if self.filter_apartment:
-            expenses = [e for e in expenses if e.get("apartamento") == self.filter_apartment]
+            expenses = [e for e in expenses if str(e.get("apartamento", "")) == str(self.filter_apartment)]
         
         if self.filter_year is not None or self.filter_month is not None:
             filtered = []
@@ -451,26 +442,24 @@ class EditDeleteExpensesView(tk.Frame):
         # Ordenar por fecha (más recientes primero)
         expenses.sort(key=lambda x: x.get("fecha", ""), reverse=True)
         
-        # Filas con efecto zebra
-        zebra_colors = ("#ffffff", "#f0f4fa")
+        zebra_colors = (cb, bg_alt)
         
         if not expenses:
-            # Mensaje cuando no hay gastos
-            no_data_frame = tk.Frame(content_frame, bg="#ffffff")
-            no_data_frame.grid(row=0, column=0, sticky="ew", pady=20)
+            no_data_frame = tk.Frame(content_frame, bg=cb)
+            no_data_frame.grid(row=0, column=0, columnspan=8, sticky="ew", pady=20)
             tk.Label(
                 no_data_frame,
                 text="No se encontraron gastos con los filtros seleccionados.",
                 font=("Segoe UI", 11),
-                fg="#666",
-                bg="#ffffff"
+                fg=theme.get("text_secondary", "#666"),
+                bg=cb
             ).pack()
             content_frame.grid_columnconfigure(0, weight=1)
         else:
             for row_idx, expense in enumerate(expenses):
                 bg_color = zebra_colors[row_idx % 2]
                 row = tk.Frame(content_frame, bg=bg_color)
-                row.grid(row=row_idx, column=0, sticky="ew")
+                row.grid(row=row_idx, column=0, columnspan=8, sticky="ew")
                 
                 # Formatear fecha
                 fecha_str = expense.get("fecha", "")
@@ -504,14 +493,18 @@ class EditDeleteExpensesView(tk.Frame):
                 for idx in range(len(columns)):
                     row.grid_columnconfigure(idx, weight=1)
                 
+                # Monto (col 5) alineado a la derecha; el resto a la izquierda
+                data_anchors = ["w", "w", "w", "w", "w", "w", "w"]  # Todas a la izquierda, incluido Monto
                 for col_idx, (val, (_, width)) in enumerate(zip(values, columns)):
+                    anc = data_anchors[col_idx] if col_idx < len(data_anchors) else "w"
                     tk.Label(
                         row,
                         text=val,
                         font=("Segoe UI", 10),
                         width=width,
-                        anchor="w",
-                        bg=bg_color
+                        anchor=anc,
+                        bg=bg_color,
+                        fg=theme["text_primary"]
                     ).grid(row=0, column=col_idx, padx=(0, 1), sticky="nsew")
                 
                 # Acciones: botones editar y eliminar
@@ -546,13 +539,22 @@ class EditDeleteExpensesView(tk.Frame):
                 
                 row.grid_columnconfigure(len(values), weight=1)
         
-        # Configurar columnas del content_frame para alineación
+        # Mismo weight en todas las columnas para que header y filas compartan anchos (como en listado de pagos)
         for idx in range(len(columns)):
             content_frame.grid_columnconfigure(idx, weight=1)
     
     def _show_edit_form(self, expense: Dict[str, Any]):
         """Muestra el formulario de edición para un gasto"""
         self.editing_expense = expense
+        
+        # Filtrar el listado por el mismo apartamento del gasto que estamos editando
+        apt = expense.get("apartamento", "---")
+        if apt == "---" or apt is None:
+            self.apartment_filter_var.set("--- (General)")
+            self.filter_apartment = "---"
+        else:
+            self.apartment_filter_var.set(str(apt))
+            self.filter_apartment = str(apt)
         
         # Limpiar contenido anterior
         for widget in self.edit_placeholder.winfo_children():
@@ -563,7 +565,7 @@ class EditDeleteExpensesView(tk.Frame):
             self.edit_placeholder.pack(
                 fill="both",
                 expand=True,
-                pady=(0, Spacing.MD)
+                pady=(0, 4)
             )
         
         # Crear el formulario de edición directamente (sin scroll, más compacto)
@@ -581,9 +583,10 @@ class EditDeleteExpensesView(tk.Frame):
             compact=True  # Modo compacto para edición
         )
         # Empaquetar el formulario para que sea visible completamente
-        edit_form.pack(fill="both", expand=True, padx=Spacing.SM, pady=Spacing.SM)
+        edit_form.pack(fill="both", expand=True, padx=4, pady=4)
         
-        # Asegurar que el contenedor se expanda para mostrar todo el contenido
+        # Refrescar el listado para mostrar solo gastos del mismo apartamento
+        self._create_expenses_list()
         self.edit_placeholder.update_idletasks()
     
     def _cancel_edit(self):
@@ -635,6 +638,95 @@ class EditDeleteExpensesView(tk.Frame):
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el gasto.")
     
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Colores rojos para módulo de gastos
+        colors = get_module_colors("gastos")
+        red_primary = colors["primary"]
+        red_hover = colors["hover"]
+        red_light = colors["light"]
+        red_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow en la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                self.on_back()
+        
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=red_primary,
+            hover_bg=red_light,
+            hover_fg=red_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard"
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=red_primary,
+            fg_color="white",
+            hover_bg=red_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
+
     def _on_back(self):
         """Maneja el botón de volver"""
         if self.on_back:

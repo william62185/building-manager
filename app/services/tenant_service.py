@@ -5,19 +5,24 @@ Maneja operaciones CRUD con persistencia en JSON
 
 import json
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
 
 class TenantService:
     """Servicio para gestión de inquilinos"""
     
     def __init__(self):
-        self.data_file = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/tenants.json'))
+        self.data_file = str(DATA_DIR / "tenants.json")
         self._ensure_data_directory()
         self._load_data()
     
     def _ensure_data_directory(self):
         """Asegura que el directorio de datos exista"""
+        ensure_dirs()
         os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
         
         # Crear archivo vacío si no existe
@@ -230,7 +235,6 @@ class TenantService:
                     self.tenants[i]["estado_pago"] = new_status
                     self.tenants[i]["updated_at"] = datetime.now().isoformat()
                     self._save_data()
-                    print(f"✅ Estado actualizado para {tenant.get('nombre')}: {new_status}")
                     return True
             
             return False
@@ -239,7 +243,7 @@ class TenantService:
             return False
     
     def recalculate_all_payment_statuses(self) -> Dict[str, int]:
-        """Recalcula el estado de pago de todos los inquilinos"""
+        """Recalcula el estado de pago de todos los inquilinos, excepto los desactivados manualmente"""
         try:
             # Recargar datos de pagos antes de recalcular estados
             from manager.app.services.payment_service import payment_service
@@ -258,19 +262,27 @@ class TenantService:
             
             for tenant in self.tenants:
                 old_status = tenant.get('estado_pago', 'al_dia')
+                
+                # NO recalcular estado si el inquilino fue desactivado manualmente
+                # (tiene fecha_desactivacion o motivo_desactivacion)
+                if tenant.get('fecha_desactivacion') or tenant.get('motivo_desactivacion'):
+                    # Mantener el estado inactivo y no recalcular
+                    if old_status == 'inactivo':
+                        status_changes['inactivo'] += 1
+                        continue
+                
+                # Recalcular estado solo para inquilinos no desactivados manualmente
                 new_status = self.calculate_payment_status(tenant.get('id'))
                 
                 if old_status != new_status:
                     tenant['estado_pago'] = new_status
                     tenant['updated_at'] = datetime.now().isoformat()
                     updated_count += 1
-                    print(f"Inquilino {tenant.get('nombre')}: {old_status} → {new_status}")
                 
                 status_changes[new_status] += 1
             
             if updated_count > 0:
                 self._save_data()
-                print(f"✅ Estados actualizados: {updated_count} inquilinos")
             
             return status_changes
             

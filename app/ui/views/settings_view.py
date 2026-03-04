@@ -6,59 +6,63 @@ Permite configurar las credenciales SMTP para envío de emails
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
+import os
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
-from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.email_service import email_service
+from manager.app.services.app_config_service import app_config_service
+from manager.app.services.backup_service import backup_service
 
 
 class SettingsView(tk.Frame):
     """Vista de configuración del sistema"""
-    
+
     def __init__(self, parent, on_back: Callable = None):
-        super().__init__(parent, **theme_manager.get_style("frame"))
-        
+        super().__init__(parent)
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.on_back = on_back
-        
-        # Cargar configuración actual
         self.current_config = email_service.get_config()
-        
-        # Variables para los campos del formulario
+        self.backup_config = app_config_service.get_backup_config()
         self.provider_var = tk.StringVar(value=self.current_config.get("provider", "gmail"))
         self.email_var = tk.StringVar(value=self.current_config.get("email", "") if self.current_config.get("email") else "")
-        self.password_var = tk.StringVar(value="")  # Nunca mostramos la contraseña actual
+        self.password_var = tk.StringVar(value="")
         self.sender_name_var = tk.StringVar(value=self.current_config.get("sender_name", "Building Manager Pro"))
         self.smtp_server_var = tk.StringVar(value=self.current_config.get("smtp_server", "smtp.gmail.com"))
         self.smtp_port_var = tk.StringVar(value=str(self.current_config.get("smtp_port", 587)))
-        
+        self.auto_backup_var = tk.BooleanVar(value=self.backup_config.get("auto_backup_enabled", True))
+        self.backup_interval_var = tk.IntVar(value=self.backup_config.get("interval_hours", 6))
+        self.max_backups_var = tk.IntVar(value=self.backup_config.get("max_backups", 10))
+
+        # Modo desarrollador (para herramientas de prueba)
+        self._dev_mode = os.environ.get("BM_DEV_MODE", "").strip() == "1"
+        lic = app_config_service.get_license_config()
+        self.license_test_mode_var = tk.BooleanVar(value=bool(lic.get("test_mode")))
+        self.license_demo_days_var = tk.IntVar(value=int(lic.get("demo_days_override") or 1))
         self._create_layout()
     
     def _create_layout(self):
         """Crea el layout principal"""
-        # Header
-        header_frame = tk.Frame(self, **theme_manager.get_style("frame"))
-        header_frame.pack(fill="x", padx=Spacing.MD, pady=(Spacing.LG, Spacing.MD))
-        
-        # Título
-        title_label = tk.Label(
-            header_frame,
-            text="⚙️ Configuración del Sistema",
-            **theme_manager.get_style("label_title")
-        )
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = self._content_bg
+        fg = theme.get("text_primary", "#1f2937")
+        header_frame = tk.Frame(self, bg=cb)
+        header_frame.pack(fill="x", padx=Spacing.MD, pady=(0, 2))
+        title_label = tk.Label(header_frame, text="⚙️ Configuración del Sistema", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg)
         title_label.pack(side="left")
-        
-        # Separador
-        separator = ModernSeparator(self)
-        separator.pack(fill="x", padx=Spacing.MD)
-        
-        # Contenedor con scroll para el contenido principal
-        scroll_container = tk.Frame(self, **theme_manager.get_style("frame"))
+        buttons_frame = tk.Frame(header_frame, bg=cb)
+        buttons_frame.pack(side="right")
+        self._create_navigation_buttons(buttons_frame, self.on_back)
+        sep_color = theme.get("border_light", "#e5e7eb")
+        sep = tk.Frame(self, height=1, bg=sep_color)
+        sep.pack(fill="x", padx=Spacing.MD, pady=(0, 2))
+        scroll_container = tk.Frame(self, bg=cb)
         scroll_container.pack(fill="both", expand=True)
-        
-        # Canvas y scrollbar
-        canvas = tk.Canvas(scroll_container, **theme_manager.get_style("frame"), highlightthickness=0)
+        canvas = tk.Canvas(scroll_container, bg=cb, highlightthickness=0)
         scrollbar = tk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
-        content_frame = tk.Frame(canvas, **theme_manager.get_style("frame"))
+        content_frame = tk.Frame(canvas, bg=cb)
         
         # Configurar scroll
         content_frame.bind(
@@ -84,217 +88,350 @@ class SettingsView(tk.Frame):
         canvas.bind('<Enter>', bind_mousewheel)
         canvas.bind('<Leave>', unbind_mousewheel)
         
-        canvas.pack(side="left", fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
+        canvas.pack(side="left", fill="both", expand=True, padx=Spacing.MD, pady=(0, 2))
         scrollbar.pack(side="right", fill="y")
-        
-        # Sección de Configuración de Email
+        self._create_backup_config_section(content_frame)
+        self._create_section_separator(content_frame)
         self._create_email_config_section(content_frame)
+        self._create_section_separator(content_frame)
+        self._create_license_section(content_frame)
+        if self._dev_mode:
+            self._create_section_separator(content_frame)
+            self._create_license_test_section(content_frame)
+    
+    def _create_section_separator(self, parent):
+        """Dibuja una línea separadora entre secciones de configuración (sin bordes de tarjeta)."""
+        cb = self._content_bg
+        sep_color = theme_manager.themes[theme_manager.current_theme].get("border_light", "#e5e7eb")
+        container = tk.Frame(parent, bg=cb)
+        container.pack(fill="x", pady=(Spacing.SM, Spacing.SM))
+        line = tk.Frame(container, height=1, bg=sep_color)
+        line.pack(fill="x")
+        line.pack_propagate(False)
+
+    def _create_backup_config_section(self, parent):
+        """Crea la sección de configuración de backups"""
+        cb = self._content_bg
+        fg = theme_manager.themes[theme_manager.current_theme].get("text_primary", "#1f2937")
+        fg_sec = "#374151"
+        backup_card = tk.Frame(parent, bg=cb)
+        backup_card.pack(fill="x", pady=(0, 0))
+        card_content = tk.Frame(backup_card, bg=cb)
+        card_content.pack(fill="both", expand=True, padx=Spacing.MD, pady=3)
+        section_title = tk.Label(card_content, text="💾 Backups Automáticos", font=("Segoe UI", 12, "bold"), bg=cb, fg=fg)
+        section_title.pack(anchor="w", pady=(0, 2))
+        auto_backup_frame = tk.Frame(card_content, bg=cb)
+        auto_backup_frame.pack(fill="x", pady=(0, 2))
+        auto_backup_check = tk.Checkbutton(
+            auto_backup_frame, text="Habilitar backups automáticos", variable=self.auto_backup_var,
+            font=("Segoe UI", 10), fg=fg, bg=cb, activebackground=cb, activeforeground=fg, selectcolor=cb,
+            command=self._on_auto_backup_toggle
+        )
+        auto_backup_check.pack(anchor="w")
+        interval_frame = tk.Frame(card_content, bg=cb)
+        interval_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(interval_frame, text="Intervalo (horas):", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+        interval_spinbox = tk.Spinbox(interval_frame, from_=1, to=24, textvariable=self.backup_interval_var, font=("Segoe UI", 10), width=8)
+        interval_spinbox.pack(anchor="w")
+        max_backups_frame = tk.Frame(card_content, bg=cb)
+        max_backups_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(max_backups_frame, text="Máximo de backups:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+        max_backups_spinbox = tk.Spinbox(max_backups_frame, from_=1, to=50, textvariable=self.max_backups_var, font=("Segoe UI", 10), width=8)
+        max_backups_spinbox.pack(anchor="w")
+        status_frame = tk.Frame(card_content, bg=cb)
+        status_frame.pack(fill="x", pady=(4, 0))
+        backup_status = backup_service.get_backup_status()
+        status_text = f"Estado: {'✅ Activo' if backup_status['enabled'] else '⏸️ Inactivo'} | Total: {backup_status['total_backups']}"
+        if backup_status['enabled']:
+            status_text += f" | Próximo: {backup_status.get('next_backup', 'N/A')}"
+        tk.Label(status_frame, text=status_text, font=("Segoe UI", 9), fg=fg_sec, bg=cb).pack(anchor="w")
+        save_btn = ModernButton(card_content, text="Guardar Backup", icon=Icons.SAVE, style="purple", small=True, command=self._save_backup_config)
+        save_btn.pack(anchor="w", pady=(4, 0))
+    
+    def _on_auto_backup_toggle(self):
+        """Maneja el toggle de backups automáticos"""
+        # La acción se realizará al guardar
+        pass
+    
+    def _save_backup_config(self):
+        """Guarda la configuración de backups con trazabilidad"""
+        from manager.app.services.user_service import user_service
+        
+        backup_config = {
+            "auto_backup_enabled": self.auto_backup_var.get(),
+            "interval_hours": self.backup_interval_var.get(),
+            "max_backups": self.max_backups_var.get()
+        }
+        
+        # Guardar en app_config
+        if app_config_service.set_backup_config(backup_config):
+            # Aplicar configuración al servicio de backup
+            backup_service.set_max_backups(backup_config["max_backups"])
+            
+            if backup_config["auto_backup_enabled"]:
+                backup_service.start_auto_backup(backup_config["interval_hours"])
+            else:
+                backup_service.stop_auto_backup()
+            
+            # Registrar actividad
+            try:
+                username = "admin"
+                status = "activado" if backup_config["auto_backup_enabled"] else "desactivado"
+                user_service._log_activity(
+                    username,
+                    "config_changed",
+                    f"Backups automáticos {status} | Intervalo: {backup_config['interval_hours']}h | Máximo: {backup_config['max_backups']}",
+                    None
+                )
+            except Exception as e:
+                print(f"Error al registrar actividad: {e}")
+            
+            messagebox.showinfo("✅ Configuración guardada", "La configuración de backups se ha guardado correctamente.")
+        else:
+            messagebox.showerror("Error", "No se pudo guardar la configuración de backups.")
     
     def _create_email_config_section(self, parent):
         """Crea la sección de configuración de email"""
-        # Card para la configuración de email
-        email_card = ModernCard(parent)
-        email_card.pack(fill="x", pady=(0, Spacing.MD))
-        
-        card_content = tk.Frame(email_card, **theme_manager.get_style("frame"))
-        card_content.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
-        
-        # Título de la sección
-        section_title = tk.Label(
-            card_content,
-            text="📧 Configuración de Email SMTP",
-            font=("Segoe UI", 14, "bold"),
-            **theme_manager.get_style("label")
-        )
-        section_title.pack(anchor="w", pady=(0, Spacing.MD))
-        
-        # Descripción
-        description = tk.Label(
-            card_content,
-            text="Configure las credenciales SMTP para enviar recibos de pago por email a los inquilinos.",
-            font=("Segoe UI", 10),
-            fg="#666",
-            **theme_manager.get_style("label")
-        )
-        description.pack(anchor="w", pady=(0, Spacing.LG))
-        
-        # Proveedor de email
-        provider_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        provider_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            provider_frame,
-            text="Proveedor de Email:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        provider_combo = ttk.Combobox(
-            provider_frame,
-            textvariable=self.provider_var,
-            values=["gmail", "outlook", "custom"],
-            state="readonly",
-            width=20,
-            font=("Segoe UI", 10)
-        )
+        cb = self._content_bg
+        fg = theme_manager.themes[theme_manager.current_theme].get("text_primary", "#1f2937")
+        fg_sec = "#374151"
+        email_card = tk.Frame(parent, bg=cb)
+        email_card.pack(fill="x", pady=(0, 0))
+        card_content = tk.Frame(email_card, bg=cb)
+        card_content.pack(fill="both", expand=True, padx=Spacing.MD, pady=3)
+        section_title = tk.Label(card_content, text="📧 Email SMTP", font=("Segoe UI", 12, "bold"), bg=cb, fg=fg)
+        section_title.pack(anchor="w", pady=(0, 2))
+        description = tk.Label(card_content, text="Credenciales SMTP para enviar recibos por email.", font=("Segoe UI", 9), fg=fg_sec, bg=cb)
+        description.pack(anchor="w", pady=(0, 2))
+        provider_frame = tk.Frame(card_content, bg=cb)
+        provider_frame.pack(fill="x", pady=(0, 2))
+        tk.Label(provider_frame, text="Proveedor:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 1))
+        provider_combo = ttk.Combobox(provider_frame, textvariable=self.provider_var, values=["gmail", "outlook", "custom"], state="readonly", width=18, font=("Segoe UI", 10))
         provider_combo.pack(anchor="w")
         provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
-        
-        # Email
-        email_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        email_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            email_frame,
-            text="Email del Remitente:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        email_entry = tk.Entry(
-            email_frame,
-            textvariable=self.email_var,
-            font=("Segoe UI", 10),
-            width=50
-        )
+        email_frame = tk.Frame(card_content, bg=cb)
+        email_frame.pack(fill="x", pady=(0, 2))
+        tk.Label(email_frame, text="Email:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 1))
+        email_entry = tk.Entry(email_frame, textvariable=self.email_var, font=("Segoe UI", 10), width=40)
         email_entry.pack(fill="x")
-        
-        # Contraseña de aplicación
-        password_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        password_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            password_frame,
-            text="Contraseña de Aplicación:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        password_entry = tk.Entry(
-            password_frame,
-            textvariable=self.password_var,
-            font=("Segoe UI", 10),
-            width=50,
-            show="*"
-        )
+        password_frame = tk.Frame(card_content, bg=cb)
+        password_frame.pack(fill="x", pady=(0, 2))
+        tk.Label(password_frame, text="Contraseña de aplicación:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 1))
+        password_entry = tk.Entry(password_frame, textvariable=self.password_var, font=("Segoe UI", 10), width=40, show="*")
         password_entry.pack(fill="x")
-        
-        help_label = tk.Label(
-            password_frame,
-            text="💡 Para Gmail/Outlook: Use una contraseña de aplicación, no su contraseña normal. Consulte la ayuda de su proveedor.",
-            font=("Segoe UI", 9),
-            fg="#666",
-            wraplength=600,
-            justify="left",
-            **theme_manager.get_style("label")
-        )
-        help_label.pack(anchor="w", pady=(5, 0))
-        
-        # Nombre del remitente
-        sender_name_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        sender_name_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            sender_name_frame,
-            text="Nombre del Remitente:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        sender_name_entry = tk.Entry(
-            sender_name_frame,
-            textvariable=self.sender_name_var,
-            font=("Segoe UI", 10),
-            width=50
-        )
+        help_label = tk.Label(password_frame, text="💡 Use contraseña de aplicación (Gmail/Outlook).", font=("Segoe UI", 8), fg=fg_sec, bg=cb, wraplength=500)
+        help_label.pack(anchor="w", pady=(1, 0))
+        sender_name_frame = tk.Frame(card_content, bg=cb)
+        sender_name_frame.pack(fill="x", pady=(0, 2))
+        tk.Label(sender_name_frame, text="Nombre remitente:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 1))
+        sender_name_entry = tk.Entry(sender_name_frame, textvariable=self.sender_name_var, font=("Segoe UI", 10), width=40)
         sender_name_entry.pack(fill="x")
-        
-        # Campos personalizados (solo para "custom")
-        self.custom_fields_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        
+        self.custom_fields_frame = tk.Frame(card_content, bg=cb)
         self._update_custom_fields_visibility()
-        
-        # Estado de la configuración
-        status_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        status_frame.pack(fill="x", pady=(Spacing.MD, 0))
-        
+        status_frame = tk.Frame(card_content, bg=cb)
+        status_frame.pack(fill="x", pady=(2, 0))
         is_configured = email_service.is_configured()
         status_text = "✅ Configuración completa" if is_configured else "⚠️ Configuración incompleta"
-        status_color = "#4caf50" if is_configured else "#ff9800"
-        
-        status_label = tk.Label(
-            status_frame,
-            text=status_text,
-            font=("Segoe UI", 10, "bold"),
-            fg=status_color,
-            **theme_manager.get_style("label")
-        )
-        status_label.pack(anchor="w")
-        
-        # Botones
-        buttons_frame = tk.Frame(card_content, **theme_manager.get_style("frame"))
-        buttons_frame.pack(fill="x", pady=(Spacing.LG, 0))
-        
-        save_btn = ModernButton(
-            buttons_frame,
-            text="Guardar Configuración",
-            icon=Icons.SAVE,
-            style="primary",
-            command=self._save_email_config
-        )
+        status_color = "#16a34a" if is_configured else "#d97706"
+        tk.Label(status_frame, text=status_text, font=("Segoe UI", 9, "bold"), fg=status_color, bg=cb).pack(anchor="w")
+        buttons_frame = tk.Frame(card_content, bg=cb)
+        buttons_frame.pack(fill="x", pady=(4, 0))
+        save_btn = ModernButton(buttons_frame, text="Guardar", icon=Icons.SAVE, style="purple", small=True, command=self._save_email_config)
         save_btn.pack(side="left", padx=(0, Spacing.SM))
-        
-        test_btn = ModernButton(
-            buttons_frame,
-            text="Probar Conexión",
-            icon="🔍",
-            style="secondary",
-            command=self._test_email_connection
-        )
+        test_btn = ModernButton(buttons_frame, text="Probar", icon="🔍", style="secondary", small=True, command=self._test_email_connection)
         test_btn.pack(side="left")
+
+    def _create_license_test_section(self, parent):
+        """Sección de modo prueba de licencias (solo desarrollo: BM_DEV_MODE=1)."""
+        from manager.app.services.license_service import license_service
+
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
+        fg = theme.get("text_primary", "#1f2937")
+        fg_sec = theme.get("text_secondary", "#374151")
+
+        card = tk.Frame(parent, bg=cb)
+        card.pack(fill="x", pady=(0, 0))
+        content = tk.Frame(card, bg=cb)
+        content.pack(fill="both", expand=True, padx=Spacing.MD, pady=3)
+
+        tk.Label(content, text="🔑 Licencias (modo prueba)", font=("Segoe UI", 12, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+        tk.Label(
+            content,
+            text="Solo para desarrollo. Activa BM_DEV_MODE=1 para habilitar estas opciones.",
+            font=("Segoe UI", 9),
+            bg=cb,
+            fg=fg_sec,
+            wraplength=700,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+
+        row = tk.Frame(content, bg=cb)
+        row.pack(fill="x", pady=(0, 2))
+        tk.Checkbutton(
+            row,
+            text="Habilitar modo prueba",
+            variable=self.license_test_mode_var,
+            font=("Segoe UI", 10),
+            fg=fg,
+            bg=cb,
+            activebackground=cb,
+            activeforeground=fg,
+            selectcolor=cb,
+        ).pack(side="left")
+
+        days_frame = tk.Frame(content, bg=cb)
+        days_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(days_frame, text="Días de demo (prueba):", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(side="left")
+        tk.Spinbox(days_frame, from_=0, to=60, textvariable=self.license_demo_days_var, font=("Segoe UI", 10), width=6).pack(side="left", padx=(Spacing.SM, 0))
+
+        status_var = tk.StringVar(value="")
+        status_lbl = tk.Label(content, textvariable=status_var, font=("Segoe UI", 9), bg=cb, fg=fg_sec)
+        status_lbl.pack(anchor="w", pady=(0, 4))
+
+        def refresh_status():
+            st = license_service.get_status()
+            mode = st.get("mode")
+            rem = st.get("remaining_days")
+            status_var.set(f"Estado actual: {mode} | Días restantes: {rem}")
+
+        def apply_test():
+            if self.license_test_mode_var.get():
+                ok = license_service.enable_test_mode(self.license_demo_days_var.get())
+                if not ok:
+                    messagebox.showwarning("Licencias", "Modo prueba disponible solo con BM_DEV_MODE=1.", parent=self.winfo_toplevel())
+            else:
+                license_service.disable_test_mode()
+            refresh_status()
+
+        def force_expired():
+            ok = license_service.force_expired_demo()
+            if not ok:
+                messagebox.showwarning("Licencias", "Modo prueba disponible solo con BM_DEV_MODE=1.", parent=self.winfo_toplevel())
+            refresh_status()
+
+        def restore_demo():
+            ok = license_service.reset_demo(30)
+            if not ok:
+                messagebox.showwarning("Licencias", "Modo prueba disponible solo con BM_DEV_MODE=1.", parent=self.winfo_toplevel())
+            refresh_status()
+
+        btns = tk.Frame(content, bg=cb)
+        btns.pack(fill="x", pady=(2, 0))
+        ModernButton(btns, text="Aplicar", icon=Icons.SAVE, style="purple", small=True, command=apply_test).pack(side="left", padx=(0, Spacing.SM))
+        ModernButton(btns, text="Forzar vencimiento", icon="⛔", style="secondary", small=True, command=force_expired).pack(side="left", padx=(0, Spacing.SM))
+        ModernButton(btns, text="Restaurar demo 30 días", icon="↩", style="secondary", small=True, command=restore_demo).pack(side="left")
+
+        refresh_status()
+
+    def _create_license_section(self, parent):
+        """Sección de licencia (usuarios finales): estado actual y activación."""
+        from manager.app.services.license_service import license_service
+
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
+        fg = theme.get("text_primary", "#1f2937")
+        fg_sec = theme.get("text_secondary", "#374151")
+
+        card = tk.Frame(parent, bg=cb)
+        card.pack(fill="x", pady=(0, 0))
+        content = tk.Frame(card, bg=cb)
+        content.pack(fill="both", expand=True, padx=Spacing.MD, pady=3)
+
+        tk.Label(content, text="🔑 Licencia", font=("Segoe UI", 12, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+
+        status_var = tk.StringVar(value="")
+        status_lbl = tk.Label(content, textvariable=status_var, font=("Segoe UI", 10), bg=cb, fg=fg_sec, justify="left", wraplength=900)
+        status_lbl.pack(anchor="w", pady=(0, 6))
+
+        def refresh_status():
+            st = license_service.get_status()
+            mode = st.get("mode")
+            rem = st.get("remaining_days")
+            if mode == "licensed":
+                exp = st.get("license_expires_at")
+                exp_txt = exp.strftime("%d/%m/%Y") if exp else "N/A"
+                status_var.set(f"Estado: Licencia activa. Vence el {exp_txt}.")
+            elif mode == "demo":
+                status_var.set(f"Estado: Demostración activa. Te quedan {rem} días.")
+            else:
+                status_var.set("Estado: Demostración vencida o licencia expirada. Activa tu licencia para continuar.")
+
+        def open_activate_dialog():
+            # Diálogo modal para ingresar clave y validar con Keygen
+            win = tk.Toplevel(self.winfo_toplevel())
+            win.title("Activar licencia")
+            win.geometry("520x260")
+            win.transient(self.winfo_toplevel())
+            win.grab_set()
+            win.resizable(False, False)
+
+            bg = theme.get("bg_primary", "#ffffff")
+            win.configure(bg=bg)
+            inner = tk.Frame(win, bg=bg, padx=Spacing.LG, pady=Spacing.LG)
+            inner.pack(fill="both", expand=True)
+
+            tk.Label(inner, text="Activar licencia", font=("Segoe UI", 14, "bold"), bg=bg, fg=fg).pack(anchor="w", pady=(0, Spacing.SM))
+            tk.Label(
+                inner,
+                text="Ingrese su clave de licencia anual para activar el software.",
+                font=("Segoe UI", 10),
+                bg=bg,
+                fg=theme.get("text_secondary", "#6b7280"),
+                justify="left",
+                wraplength=480,
+            ).pack(anchor="w", pady=(0, Spacing.MD))
+
+            tk.Label(inner, text="Clave de licencia:", font=("Segoe UI", 10), bg=bg, fg=fg).pack(anchor="w")
+            key_var = tk.StringVar()
+            entry = tk.Entry(inner, textvariable=key_var, font=("Segoe UI", 10))
+            entry.pack(fill="x", pady=(2, 0))
+            entry.focus_set()
+
+            msg_var = tk.StringVar(value="")
+            tk.Label(inner, textvariable=msg_var, font=("Segoe UI", 9), bg=bg, fg="#b91c1c", justify="left", wraplength=480).pack(anchor="w", pady=(4, 0))
+
+            btns = tk.Frame(inner, bg=bg)
+            btns.pack(fill="x", pady=(Spacing.LG, 0))
+
+            def do_activate():
+                key = key_var.get().strip()
+                result = license_service.validate_key_with_keygen(key)
+                if not result.get("ok"):
+                    msg_var.set(result.get("message", "No se pudo validar la licencia."))
+                    return
+                license_service.activate_license(key, result.get("expires_at"))
+                msg_var.set("")
+                messagebox.showinfo("Licencia activada", "La licencia se ha activado correctamente.", parent=win)
+                win.destroy()
+                refresh_status()
+
+            ModernButton(btns, text="Activar", icon="✅", style="primary", small=True, command=do_activate).pack(side="right")
+            ModernButton(btns, text="Cancelar", icon="✖", style="secondary", small=True, command=win.destroy).pack(side="right", padx=(0, Spacing.SM))
+
+            win.protocol("WM_DELETE_WINDOW", win.destroy)
+
+        actions = tk.Frame(content, bg=cb)
+        actions.pack(fill="x")
+        ModernButton(actions, text="Activar licencia", icon="🔐", style="primary", small=True, command=open_activate_dialog).pack(side="left")
+        ModernButton(actions, text="Actualizar estado", icon="🔄", style="secondary", small=True, command=refresh_status).pack(side="left", padx=(Spacing.SM, 0))
+
+        refresh_status()
     
     def _create_custom_fields(self):
         """Crea los campos personalizados para proveedor custom"""
+        cb = self._content_bg
+        fg = theme_manager.themes[theme_manager.current_theme].get("text_primary", "#1f2937")
         for widget in self.custom_fields_frame.winfo_children():
             widget.destroy()
-        
-        # Servidor SMTP
-        smtp_server_frame = tk.Frame(self.custom_fields_frame, **theme_manager.get_style("frame"))
-        smtp_server_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            smtp_server_frame,
-            text="Servidor SMTP:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        smtp_server_entry = tk.Entry(
-            smtp_server_frame,
-            textvariable=self.smtp_server_var,
-            font=("Segoe UI", 10),
-            width=50
-        )
-        smtp_server_entry.pack(fill="x")
-        
-        # Puerto SMTP
-        smtp_port_frame = tk.Frame(self.custom_fields_frame, **theme_manager.get_style("frame"))
-        smtp_port_frame.pack(fill="x", pady=(0, Spacing.MD))
-        
-        tk.Label(
-            smtp_port_frame,
-            text="Puerto SMTP:",
-            font=("Segoe UI", 10, "bold"),
-            **theme_manager.get_style("label")
-        ).pack(anchor="w", pady=(0, 5))
-        
-        smtp_port_entry = tk.Entry(
-            smtp_port_frame,
-            textvariable=self.smtp_port_var,
-            font=("Segoe UI", 10),
-            width=10
-        )
-        smtp_port_entry.pack(anchor="w")
+        smtp_server_frame = tk.Frame(self.custom_fields_frame, bg=cb)
+        smtp_server_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(smtp_server_frame, text="Servidor SMTP:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+        tk.Entry(smtp_server_frame, textvariable=self.smtp_server_var, font=("Segoe UI", 10), width=40).pack(fill="x")
+        smtp_port_frame = tk.Frame(self.custom_fields_frame, bg=cb)
+        smtp_port_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(smtp_port_frame, text="Puerto SMTP:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
+        tk.Entry(smtp_port_frame, textvariable=self.smtp_port_var, font=("Segoe UI", 10), width=8).pack(anchor="w")
     
     def _on_provider_changed(self, event=None):
         """Maneja el cambio de proveedor"""
@@ -315,7 +452,7 @@ class SettingsView(tk.Frame):
         
         if provider == "custom":
             if not self.custom_fields_frame.winfo_ismapped():
-                self.custom_fields_frame.pack(fill="x", pady=(0, Spacing.MD))
+                self.custom_fields_frame.pack(fill="x", pady=(0, 4))
             if not hasattr(self, '_custom_fields_created'):
                 self._create_custom_fields()
                 self._custom_fields_created = True
@@ -372,6 +509,20 @@ class SettingsView(tk.Frame):
         success = email_service.save_config(config_data)
         
         if success:
+            # Registrar actividad
+            try:
+                from manager.app.services.user_service import user_service
+                username = "admin"
+                provider = config_data.get("provider", "custom")
+                user_service._log_activity(
+                    username,
+                    "config_changed",
+                    f"Configuración de email SMTP actualizada: {provider} ({email})",
+                    None
+                )
+            except Exception as e:
+                print(f"Error al registrar actividad: {e}")
+            
             messagebox.showinfo("✅ Configuración guardada", "La configuración de email se ha guardado correctamente.")
             # Recargar configuración actual
             self.current_config = email_service.get_config()
@@ -392,3 +543,27 @@ class SettingsView(tk.Frame):
             "La prueba de conexión se realizará al enviar el primer email.\n\n"
             "Las credenciales se validarán automáticamente cuando intente enviar un recibo."
         )
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        colors = get_module_colors("administración")
+        purple_primary = colors["primary"]
+        purple_hover = colors["hover"]
+
+        def go_to_dashboard():
+            if self.on_back:
+                self.on_back()
+
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=purple_primary,
+            fg_color="white",
+            hover_bg=purple_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=14,
+            pady=6,
+            radius=4,
+            border_color=purple_hover
+        )
+        btn_dashboard.pack(side="right")

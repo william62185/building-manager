@@ -6,8 +6,10 @@ import json
 import os
 from typing import Dict, Any, Optional, List
 
-# Define la ruta al archivo de datos de la estructura del edificio
-BUILDING_STRUCTURE_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/building_structure.json'))
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
+BUILDING_STRUCTURE_FILE = str(DATA_DIR / "building_structure.json")
+
 
 class BuildingService:
     """Gestiona la carga y guardado de las estructuras de los edificios."""
@@ -17,6 +19,7 @@ class BuildingService:
 
     def _load_buildings(self) -> List[Dict[str, Any]]:
         """Carga la lista de estructuras de edificios desde el archivo JSON."""
+        ensure_dirs()
         if not os.path.exists(BUILDING_STRUCTURE_FILE):
             return []
         try:
@@ -70,8 +73,29 @@ class BuildingService:
                 self._save_buildings()
                 return True
         return False
+    
+    def update_building(self, building_id: int, updates: Dict[str, Any]) -> bool:
+        """Actualiza múltiples campos de un edificio específico."""
+        for building in self._buildings:
+            if building.get('id') == building_id:
+                # Actualizar solo los campos proporcionados
+                for key, value in updates.items():
+                    building[key] = value
+                self._save_buildings()
+                return True
+        return False
 
-    def create_building_from_wizard(self, name: str, floors_config: List[Dict[str, Any]], special_units: List[Dict[str, Any]]):
+    def create_building_from_wizard(
+        self,
+        name: str,
+        floors_config: List[Dict[str, Any]],
+        special_units: List[Dict[str, Any]],
+        address: str = "",
+        city: str = "",
+        country: str = "",
+        phone: str = "",
+        email: str = "",
+    ):
         """
         Crea y guarda la estructura completa de un nuevo edificio y genera sus unidades
         individuales en el ApartmentService.
@@ -92,7 +116,12 @@ class BuildingService:
             "apartment_count": sum(f['apartment_count'] for f in floors_config),
             "special_unit_count": len(special_units),
             "floors": floors_config,
-            "special_units": special_units
+            "special_units": special_units,
+            "address": address,
+            "city": city,
+            "country": country,
+            "phone": phone,
+            "email": email,
         }
         self._buildings.append(new_building)
         self._save_buildings()

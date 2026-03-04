@@ -13,7 +13,7 @@ import platform
 from ..components.theme_manager import theme_manager, Spacing
 from ..components.icons import Icons
 from ..components.modern_widgets import (
-    ModernButton, ModernCard, ModernBadge, ModernSeparator
+    ModernButton, ModernCard, ModernBadge, ModernSeparator, create_rounded_button, get_module_colors
 )
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.building_service import building_service
@@ -21,12 +21,17 @@ from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.email_service import email_service
 from manager.app.services.notification_service import notification_service
+from manager.app.paths_config import (
+    DOCUMENTOS_INQUILINOS_DIR,
+    ensure_dirs,
+    get_tenant_document_folder_name,
+)
 from datetime import datetime, timedelta
 
 class TenantDetailsView(tk.Frame):
     """Vista de detalles de inquilino"""
     
-    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None):
+    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None, on_navigate_to_dashboard: Callable = None, read_only: bool = False):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         # Recargar datos del inquilino desde el servicio para asegurar datos actualizados
@@ -48,12 +53,17 @@ class TenantDetailsView(tk.Frame):
         self.on_back = on_back
         self.on_edit = on_edit
         self.on_register_payment = on_register_payment
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
+        self.read_only = read_only  # Modo solo lectura (sin opción de editar)
         
         # Crear layout
         self._create_layout()
     
     def _create_layout(self):
         """Crea el layout principal de la vista (compacta y sin espacios extra)"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         # Header con navegación
         self._create_header()
         # Contenedor principal con scroll
@@ -65,37 +75,33 @@ class TenantDetailsView(tk.Frame):
     
     def _create_header(self):
         """Crea el header con título y navegación"""
-        header_frame = tk.Frame(self, **theme_manager.get_style("frame"))
+        header_frame = tk.Frame(self, bg=self._content_bg)
         header_frame.pack(fill="x", pady=(0, Spacing.LG))
+
+        # Título con nombre del inquilino (a la izquierda)
+        title_frame = tk.Frame(header_frame, bg=self._content_bg)
+        title_frame.pack(side="left", fill="x", expand=True)
         
-        # Botón volver
-        nav_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
-        nav_frame.pack(side="left")
+        # Frame para botones de navegación (a la derecha)
+        nav_frame = tk.Frame(header_frame, bg=self._content_bg)
+        nav_frame.pack(side="right")
         
-        btn_back = ModernButton(
-            nav_frame,
-            text="Volver",
-            icon=Icons.ARROW_LEFT,
-            style="secondary",
-            command=self._on_back_clicked
-        )
-        btn_back.pack(side="left")
-        
-        # Título con nombre del inquilino
-        title_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
-        title_frame.pack(side="left", fill="x", expand=True, padx=(Spacing.LG, 0))
+        # Crear botones con el mismo estilo que otras vistas
+        self._create_navigation_buttons(nav_frame, self._on_back_clicked)
         
         # Nombre del inquilino
+        theme = theme_manager.themes[theme_manager.current_theme]
         name_label = tk.Label(
             title_frame,
             text=self.tenant_data.get("nombre", "Inquilino"),
-            **theme_manager.get_style("label_title")
+            font=("Segoe UI", 20, "bold"),
+            bg=self._content_bg,
+            fg=theme["text_primary"]
         )
-        name_label.configure(font=("Segoe UI", 20, "bold"))
         name_label.pack(anchor="w")
         
         # Información básica con badge de estado
-        info_frame = tk.Frame(title_frame, **theme_manager.get_style("frame"))
+        info_frame = tk.Frame(title_frame, bg=self._content_bg)
         info_frame.pack(anchor="w", pady=(Spacing.XS, 0))
         
         # --- Display amigable del apartamento ---
@@ -118,7 +124,9 @@ class TenantDetailsView(tk.Frame):
         apt_label = tk.Label(
             info_frame,
             text=apt_display,
-            **theme_manager.get_style("label_subtitle")
+            font=("Segoe UI", 11),
+            bg=self._content_bg,
+            fg=theme["text_secondary"]
         )
         apt_label.pack(side="left")
         
@@ -146,7 +154,7 @@ class TenantDetailsView(tk.Frame):
         status_badge.pack(side="left", padx=(Spacing.MD, 0))
         
         # Botones de acción
-        actions_frame = tk.Frame(header_frame, **theme_manager.get_style("frame"))
+        actions_frame = tk.Frame(header_frame, bg=self._content_bg)
         actions_frame.pack(side="right")
         
         btn_pdf = ModernButton(
@@ -157,23 +165,25 @@ class TenantDetailsView(tk.Frame):
             command=self._generate_pdf
         )
         btn_pdf.pack(side="right", padx=(0, Spacing.MD))
-        btn_edit = ModernButton(
-            actions_frame,
-            text="Editar",
-            icon=Icons.EDIT,
-            style="primary",
-            command=self._on_edit_clicked
-        )
-        btn_edit.pack(side="right")
+        # Solo mostrar botón de editar si no está en modo solo lectura
+        if not self.read_only:
+            btn_edit = ModernButton(
+                actions_frame,
+                text="Editar",
+                icon=Icons.EDIT,
+                style="primary",
+                command=self._on_edit_clicked
+            )
+            btn_edit.pack(side="right")
     
     def _create_scroll_container(self):
         """Crea el container con scroll vertical funcional y compacto"""
-        self.canvas = tk.Canvas(self, **theme_manager.get_style("frame"), highlightthickness=0)
+        self.canvas = tk.Canvas(self, bg=self._content_bg, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, pady=(0, 0), padx=(0, 0))
         scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         scrollbar.pack(side="right", fill="y")
         self.canvas.configure(yscrollcommand=scrollbar.set)
-        self.scrollable_frame = tk.Frame(self.canvas, **theme_manager.get_style("frame"))
+        self.scrollable_frame = tk.Frame(self.canvas, bg=self._content_bg)
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
@@ -181,11 +191,11 @@ class TenantDetailsView(tk.Frame):
     
     def _create_content(self):
         """Crea el contenido principal (aún más compacto, sin espacios extra)"""
-        content_grid = tk.Frame(self.scrollable_frame, **theme_manager.get_style("frame"))
+        content_grid = tk.Frame(self.scrollable_frame, bg=self._content_bg)
         content_grid.pack(fill="both", expand=True, pady=(0, 0), padx=(0, 0))
-        left_column = tk.Frame(content_grid, **theme_manager.get_style("frame"))
+        left_column = tk.Frame(content_grid, bg=self._content_bg)
         left_column.pack(side="left", fill="both", expand=True, padx=(0, 2))
-        right_column = tk.Frame(content_grid, **theme_manager.get_style("frame"))
+        right_column = tk.Frame(content_grid, bg=self._content_bg)
         right_column.pack(side="right", fill="both", expand=True, padx=(2, 0))
         self._create_personal_info_section(left_column)
         self._create_emergency_contact_section(left_column)
@@ -195,11 +205,11 @@ class TenantDetailsView(tk.Frame):
     
     def _create_personal_info_section(self, parent):
         """Crea la sección de información personal"""
-        section = ModernCard(
-            parent,
-            title="Información Personal"
-        )
+        section = ModernCard(parent, title="Información Personal", bg=self._content_bg)
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.configure(bg=self._content_bg)
+        for w in section.content_frame.winfo_children():
+            w.configure(bg=self._content_bg)
         section.content_frame.pack_configure(pady=(0, 0))
         info_data = [
             ("Nombre completo", self.tenant_data.get("nombre", "N/A")),
@@ -212,11 +222,11 @@ class TenantDetailsView(tk.Frame):
     
     def _create_emergency_contact_section(self, parent):
         """Crea la sección de contacto de emergencia"""
-        section = ModernCard(
-            parent,
-            title="Contacto de Emergencia"
-        )
+        section = ModernCard(parent, title="Contacto de Emergencia", bg=self._content_bg)
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.configure(bg=self._content_bg)
+        for w in section.content_frame.winfo_children():
+            w.configure(bg=self._content_bg)
         section.content_frame.pack_configure(pady=(0, 0))
         emergency_data = [
             ("Nombre", self.tenant_data.get("contacto_emergencia_nombre", "No registrado")),
@@ -227,11 +237,11 @@ class TenantDetailsView(tk.Frame):
     
     def _create_housing_info_section(self, parent):
         """Crea la sección de información de vivienda"""
-        section = ModernCard(
-            parent,
-            title="Información de Vivienda"
-        )
+        section = ModernCard(parent, title="Información de Vivienda", bg=self._content_bg)
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.configure(bg=self._content_bg)
+        for w in section.content_frame.winfo_children():
+            w.configure(bg=self._content_bg)
         section.content_frame.pack_configure(pady=(0, 0))
         valor_arriendo = self.tenant_data.get("valor_arriendo")
         # --- Display amigable del apartamento ---
@@ -282,13 +292,13 @@ class TenantDetailsView(tk.Frame):
     
     def _create_payment_info_section(self, parent):
         """Crea la sección de información de pagos"""
-        section = ModernCard(
-            parent,
-            title="Información de Pagos"
-        )
+        section = ModernCard(parent, title="Información de Pagos", bg=self._content_bg)
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.content_frame.configure(bg=self._content_bg)
+        for w in section.content_frame.winfo_children():
+            w.configure(bg=self._content_bg)
         section.content_frame.pack_configure(pady=(0, 0))
-        
+
         # Calcular información de pagos basándose en datos reales
         tenant_id = self.tenant_data.get("id")
         ultimo_pago_display = "No registrado"
@@ -352,11 +362,11 @@ class TenantDetailsView(tk.Frame):
         btn_history.pack(anchor="w", pady=(2, 0), padx=(0, 0))
     
     def _create_documents_section_simple(self, parent):
-        section = ModernCard(
-            parent,
-            title="Documentos Adjuntos",
-        )
+        section = ModernCard(parent, title="Documentos Adjuntos", bg=self._content_bg)
         section.pack(fill="x")
+        section.content_frame.configure(bg=self._content_bg)
+        for w in section.content_frame.winfo_children():
+            w.configure(bg=self._content_bg)
         archivos = self.tenant_data.get("archivos", {})
         if isinstance(archivos, str):
             try:
@@ -366,55 +376,29 @@ class TenantDetailsView(tk.Frame):
                 archivos = {}
         doc_id = archivos.get("id") if archivos else None
         doc_contract = archivos.get("contract") if archivos else None
-        id_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
+        id_row = tk.Frame(section.content_frame, bg=cb)
         id_row.pack(fill="x", pady=(0, 2))
-        id_label = tk.Label(
-            id_row,
-            text="• Documento de Identidad:",
-            **theme_manager.get_style("label_body")
-        )
+        id_label = tk.Label(id_row, text="• Documento de Identidad:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"])
         id_label.pack(side="left")
         if doc_id and str(doc_id).strip():
             import os
             filename = os.path.basename(str(doc_id))
-            id_status = tk.Label(
-                id_row,
-                text=f"✓ {filename}",
-                fg=theme_manager.themes[theme_manager.current_theme]["success"],
-                **theme_manager.get_style("frame")
-            )
+            id_status = tk.Label(id_row, text=f"✓ {filename}", fg=theme.get("success", "#22c55e"), bg=cb)
         else:
-            id_status = tk.Label(
-                id_row,
-                text="✗ No adjuntado",
-                fg=theme_manager.themes[theme_manager.current_theme]["error"],
-                **theme_manager.get_style("frame")
-            )
+            id_status = tk.Label(id_row, text="✗ No adjuntado", fg=theme.get("error", "#dc2626"), bg=cb)
         id_status.pack(side="right")
-        contract_row = tk.Frame(section.content_frame, **theme_manager.get_style("frame"))
+        contract_row = tk.Frame(section.content_frame, bg=cb)
         contract_row.pack(fill="x", pady=(0, 2))
-        contract_label = tk.Label(
-            contract_row,
-            text="• Contrato de Arrendamiento:",
-            **theme_manager.get_style("label_body")
-        )
+        contract_label = tk.Label(contract_row, text="• Contrato de Arrendamiento:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"])
         contract_label.pack(side="left")
         if doc_contract and str(doc_contract).strip():
             import os
             filename = os.path.basename(str(doc_contract))
-            contract_status = tk.Label(
-                contract_row,
-                text=f"✓ {filename}",
-                fg=theme_manager.themes[theme_manager.current_theme]["success"],
-                **theme_manager.get_style("frame")
-            )
+            contract_status = tk.Label(contract_row, text=f"✓ {filename}", fg=theme.get("success", "#22c55e"), bg=cb)
         else:
-            contract_status = tk.Label(
-                contract_row,
-                text="✗ No adjuntado",
-                fg=theme_manager.themes[theme_manager.current_theme]["error"],
-                **theme_manager.get_style("frame")
-            )
+            contract_status = tk.Label(contract_row, text="✗ No adjuntado", fg=theme.get("error", "#dc2626"), bg=cb)
         contract_status.pack(side="right")
         btn_docs = ModernButton(
             section.content_frame,
@@ -428,30 +412,36 @@ class TenantDetailsView(tk.Frame):
     
     def _create_info_row(self, parent, label: str, value: str):
         """Crea una fila de información ultra compacta"""
-        row_frame = tk.Frame(parent, **theme_manager.get_style("frame"))
+        bg = parent.cget("bg")
+        theme = theme_manager.themes[theme_manager.current_theme]
+        row_frame = tk.Frame(parent, bg=bg)
         row_frame.pack(fill="x", pady=(0, 0), ipady=0, ipadx=0)
-        # Label
         label_widget = tk.Label(
             row_frame,
             text=f"{label}:",
-            **theme_manager.get_style("label_body")
+            font=("Segoe UI", 10, "bold"),
+            bg=bg,
+            fg=theme["text_primary"],
+            pady=0,
+            padx=0
         )
-        label_widget.configure(font=("Segoe UI", 10, "bold"), pady=0, padx=0)
         label_widget.pack(side="left", padx=(0, 2))
-        # Value
         value_widget = tk.Label(
             row_frame,
             text=str(value),
-            **theme_manager.get_style("label_body")
+            font=("Segoe UI", 10),
+            bg=bg,
+            fg=theme["text_primary"],
+            pady=0,
+            padx=0
         )
-        value_widget.configure(font=("Segoe UI", 10), pady=0, padx=0)
         value_widget.pack(side="right", padx=(0, 2))
     
     def _create_action_buttons(self):
         """Crea los botones de acción (sin espacio extra arriba)"""
-        actions_frame = tk.Frame(self, **theme_manager.get_style("frame"))
+        actions_frame = tk.Frame(self, bg=self._content_bg)
         actions_frame.pack(fill="x", pady=(0, 0))
-        buttons_frame = tk.Frame(actions_frame, **theme_manager.get_style("frame"))
+        buttons_frame = tk.Frame(actions_frame, bg=self._content_bg)
         buttons_frame.pack(pady=(0, 0))
         btn_payment = ModernButton(
             buttons_frame,
@@ -483,6 +473,75 @@ class TenantDetailsView(tk.Frame):
         """Maneja el clic en volver"""
         if self.on_back:
             self.on_back()
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo moderno y colores azules del módulo de inquilinos"""
+        # Colores azules para módulo de inquilinos
+        colors = get_module_colors("inquilinos")
+        blue_primary = colors["primary"]
+        blue_hover = colors["hover"]
+        blue_light = colors["light"]
+        blue_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    if self.on_navigate_to_dashboard:
+                        self.on_navigate_to_dashboard("dashboard")
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow a través de la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+        
+        # Botón "Volver" (primero, más a la derecha)
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=blue_primary,
+            hover_bg=blue_light,
+            hover_fg=blue_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard" (segundo, a la izquierda de Volver)
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=blue_primary,
+            fg_color="white",
+            hover_bg=blue_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
     
     def _on_edit_clicked(self):
         """Maneja el clic en editar"""
@@ -575,7 +634,7 @@ class TenantDetailsView(tk.Frame):
             text=f"Total pagado: ${total_monto:,.0f}",
             font=("Segoe UI", 11, "bold"),
             bg="white",
-            fg="#4caf50"
+            fg="#2563eb"  # Azul para mantener tonalidad azul del módulo
         ).pack(side="left")
         
         # Frame para la tabla con encabezado fijo
@@ -703,7 +762,7 @@ class TenantDetailsView(tk.Frame):
                     text=f"${monto:,.0f}",
                     font=("Segoe UI", 10, "bold"),
                     bg=bg_color,
-                    fg="#4caf50",
+                    fg="#2563eb",  # Azul para mantener tonalidad azul del módulo
                     anchor="w",
                     padx=10,
                     pady=8
@@ -875,7 +934,7 @@ class TenantDetailsView(tk.Frame):
             dialog.clipboard_clear()
             dialog.clipboard_append(file_path)
             dialog.update()
-            copy_btn.config(text="✓ Copiado", bg="#4caf50")
+            copy_btn.config(text="✓ Copiado", bg="#2563eb")  # Azul para mantener tonalidad azul del módulo
             dialog.after(1500, lambda: copy_btn.config(text="📋 Copiar", bg="#1976d2"))
         
         def open_folder():
@@ -957,7 +1016,7 @@ class TenantDetailsView(tk.Frame):
                     buttons_frame,
                     text="📧 Enviar por Email",
                     font=("Segoe UI", 9, "bold"),
-                    bg="#4caf50",
+                    bg="#2563eb",  # Azul para mantener tonalidad azul del módulo
                     fg="white",
                     relief="flat",
                     padx=15,
@@ -990,9 +1049,36 @@ class TenantDetailsView(tk.Frame):
         # Hacer el diálogo modal
         dialog.wait_window()
     
+    def _resolve_document_path(self, relative_path: str) -> str:
+        """Convierte ruta relativa de archivo (en documentos_inquilinos) a ruta absoluta."""
+        if not relative_path or not str(relative_path).strip():
+            return ""
+        path = str(relative_path).strip()
+        if os.path.isabs(path) and os.path.sep in path:
+            return path
+        return str(DOCUMENTOS_INQUILINOS_DIR / path.replace("/", os.path.sep))
+
     def _manage_documents(self):
-        """Gestiona documentos del inquilino"""
-        messagebox.showinfo("Info", "Gestión de documentos en desarrollo")
+        """Abre la carpeta del inquilino en el explorador y permite abrir cédula/contrato si existen."""
+        folder_name = get_tenant_document_folder_name(self.tenant_data)
+        tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+        if not tenant_dir.exists():
+            messagebox.showinfo(
+                "Documentos",
+                f"Aún no hay carpeta de documentos para este inquilino.\n\n"
+                f"Se creará al guardar cédula o contrato desde Editar inquilino."
+            )
+            return
+        path_str = str(tenant_dir)
+        try:
+            if platform.system() == "Windows":
+                os.startfile(path_str)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", path_str])
+            else:
+                subprocess.Popen(["xdg-open", path_str])
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la carpeta: {e}")
     
     def _register_payment(self):
         if hasattr(self, 'on_register_payment') and self.on_register_payment:
@@ -1157,7 +1243,7 @@ class TenantDetailsView(tk.Frame):
                 text=f"💰 ${monto:,.0f}",
                 font=("Segoe UI", 11, "bold"),
                 bg="#f8f9fa",
-                fg="#4caf50"
+                fg="#2563eb"  # Azul para mantener tonalidad azul del módulo
             )
             monto_label.pack(side="left", padx=(20, 0))
             
@@ -1283,12 +1369,11 @@ class TenantDetailsView(tk.Frame):
             )
             return
         
-        # Construir la ruta esperada del recibo
-        nombre = payment.get("nombre_inquilino", tenant_name).replace(" ", "_")
-        fecha = payment_date.replace("/", "-")
-        base_filename = f"recibo_pago_{nombre}_{fecha}"
-        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../recibos'))
-        pdf_path = os.path.join(folder, f"{base_filename}.pdf")
+        # Construir la ruta esperada del recibo (carpeta del inquilino)
+        ensure_dirs()
+        folder_name = get_tenant_document_folder_name(self.tenant_data)
+        fecha_safe = payment_date.replace("/", "-")
+        pdf_path = str(DOCUMENTOS_INQUILINOS_DIR / folder_name / f"recibo_{fecha_safe}.pdf")
         
         # Verificar si el archivo existe
         if not os.path.exists(pdf_path):
@@ -1340,15 +1425,12 @@ class TenantDetailsView(tk.Frame):
             # Obtener datos del inquilino
             tenant = self.tenant_data
             
-            # Crear carpeta de recibos si no existe
-            folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../recibos'))
-            os.makedirs(folder, exist_ok=True)
-            
-            # Nombre del archivo base
-            nombre = payment.get("nombre_inquilino", tenant.get("nombre", "Inquilino")).replace(" ", "_")
+            ensure_dirs()
+            folder_name = get_tenant_document_folder_name(tenant)
+            tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+            tenant_dir.mkdir(parents=True, exist_ok=True)
             fecha = payment.get("fecha_pago", "").replace("/", "-")
-            base_filename = f"recibo_pago_{nombre}_{fecha}"
-            filepath = os.path.join(folder, f"{base_filename}.pdf")
+            filepath = str(tenant_dir / f"recibo_{fecha}.pdf")
             
             # Verificar si el archivo existe y está bloqueado
             if os.path.exists(filepath):
@@ -1975,13 +2057,12 @@ class TenantDetailsView(tk.Frame):
         from tkinter import messagebox
         from datetime import datetime
 
+        ensure_dirs()
         tenant = self.tenant_data
-        nombre = tenant.get("nombre", "Inquilino").replace(" ", "_")
-        apartamento = str(tenant.get("apartamento", "N/A")).replace(" ", "_")
-        filename = f"ficha_{nombre}_{apartamento}.pdf"
-        folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../fichas'))
-        os.makedirs(folder, exist_ok=True)
-        filepath = os.path.join(folder, filename)
+        folder_name = get_tenant_document_folder_name(tenant)
+        tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+        filepath = str(tenant_dir / "ficha.pdf")
 
         c = canvas.Canvas(filepath, pagesize=letter)
         width, height = letter

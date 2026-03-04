@@ -12,20 +12,30 @@ import csv
 from pathlib import Path
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
-from manager.app.ui.components.modern_widgets import ModernButton
+from manager.app.ui.components.icons import Icons
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
+from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
+
+# Rojo más oscuro del módulo para iconos, títulos y botones (contraste)
+DARK_RED = "#991b1b"
+# Fondo sólido de las cards (rojo claro) para que no queden transparentes
+CARD_BG = "#fee2e2"
 
 
 class ExpenseReportsView(tk.Frame):
     """Vista completa de reportes de gastos del sistema"""
     
-    def __init__(self, parent, on_back: Callable = None):
+    def __init__(self, parent, on_back: Callable = None, on_navigate_to_dashboard: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.on_back = on_back
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard
         self.expense_service = ExpenseService()
         
-        # Recargar datos antes de generar reportes
         self._reload_all_data()
         
         self._create_layout()
@@ -40,164 +50,114 @@ class ExpenseReportsView(tk.Frame):
     
     def _create_layout(self):
         """Crea el layout principal de la vista de reportes"""
-        # Header
-        header = tk.Frame(self, bg="#f8f9fa", height=60)
-        header.pack(fill="x")
-        header.pack_propagate(False)
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
         
-        title_frame = tk.Frame(header, bg="#f8f9fa")
-        title_frame.pack(side="left", padx=15, fill="y", expand=True)
-        
-        tk.Label(
-            title_frame,
-            text="📊 Reportes de Gastos",
-            font=("Segoe UI", 18, "bold"),
-            bg="#f8f9fa",
-            fg="#2c3e50"
-        ).pack(side="left", pady=15)
-        
-        if self.on_back:
-            ModernButton(
-                header,
-                text="← Volver",
-                style="secondary",
-                command=self.on_back
-            ).pack(side="right", padx=15, pady=15)
-        
-        # Contenedor principal sin scroll
-        main_container = tk.Frame(self, bg="#ffffff")
+        main_container = tk.Frame(self, bg=cb)
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # Contenido de reportes directamente en el contenedor principal
+        header_frame = tk.Frame(main_container, bg=cb)
+        header_frame.pack(fill="x", pady=(0, Spacing.MD))
+        
+        title_label = tk.Label(
+            header_frame,
+            text="📊 Reportes de Gastos",
+            font=("Segoe UI", 18, "bold"),
+            bg=cb,
+            fg=theme["text_primary"]
+        )
+        title_label.pack(side="left", padx=(0, Spacing.LG))
+        
+        if self.on_back:
+            self._create_navigation_buttons(header_frame, self.on_back)
+        
         self._create_reports_content(main_container)
     
     def _create_reports_content(self, parent):
         """Crea el contenido de los reportes"""
-        # Contenedor principal que usa todo el espacio disponible
-        cards_container = tk.Frame(parent, bg="#ffffff")
+        cb = self._content_bg
+        
+        cards_container = tk.Frame(parent, bg=cb)
         cards_container.pack(fill="both", expand=True, pady=(0, 10))
         
-        # Grid de cards - 4 columnas que se ajustan al espacio disponible
-        cards_grid = tk.Frame(cards_container, bg="#ffffff")
+        cards_grid = tk.Frame(cards_container, bg=cb)
         cards_grid.pack(fill="both", expand=True, padx=15, pady=10)
         
-        # Configurar grid para que las columnas se distribuyan equitativamente (4 columnas)
+        # Tres columnas: Categoría y Subtipo, Apartamento, Comparativa Anual
         cards_grid.columnconfigure(0, weight=1, uniform="cards", minsize=200)
         cards_grid.columnconfigure(1, weight=1, uniform="cards", minsize=200)
         cards_grid.columnconfigure(2, weight=1, uniform="cards", minsize=200)
-        cards_grid.columnconfigure(3, weight=1, uniform="cards", minsize=200)
         
-        # Definir los reportes específicos de gastos
         reports = [
-            ("📅 Reporte por Período", 
-             "Análisis de gastos por rango de fechas con comparativas.",
-             "#2196F3", 
-             self._generate_period_report),
-            ("📂 Reporte por Categoría", 
-             "Gastos agrupados por categoría con estadísticas.",
-             "#9C27B0", 
-             self._generate_category_report),
-            ("🏢 Reporte por Apartamento", 
+            ("📂 Reporte por Categoría y Subtipo",
+             "Gastos agrupados por categoría y por subtipo con estadísticas.",
+             self._generate_category_and_subtype_report),
+            ("🏢 Reporte por Apartamento",
              "Análisis de gastos agrupados por apartamento.",
-             "#4CAF50", 
              self._generate_apartment_report),
-            ("💰 Reporte Consolidado", 
-             "Vista financiera con totales, promedios y proyecciones.",
-             "#F44336", 
-             self._generate_consolidated_report),
-            ("📈 Análisis de Tendencias", 
-             "Evolución de gastos en el tiempo con comparativas.",
-             "#FF9800", 
-             self._generate_trends_report),
-            ("🔍 Reporte por Subtipo", 
-             "Gastos agrupados por subtipo dentro de cada categoría.",
-             "#00BCD4", 
-             self._generate_subtype_report),
-            ("📊 Comparativa Anual", 
+            ("📊 Comparativa Anual",
              "Comparar gastos entre diferentes años.",
-             "#FF5722", 
              self._generate_year_comparison_report),
-            ("🔄 Gastos Recurrentes", 
-             "Identificar gastos que se repiten periódicamente.",
-             "#795548", 
-             self._generate_recurring_expenses_report)
         ]
         
-        # Colocar cards en grid 4 columnas (2 filas de 4 cards)
         row = 0
         col = 0
-        for title, description, color, command in reports:
-            card = self._create_report_card(
-                cards_grid,
-                title,
-                description,
-                color,
-                command
-            )
+        for title, description, command in reports:
+            card = self._create_report_card(cards_grid, title, description, command)
             card.grid(row=row, column=col, padx=10, pady=8, sticky="nsew")
-            
-            # Avanzar a la siguiente posición (4 columnas)
             col += 1
-            if col >= 4:
+            if col >= 3:
                 col = 0
                 row += 1
         
-        # Configurar las filas para que se distribuyan equitativamente (2 filas) - altura aumentada
         for r in range(row + 1):
             cards_grid.rowconfigure(r, weight=1, uniform="rows", minsize=200)
     
-    def _create_report_card(self, parent, title, description, color, command):
-        """Crea una tarjeta de reporte que se ajusta uniformemente al espacio disponible"""
-        card = tk.Frame(
-            parent,
-            bg="white",
-            relief="raised",
-            bd=2
-        )
+    def _create_report_card(self, parent, title, description, command):
+        """Crea una tarjeta de reporte con fondo sólido (CARD_BG), rojo oscuro para icono, título y botón. Mismo estilo que reportes de pagos."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        card_bg = CARD_BG
+        card = tk.Frame(parent, bg=card_bg, relief="raised", bd=2)
         
-        content = tk.Frame(card, bg="white")
-        # Padding ajustado para mejor distribución
+        content = tk.Frame(card, bg=card_bg)
         content.pack(fill="both", expand=True, padx=14, pady=12)
         
-        # Contenedor para título con wraplength dinámico
-        title_frame = tk.Frame(content, bg="white")
+        title_frame = tk.Frame(content, bg=card_bg)
         title_frame.pack(anchor="w", pady=(0, 6), fill="x")
         
-        # Icono y título
         title_label = tk.Label(
             title_frame,
             text=title,
             font=("Segoe UI", 13, "bold"),
-            bg="white",
-            fg=color,
+            bg=card_bg,
+            fg=DARK_RED,
             anchor="w",
             justify="left",
-            wraplength=1  # Se ajustará automáticamente al ancho del frame
+            wraplength=1
         )
         title_label.pack(anchor="w", fill="x")
         
-        # Descripción - se ajusta al ancho disponible, más compacta
         desc_label = tk.Label(
             content,
             text=description,
             font=("Segoe UI", 9),
-            bg="white",
-            fg="#666",
+            bg=card_bg,
+            fg=theme.get("text_secondary", "#666"),
             justify="left",
             anchor="w",
-            wraplength=1  # Se ajustará automáticamente
+            wraplength=1
         )
         desc_label.pack(anchor="w", pady=(0, 8), fill="x", expand=True)
         
-        # Botón generar - siempre al fondo con tamaño consistente
-        btn_frame = tk.Frame(content, bg="white")
+        btn_frame = tk.Frame(content, bg=card_bg)
         btn_frame.pack(fill="x", side="bottom", pady=(4, 0))
         
+        btn_red_hover = "#b91c1c"
         btn = tk.Button(
             btn_frame,
             text="Generar Reporte",
             font=("Segoe UI", 9, "bold"),
-            bg=color,
+            bg=DARK_RED,
             fg="white",
             relief="flat",
             padx=15,
@@ -206,46 +166,49 @@ class ExpenseReportsView(tk.Frame):
             command=command
         )
         btn.pack(fill="x")
+        btn.bind("<Enter>", lambda e: btn.config(bg=btn_red_hover))
+        btn.bind("<Leave>", lambda e: btn.config(bg=DARK_RED))
         
-        # Función para actualizar wraplength cuando el card cambie de tamaño
         def update_wraplength(event=None):
             if event:
                 card_width = card.winfo_width()
-                if card_width > 20:  # Solo actualizar si el card tiene un tamaño válido
-                    # Calcular wraplength considerando el padding
-                    available_width = card_width - 28  # 14px padding a cada lado
+                if card_width > 20:
+                    available_width = card_width - 28
                     title_label.config(wraplength=max(available_width, 100))
                     desc_label.config(wraplength=max(available_width, 100))
         
         card.bind("<Configure>", update_wraplength)
         
-        # Hover effect
+        hover_bg = "#fecaca"
         def on_enter(event):
-            card.configure(bg="#f5f5f5")
-            content.configure(bg="#f5f5f5")
-            title_frame.configure(bg="#f5f5f5")
-            title_label.configure(bg="#f5f5f5")
-            desc_label.configure(bg="#f5f5f5")
-            btn_frame.configure(bg="#f5f5f5")
+            card.configure(bg=hover_bg)
+            content.configure(bg=hover_bg)
+            title_frame.configure(bg=hover_bg)
+            title_label.configure(bg=hover_bg)
+            desc_label.configure(bg=hover_bg)
+            btn_frame.configure(bg=hover_bg)
         
         def on_leave(event):
-            card.configure(bg="white")
-            content.configure(bg="white")
-            title_frame.configure(bg="white")
-            title_label.configure(bg="white")
-            desc_label.configure(bg="white")
-            btn_frame.configure(bg="white")
+            card.configure(bg=card_bg)
+            content.configure(bg=card_bg)
+            title_frame.configure(bg=card_bg)
+            title_label.configure(bg=card_bg)
+            desc_label.configure(bg=card_bg)
+            btn_frame.configure(bg=card_bg)
         
-        card.bind("<Enter>", on_enter)
+        def bind_enter_to_children(widget):
+            widget.bind("<Enter>", on_enter)
+            for child in widget.winfo_children():
+                bind_enter_to_children(child)
+        
+        bind_enter_to_children(card)
         card.bind("<Leave>", on_leave)
-        content.bind("<Enter>", on_enter)
-        content.bind("<Leave>", on_leave)
         
         return card
     
     # ==================== GENERADORES DE REPORTES ====================
     
-    def _create_period_selection_window(self, title="Seleccionar Período", on_generate=None, button_color="#2196F3"):
+    def _create_period_selection_window(self, title="Seleccionar Período", on_generate=None, button_color="#dc2626"):
         """Crea una ventana reutilizable para seleccionar período de reporte"""
         period_window = tk.Toplevel(self)
         period_window.title(title)
@@ -499,90 +462,6 @@ class ExpenseReportsView(tk.Frame):
         
         return filtered, period_name
     
-    def _generate_period_report(self):
-        """Genera reporte de gastos por período"""
-        try:
-            self._reload_all_data()
-            
-            expenses = self.expense_service.get_all_expenses()
-            
-            def on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window):
-                filtered, period_name = self._filter_expenses_by_period(
-                    expenses, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry
-                )
-                
-                if filtered is None:
-                    messagebox.showerror("Error", "Por favor complete todos los campos requeridos.")
-                    return
-                
-                if not filtered:
-                    messagebox.showinfo("Sin datos", f"No hay gastos registrados para el período seleccionado.")
-                    period_window.destroy()
-                    return
-                
-                period_window.destroy()
-                self._show_report_window(
-                    f"Reporte de Gastos - {period_name}",
-                    self._format_period_report(filtered, period_name),
-                    "expense_period"
-                )
-            
-            self._create_period_selection_window("Seleccionar Período", on_generate)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte por período: {str(e)}")
-    
-    def _generate_category_report(self):
-        """Genera reporte de gastos por categoría"""
-        try:
-            self._reload_all_data()
-            
-            expenses = self.expense_service.get_all_expenses()
-            
-            if not expenses:
-                messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
-                return
-            
-            def on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window):
-                filtered, period_name = self._filter_expenses_by_period(
-                    expenses, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry
-                )
-                
-                if filtered is None:
-                    messagebox.showerror("Error", "Por favor complete todos los campos requeridos.")
-                    return
-                
-                if not filtered:
-                    messagebox.showinfo("Sin datos", f"No hay gastos registrados para el período seleccionado.")
-                    period_window.destroy()
-                    return
-                
-                # Agrupar por categoría
-                categories_dict = {}
-                for expense in filtered:
-                    category = expense.get('categoria', 'Sin categoría')
-                    if category not in categories_dict:
-                        categories_dict[category] = {
-                            'count': 0,
-                            'total': 0,
-                            'expenses': []
-                        }
-                    categories_dict[category]['count'] += 1
-                    categories_dict[category]['total'] += float(expense.get('monto', 0))
-                    categories_dict[category]['expenses'].append(expense)
-                
-                period_window.destroy()
-                self._show_report_window(
-                    f"Reporte por Categoría - {period_name}",
-                    self._format_category_report(categories_dict, len(filtered), period_name),
-                    "category"
-                )
-            
-            self._create_period_selection_window("Seleccionar Período - Categoría", on_generate, button_color="#9C27B0")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte por categoría: {str(e)}")
-    
     def _generate_apartment_report(self):
         """Genera reporte de gastos por apartamento"""
         try:
@@ -800,7 +679,6 @@ class ExpenseReportsView(tk.Frame):
                 
                 if not filtered:
                     messagebox.showinfo("Sin datos", f"No hay gastos registrados para el período seleccionado.")
-                    period_window.destroy()
                     return
                 
                 # Filtrar por apartamento si se seleccionó uno específico
@@ -812,7 +690,6 @@ class ExpenseReportsView(tk.Frame):
                 
                 if not filtered:
                     messagebox.showinfo("Sin datos", f"No hay gastos registrados para los criterios seleccionados.")
-                    period_window.destroy()
                     return
                 
                 # Agrupar por apartamento
@@ -842,7 +719,7 @@ class ExpenseReportsView(tk.Frame):
                 button_frame,
                 text="Generar Reporte",
                 font=("Segoe UI", 11, "bold"),
-                bg="#4CAF50",
+                bg="#dc2626",  # red-600 - rojo para mantener tonalidad roja del módulo
                 fg="white",
                 relief="flat",
                 padx=30,
@@ -854,159 +731,58 @@ class ExpenseReportsView(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte por apartamento: {str(e)}")
     
-    def _generate_consolidated_report(self):
-        """Genera reporte consolidado de gastos"""
+    def _generate_category_and_subtype_report(self):
+        """Genera reporte combinado por categoría y por subtipo"""
         try:
             self._reload_all_data()
-            
             expenses = self.expense_service.get_all_expenses()
-            
             if not expenses:
                 messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
                 return
-            
+
             def on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window):
                 filtered, period_name = self._filter_expenses_by_period(
                     expenses, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry
                 )
-                
                 if filtered is None:
                     messagebox.showerror("Error", "Por favor complete todos los campos requeridos.")
                     return
-                
                 if not filtered:
                     messagebox.showinfo("Sin datos", f"No hay gastos registrados para el período seleccionado.")
-                    period_window.destroy()
                     return
-                
-                # Calcular totales
-                total_expenses = sum(float(e.get('monto', 0)) for e in filtered)
-                avg_expense = total_expenses / len(filtered) if filtered else 0
-                
-                # Filtrar por período para comparativas
-                now = datetime.now()
-                this_month = [e for e in filtered if self._is_this_month(e.get('fecha', ''))]
-                this_year = [e for e in filtered if self._is_this_year(e.get('fecha', ''))]
-                
-                monthly_expenses = sum(float(e.get('monto', 0)) for e in this_month)
-                yearly_expenses = sum(float(e.get('monto', 0)) for e in this_year)
-                
-                # Proyección anual basada en el mes actual
-                projected = monthly_expenses * 12 if this_month else 0
-                
-                period_window.destroy()
-                self._show_report_window(
-                    f"Reporte Consolidado - {period_name}",
-                    self._format_consolidated_report(
-                        total_expenses, monthly_expenses, yearly_expenses, len(filtered), 
-                        avg_expense, monthly_expenses, projected, this_month, this_year, period_name
-                    ),
-                    "consolidated"
-                )
-            
-            self._create_period_selection_window("Seleccionar Período - Consolidado", on_generate, button_color="#F44336")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte consolidado: {str(e)}")
-    
-    def _generate_trends_report(self):
-        """Genera reporte de tendencias de gastos"""
-        try:
-            self._reload_all_data()
-            
-            expenses = self.expense_service.get_all_expenses()
-            
-            if not expenses:
-                messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
-                return
-            
-            # Agrupar por mes
-            monthly_data = {}
-            for expense in expenses:
-                try:
-                    date_str = expense.get('fecha', '')
-                    if date_str:
-                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                        month_key = f"{date_obj.year}-{date_obj.month:02d}"
-                        if month_key not in monthly_data:
-                            monthly_data[month_key] = {
-                                'name': date_obj.strftime("%B %Y"),
-                                'total': 0,
-                                'count': 0
-                            }
-                        monthly_data[month_key]['total'] += float(expense.get('monto', 0))
-                        monthly_data[month_key]['count'] += 1
-                except Exception:
-                    pass
-            
-            # Ordenar por fecha
-            sorted_monthly = sorted(monthly_data.items())
-            
-            self._show_report_window(
-                "Análisis de Tendencias de Gastos",
-                self._format_trends_report(sorted_monthly, expenses),
-                "trends"
-            )
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte de tendencias: {str(e)}")
-    
-    def _generate_subtype_report(self):
-        """Genera reporte de gastos por subtipo"""
-        try:
-            self._reload_all_data()
-            
-            expenses = self.expense_service.get_all_expenses()
-            
-            if not expenses:
-                messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
-                return
-            
-            def on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window):
-                filtered, period_name = self._filter_expenses_by_period(
-                    expenses, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry
-                )
-                
-                if filtered is None:
-                    messagebox.showerror("Error", "Por favor complete todos los campos requeridos.")
-                    return
-                
-                if not filtered:
-                    messagebox.showinfo("Sin datos", f"No hay gastos registrados para el período seleccionado.")
-                    period_window.destroy()
-                    return
-                
+                # Agrupar por categoría
+                categories_dict = {}
+                for expense in filtered:
+                    category = expense.get('categoria', 'Sin categoría')
+                    if category not in categories_dict:
+                        categories_dict[category] = {'count': 0, 'total': 0, 'expenses': []}
+                    categories_dict[category]['count'] += 1
+                    categories_dict[category]['total'] += float(expense.get('monto', 0))
+                    categories_dict[category]['expenses'].append(expense)
                 # Agrupar por categoría y subtipo
                 subtype_dict = {}
                 for expense in filtered:
                     category = expense.get('categoria', 'Sin categoría')
                     subtype = expense.get('subtipo', 'Sin subtipo')
                     key = f"{category} - {subtype}"
-                    
                     if key not in subtype_dict:
                         subtype_dict[key] = {
-                            'category': category,
-                            'subtype': subtype,
-                            'count': 0,
-                            'total': 0,
-                            'expenses': []
+                            'category': category, 'subtype': subtype, 'count': 0, 'total': 0, 'expenses': []
                         }
                     subtype_dict[key]['count'] += 1
                     subtype_dict[key]['total'] += float(expense.get('monto', 0))
                     subtype_dict[key]['expenses'].append(expense)
-                
                 period_window.destroy()
                 self._show_report_window(
-                    f"Reporte por Subtipo - {period_name}",
-                    self._format_subtype_report(subtype_dict, len(filtered), period_name),
-                    "subtype"
+                    f"Reporte por Categoría y Subtipo - {period_name}",
+                    self._format_category_and_subtype_report(categories_dict, subtype_dict, len(filtered), period_name),
+                    "category_subtype"
                 )
-            
-            self._create_period_selection_window("Seleccionar Período - Subtipo", on_generate, button_color="#00BCD4")
-            
+
+            self._create_period_selection_window("Seleccionar Período - Categoría y Subtipo", on_generate, button_color="#dc2626")
         except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte por subtipo: {str(e)}")
-    
+            messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
+
     def _generate_year_comparison_report(self):
         """Genera reporte comparativo anual"""
         try:
@@ -1070,7 +846,6 @@ class ExpenseReportsView(tk.Frame):
                 
                 if not year1_expenses and not year2_expenses:
                     messagebox.showinfo("Sin datos", "No hay gastos registrados para los años seleccionados.")
-                    year_window.destroy()
                     return
                 
                 year_window.destroy()
@@ -1087,7 +862,7 @@ class ExpenseReportsView(tk.Frame):
                 button_frame,
                 text="Generar Reporte",
                 font=("Segoe UI", 11, "bold"),
-                bg="#FF5722",
+                bg="#b91c1c",  # red-700 - rojo para mantener tonalidad roja del módulo
                 fg="white",
                 relief="flat",
                 padx=30,
@@ -1099,106 +874,13 @@ class ExpenseReportsView(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte comparativo: {str(e)}")
     
-    def _generate_recurring_expenses_report(self):
-        """Genera reporte de gastos recurrentes"""
-        try:
-            self._reload_all_data()
-            
-            expenses = self.expense_service.get_all_expenses()
-            
-            if not expenses:
-                messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
-                return
-            
-            # Identificar gastos recurrentes (mismo subtipo, similar monto, en diferentes meses)
-            recurring = {}
-            for expense in expenses:
-                subtype = expense.get('subtipo', '')
-                monto = float(expense.get('monto', 0))
-                categoria = expense.get('categoria', '')
-                
-                if not subtype:
-                    continue
-                
-                key = f"{categoria} - {subtype}"
-                if key not in recurring:
-                    recurring[key] = {
-                        'category': categoria,
-                        'subtype': subtype,
-                        'count': 0,
-                        'total': 0,
-                        'amounts': [],
-                        'expenses': []
-                    }
-                
-                recurring[key]['count'] += 1
-                recurring[key]['total'] += monto
-                recurring[key]['amounts'].append(monto)
-                recurring[key]['expenses'].append(expense)
-            
-            # Filtrar solo los que aparecen 3 o más veces (recurrentes)
-            recurring_filtered = {k: v for k, v in recurring.items() if v['count'] >= 3}
-            
-            if not recurring_filtered:
-                messagebox.showinfo("Sin datos", "No se encontraron gastos recurrentes (3 o más ocurrencias).")
-                return
-            
-            self._show_report_window(
-                "Reporte de Gastos Recurrentes",
-                self._format_recurring_expenses_report(recurring_filtered),
-                "recurring"
-            )
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte de gastos recurrentes: {str(e)}")
-    
     # ==================== FORMATO DE REPORTES ====================
     
-    def _format_period_report(self, expenses, period_name):
-        """Formatea el reporte por período"""
+    def _format_category_and_subtype_report(self, categories_dict, subtype_dict, total_expenses, period_name=None):
+        """Formatea el reporte combinado por categoría y por subtipo"""
         report = []
         report.append("=" * 60)
-        report.append("REPORTE DE GASTOS POR PERÍODO")
-        report.append(f"Período: {period_name}")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        report.append(f"PERÍODO SELECCIONADO: {period_name}")
-        report.append("")
-        report.append("RESUMEN:")
-        report.append(f"  • Total de gastos: {len(expenses)}")
-        report.append(f"  • Total gastado: ${sum(float(e.get('monto', 0)) for e in expenses):,.2f}")
-        report.append(f"  • Promedio por gasto: ${sum(float(e.get('monto', 0)) for e in expenses) / len(expenses):,.2f}" if expenses else "  • Promedio por gasto: $0.00")
-        report.append("")
-        report.append("DETALLE DE GASTOS:")
-        report.append("-" * 60)
-        
-        # Ordenar por fecha
-        sorted_expenses = sorted(expenses, key=lambda x: x.get('fecha', ''), reverse=True)
-        
-        for expense in sorted_expenses:
-            fecha_str = expense.get('fecha', '')
-            try:
-                fecha_obj = datetime.strptime(fecha_str, "%Y-%m-%d")
-                fecha_display = fecha_obj.strftime("%d/%m/%Y")
-            except:
-                fecha_display = fecha_str
-            
-            report.append(f"Fecha: {fecha_display}")
-            report.append(f"  • Categoría: {expense.get('categoria', 'N/A')}")
-            report.append(f"  • Subtipo: {expense.get('subtipo', 'N/A')}")
-            report.append(f"  • Apartamento: {expense.get('apartamento', 'General')}")
-            report.append(f"  • Monto: ${float(expense.get('monto', 0)):,.2f}")
-            report.append(f"  • Descripción: {expense.get('descripcion', 'N/A')}")
-            report.append("")
-        
-        return "\n".join(report)
-    
-    def _format_category_report(self, categories_dict, total_expenses, period_name=None):
-        """Formatea el reporte por categoría"""
-        report = []
-        report.append("=" * 60)
-        report.append("REPORTE DE GASTOS POR CATEGORÍA")
+        report.append("REPORTE DE GASTOS POR CATEGORÍA Y SUBTIPO")
         if period_name:
             report.append(f"Período: {period_name}")
         report.append("=" * 60)
@@ -1207,27 +889,37 @@ class ExpenseReportsView(tk.Frame):
         if period_name:
             report.append(f"PERÍODO SELECCIONADO: {period_name}")
             report.append("")
+        total_general = sum(c['total'] for c in categories_dict.values())
         report.append("RESUMEN GENERAL:")
         report.append(f"  • Total de gastos: {total_expenses}")
-        report.append(f"  • Total gastado: ${sum(c['total'] for c in categories_dict.values()):,.2f}")
+        report.append(f"  • Total gastado: ${total_general:,.2f}")
         report.append("")
-        report.append("ANÁLISIS POR CATEGORÍA:")
+        report.append("ANÁLISIS POR SUBTIPO:")
         report.append("-" * 60)
-        
-        # Ordenar por total (mayor a menor)
-        sorted_categories = sorted(categories_dict.items(), key=lambda x: x[1]['total'], reverse=True)
-        
-        for category, data in sorted_categories:
-            percentage = (data['total'] / sum(c['total'] for c in categories_dict.values()) * 100) if categories_dict else 0
-            report.append(f"Categoría: {category}")
-            report.append(f"  • Cantidad de gastos: {data['count']}")
-            report.append(f"  • Total gastado: ${data['total']:,.2f}")
-            report.append(f"  • Porcentaje del total: {percentage:.2f}%")
-            report.append(f"  • Promedio por gasto: ${data['total']/data['count']:,.2f}")
-            report.append("")
-        
+        total_sub = sum(s['total'] for s in subtype_dict.values())
+        # Agrupar subtipos por categoría para mostrar cada grupo junto
+        by_category = {}
+        for key, data in subtype_dict.items():
+            cat = data['category']
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append((key, data))
+        # Orden de categorías por total descendente; dentro de cada una, subtipos por total descendente
+        category_order = sorted(categories_dict.items(), key=lambda x: x[1]['total'], reverse=True)
+        for category, _ in category_order:
+            if category not in by_category:
+                continue
+            items = sorted(by_category[category], key=lambda x: x[1]['total'], reverse=True)
+            for key, data in items:
+                percentage = (data['total'] / total_sub * 100) if total_sub else 0
+                report.append(f"Categoría: {data['category']}")
+                report.append(f"Subtipo: {data['subtype']}")
+                report.append(f"  • Cantidad de gastos: {data['count']}")
+                report.append(f"  • Total gastado: ${data['total']:,.2f}")
+                report.append(f"  • Porcentaje del total: {percentage:.2f}%")
+                report.append("")
         return "\n".join(report)
-    
+
     def _format_apartment_report(self, apt_expenses, period_name=None, selected_apartment=None):
         """Formatea el reporte de gastos por apartamento"""
         report = []
@@ -1240,9 +932,6 @@ class ExpenseReportsView(tk.Frame):
         report.append("")
         if selected_apartment:
             report.append(f"APARTAMENTO SELECCIONADO: {selected_apartment}")
-            report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
             report.append("")
         report.append(f"Total de apartamentos con gastos: {len(apt_expenses)}")
         report.append("")
@@ -1262,10 +951,10 @@ class ExpenseReportsView(tk.Frame):
         sorted_apts = sorted(apt_expenses.items(), key=sort_key)
         
         for apt_num, data in sorted_apts:
-            report.append(f"Apartamento {apt_num}:")
+            label = self._get_unit_report_label(apt_num)
+            report.append(f"{label}:")
             report.append(f"  • Total de gastos: {data['count']}")
             report.append(f"  • Total gastado: ${data['total']:,.2f}")
-            report.append(f"  • Promedio por gasto: ${data['total']/data['count']:,.2f}" if data['count'] > 0 else "  • Promedio por gasto: $0.00")
             report.append("")
             report.append("  Historial de gastos:")
             # Ordenar gastos por fecha
@@ -1283,109 +972,24 @@ class ExpenseReportsView(tk.Frame):
             report.append("")
         
         return "\n".join(report)
-    
-    def _format_consolidated_report(self, total, monthly, yearly, count, avg_expense, avg_monthly, projected, this_month, this_year, period_name=None):
-        """Formatea el reporte consolidado"""
-        report = []
-        report.append("=" * 60)
-        report.append("REPORTE CONSOLIDADO DE GASTOS")
-        if period_name:
-            report.append(f"Período: {period_name}")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
-            report.append("")
-        report.append("RESUMEN FINANCIERO:")
-        report.append(f"  • Gastos totales (histórico): ${total:,.2f}")
-        report.append(f"  • Gastos del mes actual: ${monthly:,.2f}")
-        report.append(f"  • Gastos del año actual: ${yearly:,.2f}")
-        report.append(f"  • Total de gastos procesados: {count}")
-        report.append("")
-        report.append("ESTADÍSTICAS:")
-        report.append(f"  • Promedio por gasto: ${avg_expense:,.2f}")
-        report.append(f"  • Promedio mensual (mes actual): ${avg_monthly:,.2f}")
-        if projected > 0:
-            report.append(f"  • Proyección anual (basada en mes actual): ${projected:,.2f}")
-        report.append("")
-        report.append("DETALLE POR PERÍODO:")
-        report.append("-" * 60)
-        report.append(f"  • Gastos en el mes actual: {len(this_month)}")
-        report.append(f"  • Gastos en el año actual: {len(this_year)}")
-        
-        return "\n".join(report)
-    
-    def _format_trends_report(self, monthly_data, all_expenses):
-        """Formatea el reporte de tendencias"""
-        report = []
-        report.append("=" * 60)
-        report.append("ANÁLISIS DE TENDENCIAS DE GASTOS")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        report.append("EVOLUCIÓN MENSUAL:")
-        report.append("-" * 60)
-        
-        if not monthly_data:
-            report.append("No hay datos suficientes para analizar tendencias.")
-            return "\n".join(report)
-        
-        for month_key, data in monthly_data:
-            report.append(f"{data['name']}:")
-            report.append(f"  • Total gastado: ${data['total']:,.2f}")
-            report.append(f"  • Cantidad de gastos: {data['count']}")
-            report.append(f"  • Promedio por gasto: ${data['total']/data['count']:,.2f}" if data['count'] > 0 else "  • Promedio por gasto: $0.00")
-            report.append("")
-        
-        # Análisis comparativo
-        if len(monthly_data) >= 2:
-            report.append("ANÁLISIS COMPARATIVO:")
-            report.append("-" * 60)
-            current_month = monthly_data[-1][1]
-            previous_month = monthly_data[-2][1] if len(monthly_data) >= 2 else None
-            
-            if previous_month:
-                change = current_month['total'] - previous_month['total']
-                change_percent = (change / previous_month['total'] * 100) if previous_month['total'] > 0 else 0
-                report.append(f"Variación respecto al mes anterior: ${change:,.2f} ({change_percent:+.2f}%)")
-        
-        return "\n".join(report)
-    
-    def _format_subtype_report(self, subtype_dict, total_expenses, period_name=None):
-        """Formatea el reporte por subtipo"""
-        report = []
-        report.append("=" * 60)
-        report.append("REPORTE DE GASTOS POR SUBTIPO")
-        if period_name:
-            report.append(f"Período: {period_name}")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
-            report.append("")
-        report.append("RESUMEN GENERAL:")
-        report.append(f"  • Total de gastos: {total_expenses}")
-        report.append(f"  • Total gastado: ${sum(s['total'] for s in subtype_dict.values()):,.2f}")
-        report.append("")
-        report.append("ANÁLISIS POR SUBTIPO:")
-        report.append("-" * 60)
-        
-        # Ordenar por total (mayor a menor)
-        sorted_subtypes = sorted(subtype_dict.items(), key=lambda x: x[1]['total'], reverse=True)
-        
-        for key, data in sorted_subtypes:
-            percentage = (data['total'] / sum(s['total'] for s in subtype_dict.values()) * 100) if subtype_dict else 0
-            report.append(f"Categoría: {data['category']}")
-            report.append(f"Subtipo: {data['subtype']}")
-            report.append(f"  • Cantidad de gastos: {data['count']}")
-            report.append(f"  • Total gastado: ${data['total']:,.2f}")
-            report.append(f"  • Porcentaje del total: {percentage:.2f}%")
-            report.append(f"  • Promedio por gasto: ${data['total']/data['count']:,.2f}")
-            report.append("")
-        
-        return "\n".join(report)
+
+    def _get_unit_report_label(self, apt_num):
+        """Devuelve la etiqueta correcta para el reporte: 'Local 1', 'Apartamento 2', 'Apartamento General', etc."""
+        if apt_num == "General" or not apt_num:
+            return "Apartamento General"
+        apartments = apartment_service.get_all_apartments()
+        for apt in apartments:
+            if str(apt.get("number", "")) == str(apt_num):
+                unit_type = apt.get("unit_type", "Apartamento Estándar")
+                number = apt.get("number", apt_num)
+                if unit_type in ("Local Comercial", "Local comercial"):
+                    return f"Local {number}"
+                if unit_type == "Penthouse":
+                    return f"Penthouse {number}"
+                if unit_type in ("Depósito", "Bodega") or "Depósito" in str(unit_type) or "Bodega" in str(unit_type):
+                    return f"Depósito {number}"
+                return f"Apartamento {number}"
+        return f"Apartamento {apt_num}"
     
     def _format_year_comparison_report(self, year1, year2, year1_expenses, year2_expenses):
         """Formatea el reporte comparativo anual"""
@@ -1403,13 +1007,11 @@ class ExpenseReportsView(tk.Frame):
         report.append(f"AÑO {year1}:")
         report.append(f"  • Total de gastos: {len(year1_expenses)}")
         report.append(f"  • Total gastado: ${total1:,.2f}")
-        report.append(f"  • Promedio por gasto: ${total1/len(year1_expenses):,.2f}" if year1_expenses else "  • Promedio por gasto: $0.00")
         report.append("")
         
         report.append(f"AÑO {year2}:")
         report.append(f"  • Total de gastos: {len(year2_expenses)}")
         report.append(f"  • Total gastado: ${total2:,.2f}")
-        report.append(f"  • Promedio por gasto: ${total2/len(year2_expenses):,.2f}" if year2_expenses else "  • Promedio por gasto: $0.00")
         report.append("")
         
         report.append("ANÁLISIS COMPARATIVO:")
@@ -1428,108 +1030,143 @@ class ExpenseReportsView(tk.Frame):
         
         return "\n".join(report)
     
-    def _format_recurring_expenses_report(self, recurring_dict):
-        """Formatea el reporte de gastos recurrentes"""
-        report = []
-        report.append("=" * 60)
-        report.append("REPORTE DE GASTOS RECURRENTES")
-        report.append("=" * 60)
-        report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        report.append("")
-        report.append("RESUMEN:")
-        report.append(f"  • Total de tipos de gastos recurrentes: {len(recurring_dict)}")
-        report.append(f"  • Total gastado en gastos recurrentes: ${sum(r['total'] for r in recurring_dict.values()):,.2f}")
-        report.append("")
-        report.append("DETALLE DE GASTOS RECURRENTES:")
-        report.append("-" * 60)
-        
-        # Ordenar por frecuencia (mayor a menor)
-        sorted_recurring = sorted(recurring_dict.items(), key=lambda x: x[1]['count'], reverse=True)
-        
-        for key, data in sorted_recurring:
-            avg_amount = sum(data['amounts']) / len(data['amounts']) if data['amounts'] else 0
-            min_amount = min(data['amounts']) if data['amounts'] else 0
-            max_amount = max(data['amounts']) if data['amounts'] else 0
-            
-            report.append(f"Categoría: {data['category']}")
-            report.append(f"Subtipo: {data['subtype']}")
-            report.append(f"  • Frecuencia: {data['count']} veces")
-            report.append(f"  • Total gastado: ${data['total']:,.2f}")
-            report.append(f"  • Promedio por ocurrencia: ${avg_amount:,.2f}")
-            report.append(f"  • Rango: ${min_amount:,.2f} - ${max_amount:,.2f}")
-            report.append("")
-        
-        return "\n".join(report)
-    
     # ==================== VENTANA DE REPORTE ====================
     
+    def _show_export_success_dialog(self, filepath: Path):
+        """Ventana de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
+        colors = get_module_colors("gastos")
+        win = tk.Toplevel(self.winfo_toplevel())
+        win.title("Exportación exitosa")
+        win.geometry("520x220")
+        win.transient(self.winfo_toplevel())
+        win.resizable(True, False)
+        win.grab_set()
+        content_f = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
+        content_f.pack(fill="both", expand=True)
+        top = tk.Frame(content_f)
+        top.pack(fill="x")
+        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=colors.get("primary", "#dc2626")).pack(side="left", padx=(0, Spacing.MD))
+        msg = tk.Frame(top)
+        msg.pack(side="left", fill="x", expand=True)
+        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
+        path_var = tk.StringVar(value=str(filepath))
+        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
+        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
+        path_entry.bind("<Key>", lambda e: "break")
+        btns = tk.Frame(content_f)
+        btns.pack(fill="x", pady=(Spacing.LG, 0))
+
+        def copy_path():
+            win.clipboard_clear()
+            win.clipboard_append(str(filepath))
+
+        def open_folder():
+            folder = str(filepath.resolve().parent)
+            if os.name == "nt":
+                os.startfile(folder)
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", folder], check=False)
+
+        def open_file():
+            path = str(filepath.resolve())
+            if os.name == "nt":
+                os.startfile(path)
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", path], check=False)
+
+        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+
     def _show_report_window(self, title, content, report_type):
-        """Muestra una ventana con el reporte generado"""
+        """Muestra una ventana con el reporte generado (reglas: Exportar CSV, Exportar TXT, Cerrar; colores módulo gastos; utf-8-sig)."""
+        colors = get_module_colors("gastos")
+        header_bg = colors.get("hover", "#dc2626")
+        btn_export_bg = colors.get("primary", "#dc2626")
+
         report_window = tk.Toplevel(self)
         report_window.title(title)
         report_window.geometry("800x600")
         report_window.transient(self)
-        
-        # Header
-        header = tk.Frame(report_window, bg="#f8f9fa", height=50)
+        report_window.grab_set()
+
+        header = tk.Frame(report_window, bg=header_bg, height=50)
         header.pack(fill="x")
         header.pack_propagate(False)
-        
-        tk.Label(
+        # Empaquetar botones primero (derecha) para que reserven espacio y Cerrar se vea completo
+        buttons_frame = tk.Frame(header, bg=header_bg)
+        buttons_frame.pack(side="right", padx=Spacing.LG, pady=8)
+        title_label = tk.Label(
             header,
             text=title,
             font=("Segoe UI", 14, "bold"),
-            bg="#f8f9fa",
-            fg="#2c3e50"
-        ).pack(side="left", padx=15, pady=12)
-        
-        # Botones de acción
-        buttons_frame = tk.Frame(header, bg="#f8f9fa")
-        buttons_frame.pack(side="right", padx=15, pady=8)
-        
-        def save_report():
-            file_path = tk.filedialog.asksaveasfilename(
-                defaultextension=".txt",
-                filetypes=[("Archivo de texto", "*.txt"), ("Todos los archivos", "*.*")]
-            )
-            if file_path:
-                try:
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    messagebox.showinfo("Éxito", f"Reporte guardado en: {file_path}")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Error al guardar el reporte: {str(e)}")
-        
-        tk.Button(
-            buttons_frame,
-            text="Guardar",
-            font=("Segoe UI", 10),
-            bg="#4CAF50",
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=save_report
-        ).pack(side="left", padx=(0, 5))
-        
-        tk.Button(
-            buttons_frame,
-            text="Cerrar",
-            font=("Segoe UI", 10),
-            bg="#757575",
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=report_window.destroy
-        ).pack(side="left")
-        
-        # Contenido del reporte
-        text_frame = tk.Frame(report_window)
-        text_frame.pack(fill="both", expand=True, padx=15, pady=15)
-        
+            bg=header_bg,
+            fg="white"
+        )
+        title_label.pack(side="left", padx=Spacing.LG, pady=12, fill="x", expand=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_type = (report_type or "reporte").replace(" ", "_")
+
+        def export_txt():
+            try:
+                ensure_dirs()
+                filepath = EXPORTS_DIR / f"reporte_gastos_{safe_type}_{timestamp}.txt"
+                with open(filepath, "w", encoding="utf-8-sig") as f:
+                    f.write(content)
+                self._show_export_success_dialog(filepath)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+
+        def export_csv():
+            try:
+                ensure_dirs()
+                filepath = EXPORTS_DIR / f"reporte_gastos_{safe_type}_{timestamp}.csv"
+                with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
+                    writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+                    writer.writerow(["Reporte de gastos - Building Manager Pro", title])
+                    writer.writerow([f"Fecha de exportación: {datetime.now().strftime('%d/%m/%Y %H:%M')}"])
+                    writer.writerow([])
+                    writer.writerow(["Contenido"])
+                    for line in content.splitlines():
+                        writer.writerow([line])
+                self._show_export_success_dialog(filepath)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al exportar CSV: {str(e)}")
+
+        # Orden establecido: Exportar CSV, Exportar TXT, Cerrar (con hover suave y Cerrar corregido)
+        btn_export_hover = colors.get("hover", "#b91c1c")
+        btn_close_bg = "#dc2626"
+        btn_close_hover = "#b91c1c"
+        btn_opts = dict(font=("Segoe UI", 10), fg="white", relief="flat", padx=12, pady=6, cursor="hand2")
+
+        btn_csv = tk.Button(buttons_frame, text="💾 Exportar CSV", bg=btn_export_bg, **btn_opts, command=export_csv)
+        btn_csv.pack(side="left", padx=(0, 6))
+        btn_csv.bind("<Enter>", lambda e: btn_csv.config(bg=btn_export_hover))
+        btn_csv.bind("<Leave>", lambda e: btn_csv.config(bg=btn_export_bg))
+
+        btn_txt = tk.Button(buttons_frame, text="📄 Exportar TXT", bg=btn_export_bg, **btn_opts, command=export_txt)
+        btn_txt.pack(side="left", padx=(0, 6))
+        btn_txt.bind("<Enter>", lambda e: btn_txt.config(bg=btn_export_hover))
+        btn_txt.bind("<Leave>", lambda e: btn_txt.config(bg=btn_export_bg))
+
+        btn_close = tk.Button(buttons_frame, text="× Cerrar", bg=btn_close_bg, width=9, **btn_opts, command=report_window.destroy)
+        btn_close.pack(side="left")
+        btn_close.bind("<Enter>", lambda e: btn_close.config(bg=btn_close_hover))
+        btn_close.bind("<Leave>", lambda e: btn_close.config(bg=btn_close_bg))
+
+        text_frame = tk.Frame(report_window, bg="#ffffff")
+        text_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
+        tk.Label(
+            text_frame,
+            text="Vista previa (mismo contenido que al exportar a TXT/CSV)",
+            font=("Segoe UI", 9),
+            bg="#ffffff",
+            fg="#6b7280"
+        ).pack(anchor="w", pady=(0, 6))
         text_widget = scrolledtext.ScrolledText(
             text_frame,
             font=("Consolas", 10),
@@ -1575,3 +1212,92 @@ class ExpenseReportsView(tk.Frame):
             return date_from <= date <= date_to
         except:
             return False
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Colores rojos para módulo de gastos
+        colors = get_module_colors("gastos")
+        red_primary = colors["primary"]
+        red_hover = colors["hover"]
+        red_light = colors["light"]
+        red_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow en la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                self.on_back()
+        
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=red_primary,
+            hover_bg=red_light,
+            hover_fg=red_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard"
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=red_primary,
+            fg_color="white",
+            hover_bg=red_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")

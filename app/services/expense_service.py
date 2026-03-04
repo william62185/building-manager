@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
+
 class ExpenseService:
     """Servicio para gestionar los gastos del edificio"""
     
-    DATA_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "gastos.json"
+    DATA_FILE = DATA_DIR / "gastos.json"
     
     def __init__(self):
         self._ensure_data_file()
@@ -18,6 +21,7 @@ class ExpenseService:
     
     def _ensure_data_file(self):
         """Asegura que el archivo de datos existe"""
+        ensure_dirs()
         if not self.DATA_FILE.exists():
             self.DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(self.DATA_FILE, 'w', encoding='utf-8') as f:
@@ -128,3 +132,5 @@ class ExpenseService:
         
         return False
 
+# Instancia global del servicio
+expense_service = ExpenseService()

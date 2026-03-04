@@ -9,20 +9,26 @@ from typing import Callable, Optional
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.services.tenant_service import tenant_service
-from manager.app.ui.views.tenant_form_view import TenantFormView
+from manager.app.ui.views.tenant_form_view import TenantFormView, DatePickerWidget
 from manager.app.ui.views.tenant_details_view import TenantDetailsView
+from manager.app.ui.views.deactivate_tenant_view import DeactivateTenantView
 import csv
 import os
 import subprocess
 import platform
+from datetime import datetime, timedelta
 from manager.app.services.apartment_service import apartment_service
+from manager.app.services.payment_service import payment_service
 from manager.app.services.building_service import building_service
+from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
 
 class TenantsView(tk.Frame):
     """Vista principal del módulo de inquilinos con diseño simplificado"""
     
     def __init__(self, parent, on_navigate: Callable = None, on_data_change: Callable = None, on_register_payment: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        # Fondo igual al del área de contenido para que no se vea el recuadro blanco
+        self.configure(bg=parent.cget("bg"))
         
         self.on_navigate = on_navigate
         self.on_data_change = on_data_change
@@ -60,147 +66,178 @@ class TenantsView(tk.Frame):
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
+        
+        # Fondo de la vista (transparente respecto al área de contenido)
+        bg_view = self.cget("bg")
             
         # Título principal
-        title_frame = tk.Frame(self, **theme_manager.get_style("frame"))
+        title_frame = tk.Frame(self, bg=bg_view)
         title_frame.pack(fill="x", pady=(0, Spacing.LG))
         
-        # Botón volver - movido al lado derecho
-        btn_back = tk.Button(
-            title_frame,
-            text="← Volver al Menú",
-            font=("Segoe UI", 10),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
-            bd=1,
-            relief="solid",
-            padx=8,
-            pady=4,
-            cursor="hand2",
-            command=self._on_back_clicked
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(title_frame, bg=bg_view)
+        buttons_frame.pack(side="right")
+        
+        # Colores azules para módulo de inquilinos
+        colors = get_module_colors("inquilinos")
+        blue_primary = colors["primary"]
+        blue_hover = colors["hover"]
+        
+        # Botón "Dashboard" con esquinas redondeadas
+        def go_to_dashboard():
+            if self.on_navigate:
+                self.on_navigate("dashboard")
+        
+        btn_dashboard = create_rounded_button(
+            buttons_frame,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=blue_primary,
+            fg_color="white",
+            hover_bg=blue_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
         )
-        btn_back.pack(side="right")
+        btn_dashboard.pack(side="right")
         
         # Pregunta principal
+        theme = theme_manager.themes[theme_manager.current_theme]
         question_label = tk.Label(
             self,
             text="¿Qué deseas hacer?",
-            **theme_manager.get_style("label_subtitle")
+            font=("Segoe UI", 14),
+            fg=theme["text_primary"],
+            bg=bg_view
         )
-        question_label.configure(font=("Segoe UI", 14))
         question_label.pack(pady=(0, Spacing.XL))
         
-        # Contenedor principal centrado
-        main_container = tk.Frame(self, **theme_manager.get_style("frame"))
+        # Contenedor principal centrado (fondo igual al de la vista para que se vea transparente)
+        main_container = tk.Frame(self, bg=bg_view)
         main_container.pack(pady=Spacing.LG)
         
         # Grid de cards 2x2 con espaciado optimizado
         self._create_cards_grid(main_container)
     
     def _create_cards_grid(self, parent):
-        """Crea el grid de 4 cards principales"""
-        # Centrar todo el contenido
-        grid_container = tk.Frame(parent, **theme_manager.get_style("frame"))
+        """Crea el grid de 3 cards principales en una sola fila"""
+        bg_view = parent.cget("bg")
+        # Centrar todo el contenido (fondo transparente)
+        grid_container = tk.Frame(parent, bg=bg_view)
         grid_container.pack(anchor="center")
         
-        # Fila 1
-        row1 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row1.pack(pady=(0, Spacing.LG))
+        # Fila única con las tres tarjetas
+        row = tk.Frame(grid_container, bg=bg_view)
+        row.pack()
         
         # Card 1: Agregar Inquilino
         self._create_action_card(
-            row1, 
+            row, 
             "➕", 
             "Agregar Inquilino",
             "Registrar un nuevo inquilino en el sistema",
             "#1e40af",  # primary blue
             lambda: self._show_tenant_form()
-        ).pack(side="left", padx=(0, Spacing.LG))
+        ).pack(side="left", padx=Spacing.LG)
         
         # Card 2: Ver Inquilinos  
         self._create_action_card(
-            row1,
+            row,
             "👥",
             "Ver/Editar Inquilinos", 
             "Consultar lista completa de inquilinos",
-            "#3b82f6",  # info blue
+            "#1e40af",  # mismo color que Agregar Inquilino para consistencia
             lambda: self._show_tenants_list()
-        ).pack(side="left")
+        ).pack(side="left", padx=Spacing.LG)
         
-        # Fila 2
-        row2 = tk.Frame(grid_container, **theme_manager.get_style("frame"))
-        row2.pack()
-        
-        # Card 4: Reportes
+        # Card 3: Reportes
         self._create_action_card(
-            row2,
+            row,
             "📊",
             "Reportes", 
             "Generar reportes y estadísticas",
-            "#10b981",  # success green
+            "#1e40af",  # mismo color que Agregar Inquilino para consistencia
             lambda: self._show_reports()
-        ).pack(side="left")
+        ).pack(side="left", padx=Spacing.LG)
     
     def _create_action_card(self, parent, icon, title, description, color, command):
         """Crea una card de acción con hover effects estilo módulo pagos"""
+        # Color azul más intenso para el fondo base de las tarjetas (similar al hover anterior)
+        light_blue_bg = "#dbeafe"  # blue-100 - azul claro más intenso para mejor contraste con iconos azules
+        
         card_frame = tk.Frame(
             parent,
-            bg="white",
+            bg=light_blue_bg,
             relief="raised",
             bd=2,
             width=260,
-            height=220
+            height=220  # Igualar altura a cards de pagos
         )
         card_frame.pack_propagate(False)
-        content_frame = tk.Frame(card_frame, bg="white")
-        content_frame.pack(fill="both", expand=True)
+        
+        # Contenedor principal con padding uniforme para centrar verticalmente
+        content_frame = tk.Frame(card_frame, bg=light_blue_bg)
+        content_frame.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
+        
+        # Frame espaciador superior para centrar el contenido
+        top_spacer = tk.Frame(content_frame, bg=light_blue_bg, height=1)
+        top_spacer.pack(fill="x", expand=True)
+        
+        # Contenedor del contenido (icono, título, descripción)
+        content_container = tk.Frame(content_frame, bg=light_blue_bg)
+        content_container.pack()
+        
         icon_label = tk.Label(
-            content_frame,
+            content_container,
             text=icon,
             font=("Segoe UI", 28),
-            bg="white",
+            bg=light_blue_bg,
             fg=color
         )
         icon_label.pack(pady=(0, Spacing.MD))
+        
         title_label = tk.Label(
-            content_frame,
+            content_container,
             text=title,
             font=("Segoe UI", 14, "bold"),
-            bg="white",
-            fg=color
+            bg=light_blue_bg,
+            fg="#000000"
         )
         title_label.pack()
-        desc_label = tk.Label(
-            content_frame,
-            text=description,
-            font=("Segoe UI", 10),
-            bg="white",
-            fg="#444",
-            wraplength=200,
-            justify="center"
-        )
-        desc_label.pack(pady=(Spacing.XS, 0))
+        
+        # Textos descriptivos eliminados según solicitud del usuario
+        
+        # Frame espaciador inferior para centrar el contenido
+        bottom_spacer = tk.Frame(content_frame, bg=light_blue_bg, height=1)
+        bottom_spacer.pack(fill="x", expand=True)
         
         def on_enter(event):
-            card_frame.configure(bg="#e3f2fd")
-            content_frame.configure(bg="#e3f2fd")
-            icon_label.configure(bg="#e3f2fd")
-            title_label.configure(bg="#e3f2fd")
-            desc_label.configure(bg="#e3f2fd")
+            hover_color = "#bfdbfe"  # blue-200 - azul más intenso para hover
+            card_frame.configure(bg=hover_color)
+            content_frame.configure(bg=hover_color)
+            top_spacer.configure(bg=hover_color)
+            content_container.configure(bg=hover_color)
+            bottom_spacer.configure(bg=hover_color)
+            icon_label.configure(bg=hover_color)
+            title_label.configure(bg=hover_color)
         
         def on_leave(event):
-            card_frame.configure(bg="white")
-            content_frame.configure(bg="white")
-            icon_label.configure(bg="white")
-            title_label.configure(bg="white")
-            desc_label.configure(bg="white")
+            card_frame.configure(bg=light_blue_bg)
+            content_frame.configure(bg=light_blue_bg)
+            top_spacer.configure(bg=light_blue_bg)
+            content_container.configure(bg=light_blue_bg)
+            bottom_spacer.configure(bg=light_blue_bg)
+            icon_label.configure(bg=light_blue_bg)
+            title_label.configure(bg=light_blue_bg)
         
         def on_card_click(event):
             command()
         
         # Hacer TODO el card clickeable - bind a todos los elementos
         # Esto asegura que cualquier parte del card responda al clic
-        all_widgets = [card_frame, content_frame, icon_label, title_label, desc_label]
+        all_widgets = [card_frame, content_frame, top_spacer, content_container, bottom_spacer, icon_label, title_label]
         for widget in all_widgets:
             widget.bind("<Enter>", on_enter)
             widget.bind("<Leave>", on_leave)
@@ -221,7 +258,8 @@ class TenantsView(tk.Frame):
         form_view = TenantFormView(
             self,
             on_back=self._back_to_dashboard,
-            on_save_success=self.on_data_change
+            on_save_success=self.on_data_change,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         form_view.pack(fill="both", expand=True)
     
@@ -232,30 +270,27 @@ class TenantsView(tk.Frame):
         for widget in self.winfo_children():
             widget.destroy()
         # =================== HEADER ===================
-        header_frame = tk.Frame(self, bg="#f8f9fa")
+        bg_view = self.cget("bg")
+        header_frame = tk.Frame(self, bg=bg_view)
         header_frame.pack(fill="x", pady=(0, 15))
         title_label = tk.Label(
             header_frame,
             text="👁️ Ver detalles inquilinos",
             font=("Segoe UI", 18, "bold"),
-            bg="#f8f9fa",
-            fg="#2c3e50"
+            bg=bg_view,
+            fg="#000000"
         )
         title_label.pack(side="left", padx=10)
-        btn_back = tk.Button(
-            header_frame,
-            text="← Volver al Menú",
-            font=("Segoe UI", 10),
-            bg="#6c757d",
-            fg="white",
-            relief="flat",
-            padx=15,
-            command=self._back_to_dashboard
-        )
-        btn_back.pack(side="right", padx=10)
+        
+        # Frame para botones de navegación
+        buttons_frame = tk.Frame(header_frame, bg=bg_view)
+        buttons_frame.pack(side="right", padx=10)
+        
+        # Crear botones con el mismo estilo que otras vistas
+        self._create_navigation_buttons_list_view(buttons_frame, self._back_to_dashboard)
         # =================== CONTAINER PRINCIPAL ===================
-        main_container = tk.Frame(self, bg="#ffffff")
-        main_container.pack(fill="both", expand=True, padx=20, pady=10)
+        main_container = tk.Frame(self, bg=bg_view)
+        main_container.pack(fill="both", expand=True, padx=20, pady=(6, 2))
         # =================== PANEL BÚSQUEDA (30%) ===================
         search_panel = self._create_search_panel(main_container)
         search_panel.pack(side="left", fill="y", padx=(0, 15))
@@ -264,11 +299,13 @@ class TenantsView(tk.Frame):
         list_panel.pack(side="right", fill="both", expand=True)
         # =================== CARGAR DATOS ===================
         self._load_and_display_tenants()
+        # Enfocar el cuadro de búsqueda al abrir la vista para escribir de inmediato
+        self.after(150, self._focus_search_entry)
     
     def _create_search_panel(self, parent):
         """Crea el panel de búsqueda avanzada"""
-        # Frame principal del panel
-        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=380, height=420)
+        # Panel más alto para usar el espacio inferior (reducido padding global)
+        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=380, height=640)
         panel.pack_propagate(False)
         panel.grid_propagate(False)
         # Header del panel
@@ -328,19 +365,26 @@ class TenantsView(tk.Frame):
         status_combo.pack(fill="x", pady=(0,8))
         status_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
         
-        # === RANGO DE FECHAS (COMPACTO) ===
+        # === RANGO DE FECHAS (CON SELECTOR DE CALENDARIO) ===
         tk.Label(content, text="Fecha de ingreso:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
         
         date_frame = tk.Frame(content, bg="#e3f2fd")
         date_frame.pack(fill="x", pady=(0,3))
         
+        # Una sola línea: campos de fecha con ancho y altura fijos (botón calendario visible)
         tk.Label(date_frame, text="Desde:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
-        self.date_from = tk.Entry(date_frame, width=10, font=("Segoe UI", 8))
-        self.date_from.pack(side="left", padx=(3,8))
+        wrap_from = tk.Frame(date_frame, bg="#e3f2fd", width=118, height=30)
+        wrap_from.pack(side="left", padx=(3, 8))
+        wrap_from.pack_propagate(False)
+        self.date_from = DatePickerWidget(wrap_from)
+        self.date_from.pack(fill="both", expand=True)
         
-        tk.Label(date_frame, text="Hasta:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
-        self.date_to = tk.Entry(date_frame, width=10, font=("Segoe UI", 8))
-        self.date_to.pack(side="left", padx=3)
+        tk.Label(date_frame, text="Hasta:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left", padx=(4, 0))
+        wrap_to = tk.Frame(date_frame, bg="#e3f2fd", width=118, height=30)
+        wrap_to.pack(side="left", padx=3)
+        wrap_to.pack_propagate(False)
+        self.date_to = DatePickerWidget(wrap_to)
+        self.date_to.pack(fill="both", expand=True)
         
         # === RANGO DE ARRIENDO (COMPACTO) ===
         tk.Label(content, text="Rango de arriendo:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
@@ -362,7 +406,7 @@ class TenantsView(tk.Frame):
             text="📊 Resultados: mostrando todos",
             font=("Segoe UI", 8),
             bg="#e3f2fd",
-            fg="#2e7d32"
+            fg="#1e40af"  # Azul oscuro para mantener tonalidad azul
         )
         self.results_indicator.pack(anchor="w", pady=(5,5))
         
@@ -374,7 +418,7 @@ class TenantsView(tk.Frame):
             btn_frame,
             text="🔍 Aplicar",
             font=("Segoe UI", 10, "bold"),
-            bg="#4caf50",
+            bg="#2563eb",  # Azul para mantener tonalidad azul del módulo
             fg="white",
             relief="flat",
             padx=20,
@@ -401,18 +445,23 @@ class TenantsView(tk.Frame):
         return panel
     
     def _create_list_panel(self, parent):
-        """Crea el panel de lista de inquilinos"""
-        panel = tk.Frame(parent, bg="#f1f8e9", relief="solid", bd=2)
-        header = tk.Frame(panel, bg="#388e3c", height=50)
+        """Crea el panel de lista de inquilinos con tonalidad azul"""
+        # Aplicando regla 60-30-10: 60% azul claro, 30% blanco, 10% azul oscuro
+        panel_bg = "#e0f2fe"  # sky-50 - azul muy claro (60% fondo predominante)
+        header_bg = "#1e40af"  # blue-800 - azul oscuro para header (10% acento)
+        header_text_light = "#bfdbfe"  # sky-200 - azul claro para texto secundario
+        
+        panel = tk.Frame(parent, bg=panel_bg, relief="solid", bd=2)
+        header = tk.Frame(panel, bg=header_bg, height=50)
         header.pack(fill="x")
         header.pack_propagate(False)
-        header_content = tk.Frame(header, bg="#388e3c")
+        header_content = tk.Frame(header, bg=header_bg)
         header_content.pack(expand=True)
         self.list_title = tk.Label(
             header_content,
             text="📋 Lista de Inquilinos",
             font=("Segoe UI", 12, "bold"),
-            bg="#388e3c",
+            bg=header_bg,
             fg="white"
         )
         self.list_title.pack(side="left", padx=15)
@@ -420,27 +469,15 @@ class TenantsView(tk.Frame):
             header_content,
             text="(0 inquilinos)",
             font=("Segoe UI", 10),
-            bg="#388e3c",
-            fg="#c8e6c9"
+            bg=header_bg,
+            fg=header_text_light  # Azul claro para texto secundario
         )
         self.counter_label.pack(side="left", padx=5)
-        # Botón exportar
-        btn_export = tk.Button(
-            header_content,
-            text="📊 Exportar",
-            font=("Segoe UI", 9),
-            bg="#2e7d32",
-            fg="white",
-            relief="flat",
-            padx=15,
-            command=self._export_list
-        )
-        btn_export.pack(side="right", padx=15)
-        self.scroll_frame = tk.Frame(panel, bg="#f1f8e9")
-        self.scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        self.canvas = tk.Canvas(self.scroll_frame, bg="#f1f8e9", highlightthickness=0)
+        self.scroll_frame = tk.Frame(panel, bg=panel_bg)
+        self.scroll_frame.pack(fill="both", expand=True, padx=8, pady=6)
+        self.canvas = tk.Canvas(self.scroll_frame, bg=panel_bg, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.scroll_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#f1f8e9")
+        self.scrollable_frame = tk.Frame(self.canvas, bg=panel_bg)
         # Guardar referencia del scrollable_frame como atributo de instancia para acceso externo
         self.scrollable_frame.bind(
             "<Configure>",
@@ -461,7 +498,7 @@ class TenantsView(tk.Frame):
         return panel
     
     def _load_and_display_tenants(self):
-        """Carga y muestra todos los inquilinos"""
+        """Carga y muestra todos los inquilinos (excluyendo inactivos por defecto)"""
         try:
             # Recargar datos desde el archivo para asegurar datos actualizados
             tenant_service._load_data()
@@ -475,12 +512,34 @@ class TenantsView(tk.Frame):
             
             # Cargar inquilinos actualizados (después de recargar y recalcular)
             self.all_tenants = tenant_service.get_all_tenants()
-            self._display_tenants(self.all_tenants)
+            
+            # Aplicar filtros (esto excluirá inactivos por defecto si el estado es "Todos")
+            self._apply_filters()
         except Exception as e:
             print(f"Error al cargar inquilinos: {str(e)}")
             self.all_tenants = []
             self._display_tenants([])
     
+    def _show_empty_state(self):
+        """Muestra mensaje cuando no hay inquilinos que coincidan con los filtros"""
+        self.counter_label.config(text="(0 inquilinos)")
+        msg = tk.Label(
+            self.scrollable_frame,
+            text="No hay inquilinos que coincidan con los filtros.\nPrueba ajustar o limpiar los criterios de búsqueda.",
+            font=("Segoe UI", 11),
+            bg="#e0f2fe",  # Azul claro para mantener tonalidad azul
+            fg="#666666",
+            justify="center"
+        )
+        msg.pack(pady=40, padx=20)
+        if hasattr(self, 'results_indicator'):
+            all_tenants = getattr(self, 'all_tenants', [])
+            total_active = len([t for t in all_tenants if t.get('estado_pago') != 'inactivo'])
+            self.results_indicator.config(
+                text=f"🔍 Resultados: 0 de {total_active} inquilinos",
+                fg="#1976d2"
+            )
+
     def _display_tenants(self, tenants):
         """Muestra los inquilinos agrupados por estado"""
         # Limpiar contenido anterior
@@ -508,18 +567,18 @@ class TenantsView(tk.Frame):
             else:
                 active_tenants.append(tenant)
         
-        # Mostrar grupos
+        # Mostrar grupos: primero en mora, luego pendiente de registro, después al día, por último inactivos
         current_row = 0
-        
-        if active_tenants:
-            current_row = self._display_group("✅ AL DÍA", active_tenants, "#4caf50", current_row)
-        
-        if pending_tenants:
-            current_row = self._display_group("⏰ PENDIENTE REGISTRO", pending_tenants, "#ffc107", current_row)
-        
+
         if overdue_tenants:
             current_row = self._display_group("⚠️ EN MORA", overdue_tenants, "#ff9800", current_row)
-        
+
+        if pending_tenants:
+            current_row = self._display_group("⏰ PENDIENTE REGISTRO", pending_tenants, "#ffc107", current_row)
+
+        if active_tenants:
+            current_row = self._display_group("✅ AL DÍA", active_tenants, "#2563eb", current_row)
+
         if inactive_tenants:
             current_row = self._display_group("❌ INACTIVOS", inactive_tenants, "#f44336", current_row)
         
@@ -527,17 +586,18 @@ class TenantsView(tk.Frame):
         total = len(tenants)
         self.counter_label.config(text=f"({total} inquilino{'s' if total != 1 else ''})")
         
-        # Actualizar indicador de resultados en el panel de búsqueda
+        # Actualizar indicador de resultados en el panel de búsqueda (solo cuenta inquilinos activos)
         if hasattr(self, 'results_indicator'):
-            total_available = len(getattr(self, 'all_tenants', []))
-            if total == total_available:
+            all_tenants = getattr(self, 'all_tenants', [])
+            total_active = len([t for t in all_tenants if t.get('estado_pago') != 'inactivo'])
+            if total == total_active:
                 self.results_indicator.config(
                     text="📊 Resultados: mostrando todos",
-                    fg="#2e7d32"
+                    fg="#1e40af"  # Azul oscuro para mantener tonalidad azul
                 )
             else:
                 self.results_indicator.config(
-                    text=f"🔍 Resultados: {total} de {total_available} inquilinos",
+                    text=f"🔍 Resultados: {total} de {total_active} inquilinos",
                     fg="#1976d2"
                 )
         
@@ -553,16 +613,16 @@ class TenantsView(tk.Frame):
         """Muestra un grupo de inquilinos"""
         # Separador y título del grupo
         separator = tk.Frame(self.scrollable_frame, bg=color, height=2)
-        separator.pack(fill="x", pady=(10,0))
+        separator.pack(fill="x", pady=(4, 0))
         
         group_title = tk.Label(
             self.scrollable_frame,
             text=f"{title} ({len(tenants)})",
             font=("Segoe UI", 11, "bold"),
-            bg="#f1f8e9",
+            bg="#e0f2fe",
             fg=color
         )
-        group_title.pack(anchor="w", pady=(5,5))
+        group_title.pack(anchor="w", pady=(2, 3))
         
         # Inquilinos del grupo
         for i, tenant in enumerate(tenants):
@@ -570,13 +630,52 @@ class TenantsView(tk.Frame):
         
         return start_row + len(tenants)
     
+    def _get_dias_mora(self, tenant):
+        """Calcula los días en mora para un inquilino moroso. Retorna 0 si no aplica o hay error."""
+        try:
+            tenant_id = tenant.get("id")
+            if not tenant_id:
+                return 0
+            hoy = datetime.now()
+            payments = payment_service.get_payments_by_tenant(tenant_id)
+            if payments:
+                payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+                ultimo = payments[0]
+                fecha_ultimo_str = ultimo.get("fecha_pago", "")
+                if fecha_ultimo_str:
+                    fecha_ultimo = datetime.strptime(fecha_ultimo_str, "%d/%m/%Y")
+                    fecha_vencimiento = fecha_ultimo + timedelta(days=30)
+                    if hoy > fecha_vencimiento:
+                        return (hoy - fecha_vencimiento).days
+            else:
+                fecha_ingreso = tenant.get("fecha_ingreso", "")
+                if fecha_ingreso:
+                    try:
+                        fecha_ingreso_dt = datetime.strptime(fecha_ingreso, "%d/%m/%Y")
+                        dia_pago = fecha_ingreso_dt.day
+                        try:
+                            venc_este_mes = hoy.replace(day=min(dia_pago, 28))
+                            if venc_este_mes <= hoy:
+                                return max(0, (hoy - venc_este_mes).days)
+                            mes_ant = (hoy.replace(day=1) - timedelta(days=1))
+                            venc_ant = mes_ant.replace(day=min(dia_pago, 28))
+                            return max(0, (hoy - venc_ant).days)
+                        except ValueError:
+                            venc_este_mes = hoy.replace(day=1)
+                            return max(0, (hoy - venc_este_mes).days)
+                    except Exception:
+                        pass
+            return 0
+        except Exception:
+            return 0
+
     def _create_tenant_row(self, tenant, status_color, is_even):
         """Crea una fila para un inquilino con información completa y clic"""
         bg_color = "#ffffff" if is_even else "#f8f9fa"
         row_frame = tk.Frame(self.scrollable_frame, bg=bg_color, relief="solid", bd=1)
-        row_frame.pack(fill="x", pady=1)
+        row_frame.pack(fill="x", pady=0)
         content = tk.Frame(row_frame, bg=bg_color)
-        content.pack(fill="x", padx=10, pady=8)
+        content.pack(fill="x", padx=10, pady=4)
         name = tenant.get('nombre', 'Sin nombre')
         apartment_id = tenant.get('apartamento', None)
         apartment_display = 'N/A'
@@ -587,7 +686,6 @@ class TenantsView(tk.Frame):
                 apartment_id_int = apartment_id
             apt = apartment_service.get_apartment_by_id(apartment_id_int) if hasattr(apartment_service, 'get_apartment_by_id') else None
             if not apt:
-                # Si no hay método, buscar manualmente
                 all_apts = apartment_service.get_all_apartments()
                 apt = next((a for a in all_apts if a.get('id') == apartment_id_int), None)
             if apt:
@@ -605,7 +703,6 @@ class TenantsView(tk.Frame):
                 else:
                     apartment_display = f"{tipo} {numero}" if tipo != 'Apartamento Estándar' else str(numero)
         valor_arriendo = tenant.get('valor_arriendo', 0)
-        # Formateo seguro para valor_arriendo
         if valor_arriendo is not None and valor_arriendo != "":
             try:
                 valor_arriendo_num = float(valor_arriendo)
@@ -621,6 +718,18 @@ class TenantsView(tk.Frame):
             'moroso': 'En mora',
             'inactivo': 'Inactivo'
         }.get(estado_pago, 'Al día')
+        if estado_pago == 'moroso':
+            dias_mora = self._get_dias_mora(tenant)
+            estado_texto = f"En mora ({dias_mora} días)" if dias_mora > 0 else "En mora"
+        # Día de pago (para poner en la misma línea que el estado)
+        fecha_ingreso = tenant.get('fecha_ingreso', None)
+        dia_pago = None
+        if fecha_ingreso:
+            try:
+                dia_pago = int(fecha_ingreso.split('/')[0])
+            except Exception:
+                dia_pago = None
+
         main_info = tk.Label(
             content,
             text=f"👤 {name}",
@@ -628,48 +737,62 @@ class TenantsView(tk.Frame):
             bg=bg_color,
             anchor="w"
         )
-        main_info.pack(anchor="w")
+        main_info.pack(anchor="w", pady=(0, 0))
         details = tk.Label(
             content,
-            text=f"🏠 Apartamento: {apartment_display} | 💰 Arriendo: {valor_arriendo_display} | 📞 Teléfono: {tenant.get('telefono', 'No registrado')}",
+            text=f"🏠 Apto: {apartment_display} | 💰 Arriendo: {valor_arriendo_display} | 📞 Teléfono: {tenant.get('telefono', 'No registrado')}",
             font=("Segoe UI", 9),
             bg=bg_color,
             anchor="w"
         )
-        details.pack(anchor="w", pady=(2,0))
-        # Día de pago (si existe fecha_ingreso)
-        fecha_ingreso = tenant.get('fecha_ingreso', None)
-        dia_pago = None
-        if fecha_ingreso:
-            try:
-                # Suponiendo formato DD/MM/YYYY o similar
-                dia_pago = int(fecha_ingreso.split('/')[0])
-            except Exception:
-                dia_pago = None
+        details.pack(anchor="w", pady=(1, 0))
+        # Línea única: Día de pago + Estado (Al día / En mora)
+        payment_line = tk.Frame(content, bg=bg_color)
+        payment_line.pack(anchor="w", pady=(1, 0))
+        dia_pago_label = None
         if dia_pago:
             dia_pago_label = tk.Label(
-                content,
+                payment_line,
                 text=f"📅 Día de pago: {dia_pago} de cada mes",
                 font=("Segoe UI", 9),
                 bg=bg_color,
                 fg="#1976d2",
                 anchor="w"
             )
-            dia_pago_label.pack(anchor="w")
+            dia_pago_label.pack(side="left")
         estado_label = tk.Label(
-            content,
-            text=f"● {estado_texto}",
+            payment_line,
+            text=f"  ● {estado_texto}" if dia_pago else f"● {estado_texto}",
             font=("Segoe UI", 9, "bold"),
             fg=status_color,
             bg=bg_color
         )
-        estado_label.pack(anchor="w", pady=(2,0))
+        estado_label.pack(side="left")
         
         # Frame para botones de acción
         actions_frame = tk.Frame(content, bg=bg_color)
-        actions_frame.pack(anchor="w", pady=(5,0))
+        actions_frame.pack(anchor="w", pady=(2, 0))
         
-        # Botón de eliminar
+        # Comprobar si el inquilino tiene pagos: si tiene, Eliminar se deshabilita
+        tenant_id = tenant.get("id")
+        has_payments = bool(tenant_id and len(payment_service.get_payments_by_tenant(tenant_id)) > 0)
+        
+        # Botón Desactivar inquilino (abre la vista de desactivar con este inquilino preseleccionado)
+        deactivate_btn = tk.Button(
+            actions_frame,
+            text="🚫 Desactivar inquilino",
+            font=("Segoe UI", 8),
+            bg="#f59e0b",
+            fg="white",
+            relief="flat",
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            command=lambda t=tenant: self._open_desactivar_for_tenant(t)
+        )
+        deactivate_btn.pack(side="left", padx=(0, 6))
+        
+        # Botón de eliminar (deshabilitado si tiene al menos un pago registrado)
         delete_btn = tk.Button(
             actions_frame,
             text="🗑️ Eliminar",
@@ -679,30 +802,31 @@ class TenantsView(tk.Frame):
             relief="flat",
             padx=8,
             pady=2,
-            cursor="hand2",
+            cursor="hand2" if not has_payments else "arrow",
+            state="normal" if not has_payments else "disabled",
             command=lambda t=tenant: self._confirm_delete_tenant(t)
         )
         delete_btn.pack(side="left")
+        if has_payments:
+            delete_btn.configure(fg="#9ca3af", bg="#d1d5db")
         
         # Hacer clic en el card para ver detalles - MEJORADO: toda el área es clickeable
         def on_card_click(event, t=tenant):
-            # Verificar que el clic no fue en el botón de eliminar o su frame
+            # Verificar que el clic no fue en los botones de acción o su frame
             clicked_widget = event.widget
-            # Si el clic fue en el botón de eliminar o en su frame de acciones, no hacer nada
-            if clicked_widget == delete_btn or clicked_widget == actions_frame:
+            if clicked_widget in (delete_btn, deactivate_btn, actions_frame):
                 return
-            # Verificar si el widget es hijo del botón o del frame de acciones
             try:
                 parent = clicked_widget.winfo_parent()
-                if parent == str(delete_btn) or parent == str(actions_frame):
+                if parent == str(delete_btn) or parent == str(deactivate_btn) or parent == str(actions_frame):
                     return
             except:
                 pass
             self._show_tenant_details(t)
         
         # Bind a TODO el card y TODOS sus hijos para hacer toda el área clickeable
-        all_clickable_widgets = [row_frame, content, main_info, details, estado_label]
-        if 'dia_pago_label' in locals():
+        all_clickable_widgets = [row_frame, content, main_info, details, payment_line, estado_label]
+        if dia_pago_label is not None:
             all_clickable_widgets.append(dia_pago_label)
         
         for widget in all_clickable_widgets:
@@ -722,7 +846,8 @@ class TenantsView(tk.Frame):
             tenant_data=tenant,
             on_back=self._back_to_list,
             on_edit=self._edit_tenant,
-            on_register_payment=self.on_register_payment_callback
+            on_register_payment=self.on_register_payment_callback,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         details_view.pack(fill="both", expand=True)
     
@@ -740,7 +865,8 @@ class TenantsView(tk.Frame):
             self,
             on_back=self._back_to_list,
             tenant_data=tenant,
-            on_save_success=self.on_data_change
+            on_save_success=self.on_data_change,
+            on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         form_view.pack(fill="both", expand=True)
     
@@ -749,21 +875,42 @@ class TenantsView(tk.Frame):
         pass
     
     def _show_reports(self):
-        """Muestra la vista completa de reportes"""
+        """Muestra la vista completa de reportes específicos de gestión de inquilinos"""
         self.current_view = "reports"
         
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
         
-        # Importar e instanciar la vista de reportes
-        from manager.app.ui.views.reports_view import ReportsView
+        # Importar e instanciar la vista de reportes específica de gestión de inquilinos
+        from manager.app.ui.views.tenant_management_reports_view import TenantManagementReportsView
         
-        reports_view = ReportsView(
+        reports_view = TenantManagementReportsView(
             self,
-            on_back=self._back_to_dashboard
+            on_back=self._back_to_dashboard,
+            on_navigate=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         reports_view.pack(fill="both", expand=True)
+    
+    def _open_desactivar_for_tenant(self, tenant):
+        """Abre la vista de desactivar inquilino con el inquilino preseleccionado (misma lógica y vista que Administración)."""
+        self.current_view = "deactivate"
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        def _on_desactivar_done():
+            if self.on_data_change:
+                self.on_data_change()
+            self._back_to_list()
+        
+        deactivate_view = DeactivateTenantView(
+            self,
+            on_back=self._back_to_list,
+            on_success=_on_desactivar_done,
+            on_navigate=self.on_navigate,
+            initial_tenant=tenant
+        )
+        deactivate_view.pack(fill="both", expand=True)
     
     def _back_to_dashboard(self):
         """Vuelve al dashboard principal"""
@@ -778,6 +925,56 @@ class TenantsView(tk.Frame):
         """Maneja el clic en volver al menú principal"""
         if self.on_navigate:
             self.on_navigate("dashboard")
+    
+    def _create_navigation_buttons_list_view(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo moderno y colores azules del módulo de inquilinos"""
+        # Colores azules para módulo de inquilinos
+        colors = get_module_colors("inquilinos")
+        blue_primary = colors["primary"]
+        blue_hover = colors["hover"]
+        blue_light = colors["light"]
+        blue_text = colors["text"]
+        
+        # Botón "Volver" con esquinas ligeramente redondeadas y borde negro
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=blue_primary,
+            hover_bg=blue_light,
+            hover_fg=blue_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard" con esquinas ligeramente redondeadas y borde negro
+        def go_to_dashboard():
+            if self.on_navigate:
+                self.on_navigate("dashboard")
+        
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=blue_primary,
+            fg_color="white",
+            hover_bg=blue_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")
+
+    def _focus_search_entry(self):
+        """Coloca el foco en el cuadro de búsqueda general al abrir la vista."""
+        if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
+            self.search_entry.focus_set()
 
     def _on_search_change(self, event=None):
         """Búsqueda en tiempo real"""
@@ -866,6 +1063,69 @@ class TenantsView(tk.Frame):
             }
             target_status = status_mapping.get(status, status.lower())
             filtered = [t for t in filtered if t.get('estado_pago') == target_status]
+        else:
+            # Por defecto, cuando es "Todos", excluir inquilinos inactivos
+            filtered = [t for t in filtered if t.get('estado_pago') != 'inactivo']
+        # Filtro por rango de fecha de ingreso
+        date_from_str = self.date_from.get().strip() if hasattr(self.date_from, 'get') else ''
+        date_to_str = self.date_to.get().strip() if hasattr(self.date_to, 'get') else ''
+        if date_from_str or date_to_str:
+            def parse_date(s):
+                try:
+                    return datetime.strptime(s.strip(), "%d/%m/%Y").date()
+                except (ValueError, AttributeError):
+                    return None
+            d_from = parse_date(date_from_str) if date_from_str else None
+            d_to = parse_date(date_to_str) if date_to_str else None
+            def in_date_range(tenant):
+                fi = tenant.get('fecha_ingreso') or ''
+                if not fi:
+                    return False
+                d = parse_date(fi)
+                if d is None:
+                    return False
+                if d_from is not None and d < d_from:
+                    return False
+                if d_to is not None and d > d_to:
+                    return False
+                return True
+            filtered = [t for t in filtered if in_date_range(t)]
+        # Filtro por rango de arriendo (Min / Max)
+        rent_min_str = self.rent_min.get().strip()
+        rent_max_str = self.rent_max.get().strip()
+        if rent_min_str or rent_max_str:
+            def parse_rent(s):
+                """Convierte a número: acepta 400000, 500000.0 (decimal), 400.000 o 1.000.000 (miles)."""
+                try:
+                    s = str(s).strip().replace(",", "")
+                    if not s:
+                        return None
+                    # Si hay punto: puede ser decimal (500000.0) o miles (1.000.000)
+                    if "." in s:
+                        parts = s.split(".")
+                        # Un solo punto y 1-2 dígitos después = decimal (ej. 500000.0)
+                        if len(parts) == 2 and len(parts[1]) <= 2 and parts[1].isdigit():
+                            return float(s)
+                        # Varios puntos o 3 dígitos después = separador de miles
+                        return float(s.replace(".", ""))
+                    return float(s)
+                except (ValueError, TypeError):
+                    return None
+            r_min = parse_rent(rent_min_str) if rent_min_str else None
+            r_max = parse_rent(rent_max_str) if rent_max_str else None
+            def in_rent_range(tenant):
+                val = tenant.get('valor_arriendo')
+                if val is None or val == "":
+                    return False
+                rent = parse_rent(val)
+                if rent is None:
+                    return False
+                if r_min is not None and rent < r_min:
+                    return False
+                if r_max is not None and rent > r_max:
+                    return False
+                return True
+            filtered = [t for t in filtered if in_rent_range(t)]
         self._display_tenants(filtered)
 
     def _clear_filters(self):
@@ -873,12 +1133,13 @@ class TenantsView(tk.Frame):
         self.search_entry.delete(0, tk.END)
         self.apartment_var.set("Todos")
         self.status_var.set("Todos")
-        self.date_from.delete(0, tk.END)
-        self.date_to.delete(0, tk.END)
+        self.date_from.set("")
+        self.date_to.set("")
         self.rent_min.delete(0, tk.END)
         self.rent_max.delete(0, tk.END)
         if hasattr(self, 'all_tenants'):
-            self._display_tenants(self.all_tenants)
+            # Aplicar filtros para excluir inactivos por defecto
+            self._apply_filters()
 
     def _confirm_delete_tenant(self, tenant):
         nombre = tenant.get("nombre", "Inquilino")
@@ -921,10 +1182,9 @@ class TenantsView(tk.Frame):
             ("Contacto Emergencia", "contacto_emergencia_nombre"),
             ("Teléfono Emergencia", "contacto_emergencia_telefono")
         ]
-        # Crear carpeta exports si no existe
-        export_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../exports'))
-        os.makedirs(export_dir, exist_ok=True)
-        ruta = os.path.join(export_dir, "inquilinos_exportados.csv")
+        from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
+        ensure_dirs()
+        ruta = str(EXPORTS_DIR / "inquilinos_exportados.csv")
         try:
             with open(ruta, mode="w", newline='', encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -1018,7 +1278,7 @@ class TenantsView(tk.Frame):
             dialog.clipboard_clear()
             dialog.clipboard_append(file_path)
             dialog.update()
-            copy_btn.config(text="✓ Copiado", bg="#4caf50")
+            copy_btn.config(text="✓ Copiado", bg="#2563eb")  # Azul para mantener tonalidad azul
             dialog.after(1500, lambda: copy_btn.config(text="📋 Copiar", bg="#1976d2"))
         
         def open_folder():

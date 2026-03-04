@@ -12,18 +12,29 @@ import csv
 from pathlib import Path
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
-from manager.app.ui.components.modern_widgets import ModernButton
+from manager.app.ui.components.icons import Icons
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.apartment_service import apartment_service
 
 
+# Verde más oscuro del módulo para iconos, títulos y botones (contraste)
+DARK_GREEN = "#166534"
+# Fondo sólido de las cards (verde claro) para que no queden transparentes
+CARD_BG = "#dcfce7"
+
+
 class PaymentReportsView(tk.Frame):
     """Vista completa de reportes de pagos del sistema"""
     
-    def __init__(self, parent, on_back: Callable = None):
+    def __init__(self, parent, on_back: Callable = None, on_navigate_to_dashboard: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        theme = theme_manager.themes[theme_manager.current_theme]
+        self._content_bg = theme.get("content_bg", theme["bg_primary"])
+        self.configure(bg=self._content_bg)
         self.on_back = on_back
+        self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
         
         # Recargar datos antes de generar reportes
         self._reload_all_data()
@@ -41,32 +52,33 @@ class PaymentReportsView(tk.Frame):
     
     def _create_layout(self):
         """Crea el layout principal de la vista de reportes"""
+        cb = self._content_bg
+        theme = theme_manager.themes[theme_manager.current_theme]
         # Header
-        header = tk.Frame(self, bg="#f8f9fa", height=60)
+        header = tk.Frame(self, bg=cb, height=60)
         header.pack(fill="x")
         header.pack_propagate(False)
         
-        title_frame = tk.Frame(header, bg="#f8f9fa")
+        title_frame = tk.Frame(header, bg=cb)
         title_frame.pack(side="left", padx=15, fill="y", expand=True)
         
         tk.Label(
             title_frame,
             text="📊 Reportes de Pagos",
             font=("Segoe UI", 18, "bold"),
-            bg="#f8f9fa",
-            fg="#2c3e50"
+            bg=cb,
+            fg=theme["text_primary"]
         ).pack(side="left", pady=15)
         
-        if self.on_back:
-            ModernButton(
-                header,
-                text="← Volver",
-                style="secondary",
-                command=self.on_back
-            ).pack(side="right", padx=15, pady=15)
+        # Frame para botones de navegación (alineados a la derecha)
+        buttons_frame = tk.Frame(header, bg=cb)
+        buttons_frame.pack(side="right", padx=15, pady=15)
         
-        # Contenedor principal sin scroll
-        main_container = tk.Frame(self, bg="#ffffff")
+        if self.on_back:
+            self._create_navigation_buttons(buttons_frame, self.on_back)
+        
+        # Contenedor principal sin scroll (sin fondo blanco)
+        main_container = tk.Frame(self, bg=cb)
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Contenido de reportes directamente en el contenedor principal
@@ -74,12 +86,13 @@ class PaymentReportsView(tk.Frame):
     
     def _create_reports_content(self, parent):
         """Crea el contenido de los reportes"""
-        # Contenedor principal que usa todo el espacio disponible
-        cards_container = tk.Frame(parent, bg="#ffffff")
+        cb = self._content_bg
+        # Contenedor principal que usa todo el espacio disponible (sin fondo blanco)
+        cards_container = tk.Frame(parent, bg=cb)
         cards_container.pack(fill="both", expand=True, pady=(0, 10))
         
         # Grid de cards - 4 columnas que se ajustan al espacio disponible
-        cards_grid = tk.Frame(cards_container, bg="#ffffff")
+        cards_grid = tk.Frame(cards_container, bg=cb)
         cards_grid.pack(fill="both", expand=True, padx=15, pady=10)
         
         # Configurar grid para que las columnas se distribuyan equitativamente (4 columnas)
@@ -88,51 +101,30 @@ class PaymentReportsView(tk.Frame):
         cards_grid.columnconfigure(2, weight=1, uniform="cards", minsize=200)
         cards_grid.columnconfigure(3, weight=1, uniform="cards", minsize=200)
         
-        # Definir los reportes específicos de pagos (descripciones más cortas)
+        # Definir los reportes específicos de pagos (solo los 4 que se mantienen)
         reports = [
-            ("📅 Reporte por Período", 
-             "Análisis de pagos por rango de fechas con comparativas.",
-             "#2196F3", 
-             self._generate_period_report),
-            ("👤 Reporte por Inquilino", 
+            ("👤 Reporte por Inquilino",
              "Historial completo de pagos de un inquilino con estadísticas.",
-             "#9C27B0", 
              self._generate_tenant_payments_report),
-            ("💳 Reporte por Método de Pago", 
+            ("💳 Reporte por Método de Pago",
              "Análisis de pagos agrupados por método de pago.",
-             "#4CAF50", 
              self._generate_payment_method_report),
-            ("⚠️ Reporte de Pagos Pendientes", 
+            ("⚠️ Reporte de Pagos Pendientes",
              "Lista de inquilinos con pagos pendientes y días de mora.",
-             "#FF9800", 
              self._generate_pending_payments_report),
-            ("📊 Reporte de Ingresos Consolidado", 
-             "Vista financiera con totales, promedios y proyecciones.",
-             "#F44336", 
-             self._generate_consolidated_income_report),
-            ("🏢 Reporte por Apartamento", 
+            ("🏢 Reporte por Apartamento",
              "Análisis de pagos agrupados por apartamento.",
-             "#00BCD4", 
              self._generate_apartment_payments_report),
-            ("📈 Análisis de Tendencias", 
-             "Evolución de pagos en el tiempo con comparativas.",
-             "#FF5722", 
-             self._generate_trends_report),
-            ("💰 Reporte de Eficiencia de Cobro", 
-             "Análisis de pagos recibidos vs esperados.",
-             "#795548", 
-             self._generate_collection_efficiency_report)
         ]
         
         # Colocar cards en grid 4 columnas (2 filas de 4 cards)
         row = 0
         col = 0
-        for title, description, color, command in reports:
+        for title, description, command in reports:
             card = self._create_report_card(
                 cards_grid,
                 title,
                 description,
-                color,
                 command
             )
             card.grid(row=row, column=col, padx=10, pady=8, sticky="nsew")
@@ -147,58 +139,59 @@ class PaymentReportsView(tk.Frame):
         for r in range(row + 1):
             cards_grid.rowconfigure(r, weight=1, uniform="rows", minsize=200)
     
-    def _create_report_card(self, parent, title, description, color, command):
-        """Crea una tarjeta de reporte que se ajusta uniformemente al espacio disponible"""
+    def _create_report_card(self, parent, title, description, command):
+        """Crea una tarjeta de reporte con fondo sólido (CARD_BG), verde oscuro para icono, título y botón."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        card_bg = CARD_BG
         card = tk.Frame(
             parent,
-            bg="white",
+            bg=card_bg,
             relief="raised",
             bd=2
         )
         
-        content = tk.Frame(card, bg="white")
-        # Padding ajustado para mejor distribución
+        content = tk.Frame(card, bg=card_bg)
         content.pack(fill="both", expand=True, padx=14, pady=12)
         
-        # Contenedor para título con wraplength dinámico
-        title_frame = tk.Frame(content, bg="white")
+        title_frame = tk.Frame(content, bg=card_bg)
         title_frame.pack(anchor="w", pady=(0, 6), fill="x")
         
-        # Icono y título
+        # Icono y título en verde oscuro
         title_label = tk.Label(
             title_frame,
             text=title,
             font=("Segoe UI", 13, "bold"),
-            bg="white",
-            fg=color,
+            bg=card_bg,
+            fg=DARK_GREEN,
             anchor="w",
             justify="left",
-            wraplength=1  # Se ajustará automáticamente al ancho del frame
+            wraplength=1
         )
         title_label.pack(anchor="w", fill="x")
         
-        # Descripción - se ajusta al ancho disponible, más compacta
+        # Descripción con color de texto del tema
         desc_label = tk.Label(
             content,
             text=description,
             font=("Segoe UI", 9),
-            bg="white",
-            fg="#666",
+            bg=card_bg,
+            fg=theme.get("text_secondary", "#666"),
             justify="left",
             anchor="w",
-            wraplength=1  # Se ajustará automáticamente
+            wraplength=1
         )
         desc_label.pack(anchor="w", pady=(0, 8), fill="x", expand=True)
         
-        # Botón generar - siempre al fondo con tamaño consistente
-        btn_frame = tk.Frame(content, bg="white")
+        # Botón con fondo verde oscuro (contraste) y hover suave
+        btn_frame = tk.Frame(content, bg=card_bg)
         btn_frame.pack(fill="x", side="bottom", pady=(4, 0))
         
+        btn_green_hover = "#15803d"
         btn = tk.Button(
             btn_frame,
             text="Generar Reporte",
             font=("Segoe UI", 9, "bold"),
-            bg=color,
+            bg=DARK_GREEN,
             fg="white",
             relief="flat",
             padx=15,
@@ -207,46 +200,51 @@ class PaymentReportsView(tk.Frame):
             command=command
         )
         btn.pack(fill="x")
+        btn.bind("<Enter>", lambda e: btn.config(bg=btn_green_hover))
+        btn.bind("<Leave>", lambda e: btn.config(bg=DARK_GREEN))
         
-        # Función para actualizar wraplength cuando el card cambie de tamaño
         def update_wraplength(event=None):
             if event:
                 card_width = card.winfo_width()
-                if card_width > 20:  # Solo actualizar si el card tiene un tamaño válido
-                    # Calcular wraplength considerando el padding
-                    available_width = card_width - 28  # 14px padding a cada lado
+                if card_width > 20:
+                    available_width = card_width - 28
                     title_label.config(wraplength=max(available_width, 100))
                     desc_label.config(wraplength=max(available_width, 100))
         
         card.bind("<Configure>", update_wraplength)
         
-        # Hover effect
+        # Hover en toda el área del card: Enter en card y todos los hijos; Leave solo en el card
+        hover_bg = "#bbf7d0"
         def on_enter(event):
-            card.configure(bg="#f5f5f5")
-            content.configure(bg="#f5f5f5")
-            title_frame.configure(bg="#f5f5f5")
-            title_label.configure(bg="#f5f5f5")
-            desc_label.configure(bg="#f5f5f5")
-            btn_frame.configure(bg="#f5f5f5")
+            card.configure(bg=hover_bg)
+            content.configure(bg=hover_bg)
+            title_frame.configure(bg=hover_bg)
+            title_label.configure(bg=hover_bg)
+            desc_label.configure(bg=hover_bg)
+            btn_frame.configure(bg=hover_bg)
         
         def on_leave(event):
-            card.configure(bg="white")
-            content.configure(bg="white")
-            title_frame.configure(bg="white")
-            title_label.configure(bg="white")
-            desc_label.configure(bg="white")
-            btn_frame.configure(bg="white")
+            # Solo quitar hover cuando el ratón sale del card (no al pasar entre hijos)
+            card.configure(bg=card_bg)
+            content.configure(bg=card_bg)
+            title_frame.configure(bg=card_bg)
+            title_label.configure(bg=card_bg)
+            desc_label.configure(bg=card_bg)
+            btn_frame.configure(bg=card_bg)
         
-        card.bind("<Enter>", on_enter)
+        def bind_enter_to_children(widget):
+            widget.bind("<Enter>", on_enter)
+            for child in widget.winfo_children():
+                bind_enter_to_children(child)
+        
+        bind_enter_to_children(card)
         card.bind("<Leave>", on_leave)
-        content.bind("<Enter>", on_enter)
-        content.bind("<Leave>", on_leave)
         
         return card
     
     # ==================== GENERADORES DE REPORTES ====================
     
-    def _create_period_selection_window(self, title="Seleccionar Período", on_generate=None, button_color="#2196F3"):
+    def _create_period_selection_window(self, title="Seleccionar Período", on_generate=None, button_color="#22c55e"):
         """Crea una ventana reutilizable para seleccionar período de reporte"""
         period_window = tk.Toplevel(self)
         period_window.title(title)
@@ -605,7 +603,7 @@ class PaymentReportsView(tk.Frame):
                 button_frame,
                 text="Generar Reporte",
                 font=("Segoe UI", 11, "bold"),
-                bg="#9C27B0",
+                bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
                 fg="white",
                 relief="flat",
                 padx=30,
@@ -663,7 +661,7 @@ class PaymentReportsView(tk.Frame):
                     "payment_method"
                 )
             
-            self._create_period_selection_window("Seleccionar Período - Método de Pago", on_generate, button_color="#4CAF50")
+            self._create_period_selection_window("Seleccionar Período - Método de Pago", on_generate, button_color="#16a34a")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte por método: {str(e)}")
@@ -747,7 +745,7 @@ class PaymentReportsView(tk.Frame):
                     "consolidated_income"
                 )
             
-            self._create_period_selection_window("Seleccionar Período - Ingresos Consolidado", on_generate, button_color="#F44336")
+            self._create_period_selection_window("Seleccionar Período - Ingresos Consolidado", on_generate, button_color="#166534")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte consolidado: {str(e)}")
@@ -1044,7 +1042,7 @@ class PaymentReportsView(tk.Frame):
                     "apartment_payments"
                 )
             
-            self._create_apartment_period_selection_window("Seleccionar Apartamento y Período", on_generate, button_color="#00BCD4")
+            self._create_apartment_period_selection_window("Seleccionar Apartamento y Período", on_generate, button_color="#22c55e")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte por apartamento: {str(e)}")
@@ -1320,9 +1318,15 @@ class PaymentReportsView(tk.Frame):
         
         # Ordenar por número de apartamento
         sorted_apts = sorted(apt_payments.items(), key=lambda x: x[0])
-        
-        for apt_num, data in sorted_apts:
-            report.append(f"Apartamento {apt_num}:")
+
+        for i, (apt_num, data) in enumerate(sorted_apts):
+            if i > 0:
+                report.append("")
+                report.append("-" * 60)
+                report.append("")
+            apt = data.get("apartment", {})
+            unit_label = self._get_apartment_display_name(apt) if apt else f"Apartamento {apt_num}"
+            report.append(f"{unit_label}:")
             report.append(f"  • Total de pagos: {data['count']}")
             report.append(f"  • Total recaudado: ${data['total']:,.2f}")
             report.append(f"  • Promedio por pago: ${data['total']/data['count']:,.2f}" if data['count'] > 0 else "  • Promedio por pago: $0.00")
@@ -1335,7 +1339,7 @@ class PaymentReportsView(tk.Frame):
             if len(sorted_payments) > 5:
                 report.append(f"    ... y {len(sorted_payments) - 5} pago(s) más")
             report.append("")
-        
+
         return "\n".join(report)
     
     def _format_trends_report(self, monthly_data, all_payments):
@@ -1416,78 +1420,60 @@ class PaymentReportsView(tk.Frame):
     # ==================== VENTANA DE VISUALIZACIÓN ====================
     
     def _show_report_window(self, title, content, report_type):
-        """Muestra el reporte en una ventana con opciones de exportar"""
+        """Muestra el reporte en una ventana con opciones de exportar (reglas: Exportar CSV, Exportar TXT, Cerrar; colores módulo pagos; utf-8-sig)."""
+        colors = get_module_colors("pagos")
+        header_bg = colors.get("hover", "#16a34a")
+        btn_export_bg = colors.get("primary", "#22c55e")
+
         window = tk.Toplevel(self)
         window.title(title)
         window.geometry("800x600")
         window.transient(self)
         window.grab_set()
-        
-        # Header
-        header = tk.Frame(window, bg="#1976d2", height=50)
+
+        header = tk.Frame(window, bg=header_bg, height=50)
         header.pack(fill="x")
         header.pack_propagate(False)
-        
         tk.Label(
             header,
             text=title,
             font=("Segoe UI", 14, "bold"),
-            bg="#1976d2",
+            bg=header_bg,
             fg="white"
-        ).pack(side="left", padx=15, pady=12)
-        
-        # Botones de acción
-        btn_frame = tk.Frame(header, bg="#1976d2")
-        btn_frame.pack(side="right", padx=15)
-        
+        ).pack(side="left", padx=Spacing.LG, pady=12)
+        btn_frame = tk.Frame(header, bg=header_bg)
+        btn_frame.pack(side="right", padx=Spacing.LG)
+
         def export_csv():
             self._export_to_csv(content, title, report_type)
-        
         def export_txt():
             self._export_to_txt(content, title, report_type)
-        
-        tk.Button(
-            btn_frame,
-            text="💾 Exportar CSV",
-            font=("Segoe UI", 9),
-            bg="#4CAF50",
-            fg="white",
-            relief="flat",
-            padx=12,
-            pady=6,
-            cursor="hand2",
-            command=export_csv
-        ).pack(side="left", padx=5)
-        
-        tk.Button(
-            btn_frame,
-            text="📄 Exportar TXT",
-            font=("Segoe UI", 9),
-            bg="#2196F3",
-            fg="white",
-            relief="flat",
-            padx=12,
-            pady=6,
-            cursor="hand2",
-            command=export_txt
-        ).pack(side="left", padx=5)
-        
-        tk.Button(
-            btn_frame,
-            text="✖ Cerrar",
-            font=("Segoe UI", 9),
-            bg="#f44336",
-            fg="white",
-            relief="flat",
-            padx=12,
-            pady=6,
-            cursor="hand2",
-            command=window.destroy
-        ).pack(side="left", padx=5)
-        
-        # Contenido con scroll
+
+        # Colores para hover suave (verde más oscuro para exportar, rojo más oscuro para cerrar)
+        btn_export_hover = colors.get("hover", "#16a34a")
+        btn_close_bg = "#dc2626"
+        btn_close_hover = "#b91c1c"
+
+        btn_opts = dict(font=("Segoe UI", 9), fg="white", relief="flat", bd=0, highlightthickness=0, padx=14, pady=6, cursor="hand2")
+
+        btn_csv = tk.Button(btn_frame, text="💾 Exportar CSV", bg=btn_export_bg, **btn_opts, command=export_csv)
+        btn_csv.pack(side="left", padx=Spacing.SM)
+        btn_csv.bind("<Enter>", lambda e: btn_csv.config(bg=btn_export_hover))
+        btn_csv.bind("<Leave>", lambda e: btn_csv.config(bg=btn_export_bg))
+
+        btn_txt = tk.Button(btn_frame, text="📄 Exportar TXT", bg=btn_export_bg, **btn_opts, command=export_txt)
+        btn_txt.pack(side="left", padx=Spacing.SM)
+        btn_txt.bind("<Enter>", lambda e: btn_txt.config(bg=btn_export_hover))
+        btn_txt.bind("<Leave>", lambda e: btn_txt.config(bg=btn_export_bg))
+
+        # Cerrar: ancho fijo para que el icono no se corte (× más compacto que ✖)
+        btn_close = tk.Button(btn_frame, text="× Cerrar", bg=btn_close_bg, width=10, **btn_opts, command=window.destroy)
+        btn_close.pack(side="left", padx=Spacing.SM)
+        btn_close.bind("<Enter>", lambda e: btn_close.config(bg=btn_close_hover))
+        btn_close.bind("<Leave>", lambda e: btn_close.config(bg=btn_close_bg))
+
         text_frame = tk.Frame(window)
-        text_frame.pack(fill="both", expand=True, padx=15, pady=15)
+        text_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
         
         text_widget = tk.Text(
             text_frame,
@@ -1503,50 +1489,122 @@ class PaymentReportsView(tk.Frame):
         text_widget.config(yscrollcommand=scrollbar.set)
         
         text_widget.insert("1.0", content)
+        if report_type == "apartment_payments":
+            text_widget.tag_configure("apt_header", font=("Consolas", 13, "bold"))
+            num_lines = int(text_widget.index("end-1c").split(".")[0])
+            # Encabezados de unidad (tipo + número) en negrita y tamaño 13
+            unit_prefixes = ("Apto:", "Local:", "Penthouse:", "Depósito:", "Apartamento ", "Otro:", "Unidad:")
+            for i in range(1, num_lines + 1):
+                line_text = text_widget.get(f"{i}.0", f"{i}.0 lineend")
+                s = line_text.strip()
+                if s.endswith(":") and s.startswith(unit_prefixes):
+                    text_widget.tag_add("apt_header", f"{i}.0", f"{i}.0 lineend")
+        elif report_type == "pending_payments":
+            # Negrita para "Inquilino:" y "  • Apartamento:"
+            text_widget.tag_configure("bold", font=("Consolas", 10, "bold"))
+            num_lines = int(text_widget.index("end-1c").split(".")[0])
+            for i in range(1, num_lines + 1):
+                line_text = text_widget.get(f"{i}.0", f"{i}.0 lineend")
+                if line_text.strip().startswith("Inquilino:") or "• Apartamento:" in line_text:
+                    text_widget.tag_add("bold", f"{i}.0", f"{i}.0 lineend")
         text_widget.config(state="disabled")
+    
+    def _show_export_success_dialog(self, filepath):
+        """Ventana de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
+        path = Path(filepath) if not isinstance(filepath, Path) else filepath
+        colors = get_module_colors("pagos")
+        win = tk.Toplevel(self.winfo_toplevel())
+        win.title("Exportación exitosa")
+        win.geometry("520x220")
+        win.transient(self.winfo_toplevel())
+        win.resizable(True, False)
+        win.grab_set()
+        content = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
+        content.pack(fill="both", expand=True)
+        top = tk.Frame(content)
+        top.pack(fill="x")
+        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=colors.get("primary", "#2563eb")).pack(side="left", padx=(0, Spacing.MD))
+        msg = tk.Frame(top)
+        msg.pack(side="left", fill="x", expand=True)
+        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
+        path_var = tk.StringVar(value=str(path))
+        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
+        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
+        path_entry.bind("<Key>", lambda e: "break")
+        btns = tk.Frame(content)
+        btns.pack(fill="x", pady=(Spacing.LG, 0))
+        def copy_path():
+            win.clipboard_clear()
+            win.clipboard_append(str(path))
+        def open_folder():
+            folder = str(path.resolve().parent)
+            if os.name == "nt":
+                os.startfile(folder)
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", folder], check=False)
+        def open_file():
+            p = str(path.resolve())
+            if os.name == "nt":
+                os.startfile(p)
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", p], check=False)
+        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
+        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
     
     def _export_to_csv(self, content, title, report_type):
         """Exporta el reporte a CSV"""
         try:
-            export_dir = Path(__file__).resolve().parent.parent.parent.parent / "exports"
-            export_dir.mkdir(exist_ok=True)
-            
+            from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
+            ensure_dirs()
             filename = f"{report_type}_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            filepath = export_dir / filename
+            filepath = EXPORTS_DIR / filename
             
-            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 for line in content.split('\n'):
                     writer.writerow([line])
             
-            messagebox.showinfo(
-                "Exportación exitosa",
-                f"Reporte exportado a:\n{filepath}\n\nPuedes copiar esta ruta para acceder al archivo."
-            )
+            self._show_export_success_dialog(filepath)
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar CSV: {str(e)}")
     
     def _export_to_txt(self, content, title, report_type):
         """Exporta el reporte a TXT"""
         try:
-            export_dir = Path(__file__).resolve().parent.parent.parent.parent / "exports"
-            export_dir.mkdir(exist_ok=True)
-            
+            from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
+            ensure_dirs()
             filename = f"{report_type}_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            filepath = export_dir / filename
+            filepath = EXPORTS_DIR / filename
             
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, 'w', encoding='utf-8-sig') as f:
                 f.write(content)
             
-            messagebox.showinfo(
-                "Exportación exitosa",
-                f"Reporte exportado a:\n{filepath}\n\nPuedes copiar esta ruta para acceder al archivo."
-            )
+            self._show_export_success_dialog(filepath)
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar TXT: {str(e)}")
     
     # ==================== HELPERS ====================
     
+    def _get_apartment_display_name(self, apt):
+        """Devuelve el nombre de la unidad para el reporte: Apto, Local, Penthouse, Depósito, etc."""
+        if not apt:
+            return "Unidad"
+        unit_type = apt.get("unit_type", "Apartamento Estándar")
+        unit_number = apt.get("number", "N/A")
+        if unit_type == "Local Comercial" or unit_type == "Local comercial":
+            return f"Local: {unit_number}"
+        if unit_type == "Penthouse":
+            return f"Penthouse: {unit_number}"
+        if unit_type == "Depósito" or "Depósito" in str(unit_type) or "Bodega" in str(unit_type):
+            return f"Depósito: {unit_number}"
+        if unit_type == "Apartamento Estándar" or unit_type == "Apartamento Estandar":
+            return f"Apto: {unit_number}"
+        return f"{unit_type}: {unit_number}"
+
     def _get_apartment_number(self, tenant):
         """Obtiene el número del apartamento de un inquilino"""
         apt_id = tenant.get('apartamento', None)
@@ -1599,3 +1657,92 @@ class PaymentReportsView(tk.Frame):
             return datetime.strptime(date_str, "%d/%m/%Y")
         except:
             return datetime(1900, 1, 1)
+    
+    def _create_navigation_buttons(self, parent, on_back_command):
+        """Crea los botones Volver y Dashboard con estilo consistente"""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
+        
+        # Configuración común para ambos botones (misma altura)
+        button_config = {
+            "font": ("Segoe UI", 10, "bold"),
+            "bg": theme["btn_secondary_bg"],
+            "fg": theme["btn_secondary_fg"],
+            "activebackground": hover_bg,
+            "activeforeground": theme["btn_secondary_fg"],
+            "bd": 1,
+            "relief": "solid",
+            "padx": 12,
+            "pady": 5,
+            "cursor": "hand2"
+        }
+        
+        # Colores verdes para módulo de pagos
+        colors = get_module_colors("pagos")
+        green_primary = colors["primary"]
+        green_hover = colors["hover"]
+        green_light = colors["light"]
+        green_text = colors["text"]
+        
+        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+        def go_to_dashboard():
+            # Prioridad 1: Usar callback directo si está disponible
+            if self.on_navigate_to_dashboard:
+                try:
+                    self.on_navigate_to_dashboard()
+                    return
+                except Exception as e:
+                    print(f"Error en callback de navegación: {e}")
+            
+            # Prioridad 2: Buscar MainWindow en la jerarquía
+            widget = self.master
+            max_depth = 10
+            depth = 0
+            while widget and depth < max_depth:
+                if (hasattr(widget, '_navigate_to') and 
+                    hasattr(widget, '_load_view') and 
+                    hasattr(widget, 'views_container')):
+                    try:
+                        widget._navigate_to("dashboard")
+                        return
+                    except Exception as e:
+                        print(f"Error al navegar: {e}")
+                        break
+                widget = getattr(widget, 'master', None)
+                depth += 1
+            
+            # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
+            if self.on_back:
+                self.on_back()
+        
+        # Botón "Volver"
+        btn_back = create_rounded_button(
+            parent,
+            text=f"{Icons.ARROW_LEFT} Volver",
+            bg_color="white",
+            fg_color=green_primary,
+            hover_bg=green_light,
+            hover_fg=green_text,
+            command=on_back_command,
+            padx=16,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        
+        # Botón "Dashboard"
+        btn_dashboard = create_rounded_button(
+            parent,
+            text=f"{Icons.APARTMENTS} Dashboard",
+            bg_color=green_primary,
+            fg_color="white",
+            hover_bg=green_hover,
+            hover_fg="white",
+            command=go_to_dashboard,
+            padx=18,
+            pady=8,
+            radius=4,
+            border_color="#000000"
+        )
+        btn_dashboard.pack(side="right")

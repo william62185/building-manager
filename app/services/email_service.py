@@ -16,11 +16,13 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import json
 
+from manager.app.paths_config import DATA_DIR, ensure_dirs
+
 
 class EmailService:
     """Servicio para envío de emails"""
     
-    CONFIG_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "email_config.json"
+    CONFIG_FILE = DATA_DIR / "email_config.json"
     
     def __init__(self):
         self._ensure_config_file()
@@ -28,6 +30,7 @@ class EmailService:
     
     def _ensure_config_file(self):
         """Asegura que el archivo de configuración existe"""
+        ensure_dirs()
         if not self.CONFIG_FILE.exists():
             self.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
