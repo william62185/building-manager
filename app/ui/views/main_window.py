@@ -14,9 +14,10 @@ from pathlib import Path
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator, ModernMetricCard, DetailedMetricCard, create_rounded_button, get_module_colors
-from manager.app.services.tenant_service import TenantService
-from manager.app.services.payment_service import PaymentService
+from manager.app.services.tenant_service import tenant_service
+from manager.app.services.payment_service import payment_service
 from manager.app.services.expense_service import ExpenseService
+from manager.app.logger import logger
 from .payments_view import PaymentsView
 from .tenants_view import TenantsView
 from .expenses_view import ExpensesView
@@ -85,10 +86,13 @@ class MainWindow:
         # Configurar estilos
         self.root.configure(**theme_manager.get_style("window"))
         
-        # Icono de la aplicación (puedes cambiar por un .ico)
+        # Icono de la aplicación (ruta vía paths_config para dev y frozen)
         try:
-            self.root.iconbitmap("assets/icon.ico")
-        except:
+            from manager.app.paths_config import get_icon_path
+            icon_path = get_icon_path()
+            if icon_path:
+                self.root.iconbitmap(str(icon_path))
+        except Exception:
             pass  # Si no existe el icono, continúa sin él
         
         # Centrar ventana si no se puede maximizar
@@ -553,9 +557,7 @@ class MainWindow:
                         self._update_nav_button_theme(btn_frame, theme)
             
         except Exception as e:
-            print(f"Error al actualizar tema del sidebar: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error al actualizar tema del sidebar: %s", e)
     
     def _update_widget_theme_recursive(self, widget, theme, bg_key, fg_key, fg_secondary_key):
         """Actualiza recursivamente los colores de los widgets"""
@@ -1061,7 +1063,6 @@ class MainWindow:
             self._create_dashboard_view()
         elif view_name == "tenants":
             # Recargar datos de inquilinos antes de crear la vista para asegurar datos actualizados
-            from manager.app.services.tenant_service import tenant_service
             try:
                 # Recargar datos desde archivo
                 tenant_service._load_data()
@@ -1070,7 +1071,7 @@ class MainWindow:
                 # Recargar datos después del recálculo
                 tenant_service._load_data()
             except Exception as e:
-                print(f"Error al recargar datos de inquilinos: {str(e)}")
+                logger.warning("Error al recargar datos de inquilinos: %s", e)
             
             self._create_tenants_view()
             # Forzar actualización después de cargar la vista de inquilinos
@@ -2124,7 +2125,7 @@ class MainWindow:
     def refresh_tenants_view(self):
         """Refresca la vista de inquilinos para mostrar estados actualizados en tiempo real"""
         current_view = getattr(self, '_current_view', None)
-        print(f"🔄 Refrescando vista de inquilinos desde vista: {current_view}")
+        logger.debug("Refrescando vista de inquilinos desde vista: %s", current_view)
         
         try:
             # Primero intentar refrescar si la vista de inquilinos ya está activa
@@ -2135,26 +2136,22 @@ class MainWindow:
                         # Si está en la lista, refrescar solo la lista sin destruir la vista
                         if widget.current_view == "list":
                             widget.refresh_list()
-                            print("✅ Lista de inquilinos refrescada en tiempo real (sin recrear vista)")
+                            logger.debug("Lista de inquilinos refrescada en tiempo real (sin recrear vista)")
                             # Forzar actualización de la UI
                             self.root.update_idletasks()
                             self.root.update()
                             return
                         # Si está en otra subvista (dashboard, details), refrescar cuando vuelva a lista
             
-            # Si no estamos en la vista de inquilinos o no está en lista, 
-            # los datos se recargarán automáticamente cuando navegues a inquilinos
-            # gracias a _create_tenants_view() que ya recarga datos
-            
-            print(f"✅ Callback de refresh ejecutado - Los datos se actualizarán al navegar a inquilinos")
+            # Si no estamos en la vista de inquilinos o no está en lista,
+            # los datos se recargarán al navegar a inquilinos vía _create_tenants_view()
+            logger.debug("Callback de refresh ejecutado - Los datos se actualizarán al navegar a inquilinos")
         except Exception as e:
-            print(f"⚠️ Error al refrescar vista de inquilinos: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.warning("Error al refrescar vista de inquilinos: %s", e)
     
     def _force_tenants_refresh(self):
         """Fuerza un refresh completo de la vista de inquilinos"""
-        print("Forzando refresh completo de vista de inquilinos")
+        logger.debug("Forzando refresh completo de vista de inquilinos")
         try:
             # Limpiar contenido actual
             for widget in self.views_container.winfo_children():
@@ -2168,19 +2165,15 @@ class MainWindow:
             self.root.update()
             self.root.after(100, self.root.update_idletasks)
             self.root.after(200, self.root.update)
-            
-            print(f"Refresh completo forzado exitosamente")
         except Exception as e:
-            print(f"Error al forzar refresh: {str(e)}")
+            logger.warning("Error al forzar refresh: %s", e)
     
     def _get_payments_of_current_month(self):
         """Calcula el total de ingresos del mes actual"""
-        from manager.app.services.payment_service import PaymentService
         import datetime
-        service = PaymentService()
-        service._load_data()  # Asegurar datos actualizados
+        payment_service._load_data()  # Asegurar datos actualizados
         now = datetime.datetime.now()
-        pagos = service.get_all_payments()
+        pagos = payment_service.get_all_payments()
         pagos_mes = [p for p in pagos if self._is_payment_in_current_month(p, now)]
         total = sum(float(p.get('monto', 0)) for p in pagos_mes)
         return total

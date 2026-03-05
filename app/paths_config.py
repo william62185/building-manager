@@ -10,7 +10,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _get_base_path() -> Path:
@@ -38,6 +38,38 @@ BACKUPS_DIR = BASE_PATH / "backups"
 DOCUMENTOS_INQUILINOS_DIR = DATA_DIR / "documentos_inquilinos"
 GASTOS_DOCS_DIR = BASE_PATH / "gastos_docs"
 EXPORTS_DIR = BASE_PATH / "exports"
+
+
+def get_icon_path() -> Optional[Path]:
+    """
+    Ruta del icono de la aplicación (.ico).
+    En desarrollo: raíz del proyecto / assets / icon.ico.
+    En frozen: carpeta del ejecutable / assets / icon.ico (si el instalador incluye assets).
+    Devuelve None si el archivo no existe.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+        if base.name == "_internal":
+            base = base.parent
+    else:
+        base = Path(__file__).resolve().parent.parent.parent  # raíz del proyecto
+    icon_path = base / "assets" / "icon.ico"
+    return icon_path if icon_path.exists() else None
+
+
+def get_splash_path() -> Optional[Path]:
+    """
+    Ruta de la imagen de splash (splash.png).
+    Misma lógica que get_icon_path: raíz del proyecto / assets en dev, carpeta del ejecutable en frozen.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+        if base.name == "_internal":
+            base = base.parent
+    else:
+        base = Path(__file__).resolve().parent.parent.parent
+    splash_path = base / "assets" / "splash.png"
+    return splash_path if splash_path.exists() else None
 
 
 def _sanitize_folder_part(text: str) -> str:

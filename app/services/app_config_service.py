@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
+from manager.app.persistence import save_json_atomic
 
 
 class AppConfigService:
@@ -20,92 +22,74 @@ class AppConfigService:
         self._ensure_config_file()
         self._load_config()
     
+    def _default_config(self) -> Dict[str, Any]:
+        """Configuración por defecto única (evita duplicación)."""
+        return {
+            "theme": "dark",
+            "currency": {
+                "symbol": "$",
+                "code": "COP",
+                "thousands_separator": ".",
+                "decimal_separator": ","
+            },
+            "date_format": "DD/MM/YYYY",
+            "backup": {
+                "auto_backup_enabled": True,
+                "interval_hours": 6,
+                "max_backups": 10
+            },
+            "license": {
+                "first_run_date": None,
+                "demo_ends_at": None,
+                "license_key": None,
+                "license_status": "unknown",
+                "license_expires_at": None,
+                "activated_at": None,
+                "test_mode": False,
+                "demo_days_override": 1,
+                "force_expired": False
+            }
+        }
+    
     def _ensure_config_file(self):
         """Asegura que el archivo de configuración existe"""
         try:
-            # Asegurar que ensure_dirs esté disponible
             from manager.app.paths_config import ensure_dirs
             ensure_dirs()
-        except (NameError, ImportError, AttributeError) as e:
-            # Fallback si ensure_dirs no está disponible (PyInstaller)
+        except (NameError, ImportError, AttributeError):
             try:
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
             except Exception:
                 pass
         if not self.CONFIG_FILE.exists():
             self.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            default_config = {
-                "theme": "dark",
-                "currency": {
-                    "symbol": "$",
-                    "code": "COP",
-                    "thousands_separator": ".",
-                    "decimal_separator": ","
-                },
-                "date_format": "DD/MM/YYYY",
-                "backup": {
-                    "auto_backup_enabled": True,
-                    "interval_hours": 6,
-                    "max_backups": 10
-                },
-                "license": {
-                    "first_run_date": None,
-                    "demo_ends_at": None,
-                    "license_key": None,
-                    "license_status": "unknown",  # demo | active | expired
-                    "license_expires_at": None,
-                    "activated_at": None,
-                    "test_mode": False,
-                    "demo_days_override": 1,
-                    "force_expired": False
-                }
-            }
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(default_config, f, ensure_ascii=False, indent=2)
+                json.dump(self._default_config(), f, ensure_ascii=False, indent=2)
     
     def _load_config(self):
-        """Carga la configuración desde el archivo"""
+        """Carga la configuración desde el archivo. Si está corrupto, respaldo .bak y usa valores por defecto."""
         try:
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.config = {
-                "theme": "dark",
-                "currency": {
-                    "symbol": "$",
-                    "code": "COP",
-                    "thousands_separator": ".",
-                    "decimal_separator": ","
-                },
-                "date_format": "DD/MM/YYYY",
-                "backup": {
-                    "auto_backup_enabled": True,
-                    "interval_hours": 6,
-                    "max_backups": 10
-                },
-                "license": {
-                    "first_run_date": None,
-                    "demo_ends_at": None,
-                    "license_key": None,
-                    "license_status": "unknown",
-                    "license_expires_at": None,
-                    "activated_at": None,
-                    "test_mode": False,
-                    "demo_days_override": 1,
-                    "force_expired": False
-                }
-            }
+            if not isinstance(self.config, dict):
+                self.config = self._default_config().copy()
+                self._save_config()
+        except FileNotFoundError:
+            self.config = self._default_config().copy()
+            self._save_config()
+        except json.JSONDecodeError:
+            logger.warning("Archivo de configuración corrupto, respaldo como .bak: %s", self.CONFIG_FILE)
+            try:
+                bak = self.CONFIG_FILE.with_suffix(".json.bak")
+                self.CONFIG_FILE.rename(bak)
+            except Exception as e:
+                logger.warning("No se pudo renombrar archivo corrupto: %s", e)
+            self.config = self._default_config().copy()
             self._save_config()
     
     def _save_config(self):
-        """Guarda la configuración al archivo"""
-        try:
-            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            print(f"⚠️ Error al guardar configuración: {str(e)}")
-            return False
+        """Guarda la configuración al archivo (escritura atómica)."""
+        return save_json_atomic(self.CONFIG_FILE, self.config, ensure_ascii=False, indent=2)
     
     # Métodos para tema
     def get_theme(self) -> str:

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
 
 APARTMENTS_FILE = str(DATA_DIR / "apartments.json")
 
@@ -23,7 +24,7 @@ class ApartmentService:
         
         # Si se realizó una limpieza durante la carga, guardar el resultado para hacerlo permanente.
         if cleanup_needed:
-            print("INFO: Guardando la lista de apartamentos depurada para eliminar registros obsoletos permanentemente.")
+            logger.info("Guardando la lista de apartamentos depurada para eliminar registros obsoletos permanentemente.")
             self._save_data()
 
     def _load_data(self) -> (List[Dict[str, Any]], int, bool):
@@ -37,14 +38,14 @@ class ApartmentService:
                 apartments_from_file = json.load(f)
 
             if not isinstance(apartments_from_file, list):
-                print(f"ADVERTENCIA: El archivo de apartamentos no contenía una lista. Se ha reiniciado.")
+                logger.warning("El archivo de apartamentos no contenía una lista. Se ha reiniciado.")
                 return [], 1, False
 
             # Limpieza: solo cargar apartamentos que pertenecen a un edificio.
             valid_apartments = [apt for apt in apartments_from_file if apt.get('building_id') is not None]
 
             if len(valid_apartments) < len(apartments_from_file):
-                print(f"INFO: Se han filtrado {len(apartments_from_file) - len(valid_apartments)} apartamentos obsoletos (sin ID de edificio).")
+                logger.info("Se han filtrado %d apartamentos obsoletos (sin ID de edificio).", len(apartments_from_file) - len(valid_apartments))
                 cleanup_needed = True
 
             if not valid_apartments:
@@ -65,7 +66,7 @@ class ApartmentService:
             with open(self.apartments_file, 'w', encoding='utf-8') as f:
                 json.dump(sorted_apartments, f, indent=4, ensure_ascii=False)
         except IOError as e:
-            print(f"Error al guardar datos de apartamentos: {e}")
+            logger.warning("Error al guardar datos de apartamentos: %s", e)
     
     def _natural_sort_apartments(self, apartment_list: List[Dict[str, Any]]):
         """Ordena una lista de apartamentos usando ordenamiento natural por el campo 'number'."""

@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
+from manager.app.persistence import save_json_atomic
 
 
 class UserService:
@@ -47,13 +49,22 @@ class UserService:
     
     def _load_data(self):
         """Carga datos de usuarios desde el archivo JSON.
-        No crea admin por defecto si no hay usuarios (primera ejecución:
-        el usuario se crea desde la pantalla de bienvenida).
+        Si está corrupto, renombra a .bak y arranca con lista vacía.
         """
         try:
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 self.users = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+            if not isinstance(self.users, list):
+                self.users = []
+        except FileNotFoundError:
+            self.users = []
+        except json.JSONDecodeError:
+            logger.warning("Archivo de usuarios corrupto, respaldo como .bak: %s", self.data_file)
+            try:
+                bak = self.data_file.with_suffix(".json.bak")
+                self.data_file.rename(bak)
+            except Exception as e:
+                logger.warning("No se pudo renombrar archivo corrupto: %s", e)
             self.users = []
     
     def _load_activity(self):
@@ -89,18 +100,16 @@ class UserService:
         return hashlib.sha256(password.encode()).hexdigest()
     
     def _save_data(self):
-        """Guarda datos de usuarios al archivo JSON"""
-        with open(self.data_file, 'w', encoding='utf-8') as f:
-            json.dump(self.users, f, ensure_ascii=False, indent=2)
-    
+        """Guarda datos de usuarios al archivo JSON (escritura atómica)."""
+        if not save_json_atomic(self.data_file, self.users, ensure_ascii=False, indent=2):
+            raise IOError("No se pudo guardar users.json")
+
     def _save_activity(self):
-        """Guarda el historial de actividad"""
-        # Mantener solo los últimos 1000 registros
+        """Guarda el historial de actividad (escritura atómica)."""
         if len(self.activity_log) > 1000:
             self.activity_log = self.activity_log[-1000:]
-        
-        with open(self.activity_file, 'w', encoding='utf-8') as f:
-            json.dump(self.activity_log, f, ensure_ascii=False, indent=2)
+        if not save_json_atomic(self.activity_file, self.activity_log, ensure_ascii=False, indent=2):
+            logger.warning("No se pudo guardar user_activity.json")
     
     def _log_activity(self, username: str, action: str, details: str, target_user: Optional[str] = None):
         """Registra una actividad en el historial"""

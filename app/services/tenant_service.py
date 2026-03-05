@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
+from manager.app.persistence import save_json_atomic
 
 
 class TenantService:
@@ -31,17 +33,27 @@ class TenantService:
                 json.dump([], f, ensure_ascii=False, indent=2)
     
     def _load_data(self):
-        """Carga datos desde el archivo JSON"""
+        """Carga datos desde el archivo JSON. Si está corrupto, renombra a .bak y arranca con lista vacía."""
         try:
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 self.tenants = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+            if not isinstance(self.tenants, list):
+                self.tenants = []
+        except FileNotFoundError:
+            self.tenants = []
+        except json.JSONDecodeError:
+            logger.warning("Archivo de inquilinos corrupto, respaldo como .bak y reinicio con lista vacía: %s", self.data_file)
+            try:
+                bak = Path(self.data_file).with_suffix(".json.bak")
+                os.replace(self.data_file, bak)
+            except Exception as e:
+                logger.warning("No se pudo renombrar archivo corrupto: %s", e)
             self.tenants = []
     
     def _save_data(self):
-        """Guarda datos al archivo JSON"""
-        with open(self.data_file, 'w', encoding='utf-8') as f:
-            json.dump(self.tenants, f, ensure_ascii=False, indent=2)
+        """Guarda datos al archivo JSON (escritura atómica)."""
+        if not save_json_atomic(self.data_file, self.tenants, ensure_ascii=False, indent=2):
+            raise IOError("No se pudo guardar tenants.json")
     
     def get_all_tenants(self) -> List[Dict[str, Any]]:
         """Obtiene todos los inquilinos"""
@@ -97,7 +109,7 @@ class TenantService:
             return tenant.copy()
             
         except Exception as e:
-            print(f"Error al crear inquilino: {str(e)}")
+            logger.exception("Error al crear inquilino: %s", e)
             return None
     
     def update_tenant(self, tenant_id: int, tenant_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -113,7 +125,7 @@ class TenantService:
                     return self.tenants[i].copy()
             return None
         except Exception as e:
-            print(f"Error al actualizar inquilino: {str(e)}")
+            logger.exception("Error al actualizar inquilino: %s", e)
             return None
     
     def delete_tenant(self, tenant_id: int) -> bool:
@@ -221,7 +233,7 @@ class TenantService:
                 return "inactivo"
                 
         except Exception as e:
-            print(f"Error al calcular estado de pago: {str(e)}")
+            logger.warning("Error al calcular estado de pago: %s", e)
             return "moroso"  # En caso de error, considerar moroso
     
     def update_payment_status(self, tenant_id: int) -> bool:
@@ -239,7 +251,7 @@ class TenantService:
             
             return False
         except Exception as e:
-            print(f"Error al actualizar estado de pago: {str(e)}")
+            logger.warning("Error al actualizar estado de pago: %s", e)
             return False
     
     def recalculate_all_payment_statuses(self) -> Dict[str, int]:
@@ -287,7 +299,7 @@ class TenantService:
             return status_changes
             
         except Exception as e:
-            print(f"Error al recalcular estados: {str(e)}")
+            logger.warning("Error al recalcular estados: %s", e)
             return {}
 
 # Instancia global del servicio

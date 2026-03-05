@@ -1182,7 +1182,6 @@ class PaymentReportsView(tk.Frame):
         total_paid = sum(float(p.get('monto', 0)) for p in payments)
         report.append(f"  • Total de pagos registrados: {len(payments)}")
         report.append(f"  • Total pagado: ${total_paid:,.2f}")
-        report.append(f"  • Promedio por pago: ${total_paid/len(payments):,.2f}" if payments else "  • Promedio por pago: $0.00")
         report.append("")
         report.append("HISTORIAL DE PAGOS:")
         report.append("-" * 60)
@@ -1211,9 +1210,6 @@ class PaymentReportsView(tk.Frame):
         report.append("=" * 60)
         report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
-            report.append("")
         report.append("RESUMEN GENERAL:")
         report.append(f"  • Total de pagos: {total_payments}")
         report.append(f"  • Total recaudado: ${sum(m['total'] for m in methods_dict.values()):,.2f}")
@@ -1230,7 +1226,6 @@ class PaymentReportsView(tk.Frame):
             report.append(f"  • Cantidad de pagos: {data['count']}")
             report.append(f"  • Total recaudado: ${data['total']:,.2f}")
             report.append(f"  • Porcentaje del total: {percentage:.2f}%")
-            report.append(f"  • Promedio por pago: ${data['total']/data['count']:,.2f}")
             report.append("")
         
         return "\n".join(report)
@@ -1308,9 +1303,6 @@ class PaymentReportsView(tk.Frame):
         if selected_apartment:
             report.append(f"APARTAMENTO SELECCIONADO: {selected_apartment}")
             report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
-            report.append("")
         report.append(f"Total de apartamentos con pagos: {len(apt_payments)}")
         report.append("")
         report.append("DETALLE POR APARTAMENTO:")
@@ -1329,7 +1321,6 @@ class PaymentReportsView(tk.Frame):
             report.append(f"{unit_label}:")
             report.append(f"  • Total de pagos: {data['count']}")
             report.append(f"  • Total recaudado: ${data['total']:,.2f}")
-            report.append(f"  • Promedio por pago: ${data['total']/data['count']:,.2f}" if data['count'] > 0 else "  • Promedio por pago: $0.00")
             report.append("")
             report.append("  Historial de pagos:")
             # Ordenar pagos por fecha
@@ -1434,15 +1425,9 @@ class PaymentReportsView(tk.Frame):
         header = tk.Frame(window, bg=header_bg, height=50)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(
-            header,
-            text=title,
-            font=("Segoe UI", 14, "bold"),
-            bg=header_bg,
-            fg="white"
-        ).pack(side="left", padx=Spacing.LG, pady=12)
+
         btn_frame = tk.Frame(header, bg=header_bg)
-        btn_frame.pack(side="right", padx=Spacing.LG)
+        btn_frame.pack(side="right", padx=Spacing.LG, pady=12)
 
         def export_csv():
             self._export_to_csv(content, title, report_type)
@@ -1466,11 +1451,23 @@ class PaymentReportsView(tk.Frame):
         btn_txt.bind("<Enter>", lambda e: btn_txt.config(bg=btn_export_hover))
         btn_txt.bind("<Leave>", lambda e: btn_txt.config(bg=btn_export_bg))
 
-        # Cerrar: ancho fijo para que el icono no se corte (× más compacto que ✖)
-        btn_close = tk.Button(btn_frame, text="× Cerrar", bg=btn_close_bg, width=10, **btn_opts, command=window.destroy)
+        # Cerrar: ancho suficiente para que "× Cerrar" no se corte en ningún tema/fuente
+        btn_close_opts = {**btn_opts, "padx": 18}
+        btn_close = tk.Button(btn_frame, text="× Cerrar", bg=btn_close_bg, width=12, **btn_close_opts, command=window.destroy)
         btn_close.pack(side="left", padx=Spacing.SM)
         btn_close.bind("<Enter>", lambda e: btn_close.config(bg=btn_close_hover))
         btn_close.bind("<Leave>", lambda e: btn_close.config(bg=btn_close_bg))
+
+        # Título a la izquierda: ocupa el espacio restante sin empujar los botones
+        title_label = tk.Label(
+            header,
+            text=title,
+            font=("Segoe UI", 14, "bold"),
+            bg=header_bg,
+            fg="white",
+            anchor="w"
+        )
+        title_label.pack(side="left", fill="x", expand=True, padx=Spacing.LG, pady=12)
 
         text_frame = tk.Frame(window)
         text_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)

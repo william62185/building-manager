@@ -886,9 +886,6 @@ class ExpenseReportsView(tk.Frame):
         report.append("=" * 60)
         report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         report.append("")
-        if period_name:
-            report.append(f"PERÍODO SELECCIONADO: {period_name}")
-            report.append("")
         total_general = sum(c['total'] for c in categories_dict.values())
         report.append("RESUMEN GENERAL:")
         report.append(f"  • Total de gastos: {total_expenses}")

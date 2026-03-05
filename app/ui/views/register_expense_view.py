@@ -24,6 +24,8 @@ class DatePickerWidget(tk.Frame):
     
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **theme_manager.get_style("frame"))
+        # Usar el mismo fondo que el padre para no mostrar un recuadro blanco extra
+        self.configure(bg=parent.cget("bg"))
         
         self.selected_date = None
         self.calendar_window = None
@@ -32,25 +34,40 @@ class DatePickerWidget(tk.Frame):
         self._create_widget()
     
     def _create_widget(self):
-        """Crea el widget de selección de fecha"""
-        # Campo de entrada para mostrar la fecha seleccionada
-        self.date_entry = tk.Entry(self, **theme_manager.get_style("entry"))
-        self.date_entry.pack(side="left", fill="x", expand=True)
-        
-        # Botón para abrir el calendario
+        """Crea el widget de selección de fecha (ancho y altura acordes al resto de campos)."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        # Misma fuente que los demás campos del formulario para altura uniforme
+        entry_font = ("Segoe UI", 10)
+        border_grey = "#d1d5db"
+        date_entry_width = 23
+        entry_wrapper = tk.Frame(self, bg=border_grey, bd=0)
+        entry_wrapper.pack(side="left")
+        inner = tk.Frame(entry_wrapper, bg=theme.get("bg_primary", "#ffffff"))
+        inner.pack(padx=1, pady=1)
+        self.date_entry = tk.Entry(
+            inner,
+            font=entry_font,
+            width=date_entry_width,
+            bg=theme.get("bg_primary", "#ffffff"),
+            fg=theme.get("text_primary", "#1e293b"),
+            relief="flat",
+            bd=0
+        )
+        self.date_entry.pack(pady=1, ipady=2, padx=2)
+        # Selector de calendario inmediatamente a la derecha del campo de fecha (altura reducida)
         self.calendar_btn = tk.Button(
             self,
             text="📅",
-            font=("Segoe UI", 10),
-            bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
-            fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
+            font=entry_font,
+            bg=theme["btn_secondary_bg"],
+            fg=theme["btn_secondary_fg"],
             bd=1,
             relief="solid",
             width=3,
             cursor="hand2",
             command=self._show_calendar
         )
-        self.calendar_btn.pack(side="right", padx=(4, 0))
+        self.calendar_btn.pack(side="left", padx=(6, 0), pady=1, ipady=1)
     
     def _show_calendar(self):
         """Muestra el calendario en una ventana emergente"""
@@ -592,7 +609,7 @@ class RegisterExpenseView(tk.Frame):
             form_container,
             "Monto ($):",
             self.monto_var,
-            width=20
+            width=29
         )
         
         row6 = tk.Frame(form_container, bg=cb)

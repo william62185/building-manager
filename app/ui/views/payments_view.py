@@ -6,14 +6,16 @@ from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
-from manager.app.services.payment_service import PaymentService
-from manager.app.services.tenant_service import TenantService
+from manager.app.services.payment_service import payment_service
+from manager.app.services.tenant_service import tenant_service
 import webbrowser
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from .edit_delete_payments_view import EditDeletePaymentsView
+from .register_expense_view import DatePickerWidget
 from manager.app.services.apartment_service import apartment_service
+from manager.app.logger import logger
 
 class PaymentsView(tk.Frame):
     """Vista profesional para gestión de pagos de inquilinos"""
@@ -22,8 +24,8 @@ class PaymentsView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
         self.configure(bg=self._content_bg)
-        self.payment_service = PaymentService()
-        self.tenant_service = TenantService()
+        self.payment_service = payment_service
+        self.tenant_service = tenant_service
         self.on_back = on_back
         self.preselected_tenant = preselected_tenant
         self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
@@ -293,21 +295,40 @@ class PaymentsView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
         row_opts = {'padx': (0, 8), 'pady': 2}
-        # Fecha
+        # Fecha (con mini selector de calendario)
         row1 = tk.Frame(self.form_frame, bg=cb)
         row1.pack(fill="x", pady=1)
         tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        tk.Entry(row1, textvariable=self.fecha_var, width=18).pack(side="left", **row_opts)
+        self.date_picker = DatePickerWidget(row1)
+        self.date_picker.pack(side="left", **row_opts)
+        self.date_picker.set(self.fecha_var.get())
+        # Mantener fecha_var en sync con el date picker
+        def _on_date_change(event=None):
+            val = self.date_picker.get()
+            if val:
+                self.fecha_var.set(val)
+        self.date_picker.date_entry.bind("<KeyRelease>", _on_date_change)
+        self.date_picker.date_entry.bind("<FocusOut>", _on_date_change)
+        _orig_select = self.date_picker._select_date
+        _orig_today = self.date_picker._select_today
+        def _wrapped_select(day):
+            _orig_select(day)
+            self.fecha_var.set(self.date_picker.get())
+        def _wrapped_today():
+            _orig_today()
+            self.fecha_var.set(self.date_picker.get())
+        self.date_picker._select_date = _wrapped_select
+        self.date_picker._select_today = _wrapped_today
         # Monto
         row2 = tk.Frame(self.form_frame, bg=cb)
         row2.pack(fill="x", pady=1)
         tk.Label(row2, text="Monto:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        tk.Entry(row2, textvariable=self.monto_var, width=18).pack(side="left", **row_opts)
+        tk.Entry(row2, textvariable=self.monto_var, width=27).pack(side="left", **row_opts)
         # Método
         row3 = tk.Frame(self.form_frame, bg=cb)
         row3.pack(fill="x", pady=1)
         tk.Label(row3, text="Método:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        metodo_combo = ttk.Combobox(row3, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=16)
+        metodo_combo = ttk.Combobox(row3, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=24)
         metodo_combo.pack(side="left", **row_opts)
         # Observaciones
         row4 = tk.Frame(self.form_frame, bg=cb)
@@ -342,6 +363,8 @@ class PaymentsView(tk.Frame):
         self.selected_tenant = None
         self.monto_var.set("")
         self.fecha_var.set(datetime.now().strftime("%d/%m/%Y"))
+        if hasattr(self, "date_picker") and self.date_picker.winfo_exists():
+            self.date_picker.set(self.fecha_var.get())
         self.metodo_var.set("Efectivo")
         self.obs_var.set("")
         self._display_register_payments(self._get_all_payments())
@@ -366,7 +389,7 @@ class PaymentsView(tk.Frame):
         cb = self._content_bg
         bg_alt = theme.get("bg_tertiary", "#f0f4fa")
         columns = getattr(self, '_table_columns', [
-            ("Inquilino", 22), ("Fecha de pago", 14), ("Monto", 14), ("Método", 12), ("Observaciones", 38)
+            ("Inquilino", 22), ("Fecha de pago", 12), ("Monto", 14), ("Método", 12), ("Observaciones", 38)
         ])
         # Solo filas de datos (el encabezado está fijo en list_header_frame)
         table_frame = tk.Frame(self.list_frame, bg=cb)
@@ -410,6 +433,9 @@ class PaymentsView(tk.Frame):
         if not hasattr(self, 'selected_tenant') or not self.selected_tenant:
             messagebox.showerror("Error", "Debe seleccionar un inquilino.")
             return
+        fecha_str = self.date_picker.get() if (hasattr(self, "date_picker") and self.date_picker.winfo_exists()) else self.fecha_var.get()
+        if fecha_str:
+            self.fecha_var.set(fecha_str)
         if not self.fecha_var.get():
             messagebox.showerror("Error", "Debe ingresar la fecha de pago.")
             return
@@ -458,6 +484,8 @@ class PaymentsView(tk.Frame):
         
         self._display_register_payments(self._get_all_payments())
         self.fecha_var.set(datetime.now().strftime("%d/%m/%Y"))
+        if hasattr(self, "date_picker") and self.date_picker.winfo_exists():
+            self.date_picker.set(self.fecha_var.get())
         self.monto_var.set(str(self.selected_tenant.get('valor_arriendo', '')))
         self.metodo_var.set("Efectivo")
         self.obs_var.set("")
@@ -550,7 +578,7 @@ class PaymentsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1
@@ -585,7 +613,7 @@ class PaymentsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1
@@ -696,7 +724,7 @@ class PaymentModal(tk.Toplevel):
         super().__init__(parent)
         self.title("Registrar Pago" if payment is None else "Editar Pago")
         self.geometry("400x400")
-        self.payment_service = PaymentService()
+        self.payment_service = payment_service
         self.payment = payment
         self.on_save = on_save
         self.tenants = tenants

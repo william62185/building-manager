@@ -83,7 +83,6 @@ class LoginView(tk.Frame):
             width=36,
         )
         self._pass_entry.pack(fill="x", pady=(0, Spacing.SM))
-        self._pass_entry.focus_set()
         self._pass_entry.bind("<Return>", lambda e: self._do_login())
 
         self._usernames = usernames
@@ -141,6 +140,10 @@ class LoginView(tk.Frame):
         salir_btn.pack(side="left")
         salir_btn.bind("<Enter>", lambda e: salir_btn.configure(bg=btn_tertiary_hover))
         salir_btn.bind("<Leave>", lambda e: salir_btn.configure(bg=btn_tertiary))
+
+    def focus_password_entry(self):
+        """Pone el foco en el campo contraseña (llamar tras mostrar la ventana, p. ej. desde main)."""
+        self._pass_entry.focus_set()
 
     def _do_login(self):
         idx = self._combo.current()

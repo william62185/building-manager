@@ -22,6 +22,7 @@ from manager.app.paths_config import (
     EXPORTS_DIR,
     ensure_dirs,
 )
+from manager.app.logger import logger
 
 
 class BackupService:
@@ -105,7 +106,7 @@ class BackupService:
             
             return str(backup_path)
         except Exception as e:
-            print(f"⚠️ Error al crear backup completo: {str(e)}")
+            logger.exception("Error al crear backup completo: %s", e)
             return None
     
     def _create_metadata(self) -> Dict[str, Any]:
@@ -195,7 +196,7 @@ class BackupService:
             stats["documents_by_directory"] = docs_by_dir
             
         except Exception as e:
-            print(f"⚠️ Error al obtener estadísticas: {str(e)}")
+            logger.warning("Error al obtener estadísticas: %s", e)
         
         return stats
     
@@ -307,8 +308,7 @@ class BackupService:
                 building_service._load_buildings()
                 
         except Exception as e:
-            print(f"⚠️ Advertencia: No se pudieron recargar todos los servicios: {str(e)}")
-            print("   Se recomienda reiniciar la aplicación para ver todos los cambios.")
+            logger.warning("No se pudieron recargar todos los servicios: %s. Se recomienda reiniciar la aplicación.", e)
     
     def _extract_metadata(self, backup_file: Path) -> Optional[Dict[str, Any]]:
         """Extrae metadatos de un archivo de backup"""
@@ -318,7 +318,7 @@ class BackupService:
                     metadata_json = zipf.read("backup_metadata.json").decode('utf-8')
                     return json.loads(metadata_json)
         except Exception as e:
-            print(f"⚠️ Error al extraer metadatos: {str(e)}")
+            logger.warning("Error al extraer metadatos: %s", e)
         return None
     
     def validate_backup(self, backup_path: str) -> Dict[str, Any]:
@@ -374,9 +374,9 @@ class BackupService:
                     try:
                         old_backup.unlink()
                     except Exception as e:
-                        print(f"⚠️ Error al eliminar backup antiguo: {str(e)}")
+                        logger.warning("Error al eliminar backup antiguo: %s", e)
         except Exception as e:
-            print(f"⚠️ Error al limpiar backups antiguos: {str(e)}")
+            logger.warning("Error al limpiar backups antiguos: %s", e)
     
     def get_backup_status(self) -> Dict[str, Any]:
         """Obtiene el estado actual de los backups"""
@@ -437,7 +437,7 @@ class BackupService:
             try:
                 self.create_full_backup()
             except Exception as e:
-                print(f"⚠️ Error al crear backup automático: {str(e)}")
+                logger.warning("Error al crear backup automático: %s", e)
         
         # Programar próximo backup
         interval_seconds = self._backup_interval_hours * 3600

@@ -5,9 +5,11 @@ from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
-from manager.app.services.payment_service import PaymentService
-from manager.app.services.tenant_service import TenantService
+from manager.app.services.payment_service import payment_service
+from manager.app.services.tenant_service import tenant_service
 from manager.app.services.apartment_service import apartment_service
+from manager.app.logger import logger
+from manager.app.ui.views.register_expense_view import DatePickerWidget
 
 class EditDeletePaymentsView(tk.Frame):
     """Vista profesional para editar/eliminar pagos (independiente, duplicado de registrar pago)"""
@@ -16,8 +18,8 @@ class EditDeletePaymentsView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
         self.configure(bg=self._content_bg)
-        self.payment_service = PaymentService()
-        self.tenant_service = TenantService()
+        self.payment_service = payment_service
+        self.tenant_service = tenant_service
         self.on_back = on_back
         self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
         self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
@@ -238,18 +240,36 @@ class EditDeletePaymentsView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
         row_opts = {'padx': (0, 8), 'pady': 2}
-        # Fecha
+        # Fecha (con mini selector de calendario)
         row1 = tk.Frame(self.edit_placeholder, bg=cb)
         row1.pack(fill="x", pady=1)
         tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         fecha_var = tk.StringVar(value=self.editing_payment['fecha_pago'])
-        tk.Entry(row1, textvariable=fecha_var, width=18).pack(side="left", **row_opts)
+        date_picker = DatePickerWidget(row1)
+        date_picker.pack(side="left", **row_opts)
+        date_picker.set(fecha_var.get())
+        def _on_date_change(event=None):
+            val = date_picker.get()
+            if val:
+                fecha_var.set(val)
+        date_picker.date_entry.bind("<KeyRelease>", _on_date_change)
+        date_picker.date_entry.bind("<FocusOut>", _on_date_change)
+        _orig_select = date_picker._select_date
+        _orig_today = date_picker._select_today
+        def _wrapped_select(day):
+            _orig_select(day)
+            fecha_var.set(date_picker.get())
+        def _wrapped_today():
+            _orig_today()
+            fecha_var.set(date_picker.get())
+        date_picker._select_date = _wrapped_select
+        date_picker._select_today = _wrapped_today
         # Monto
         row2 = tk.Frame(self.edit_placeholder, bg=cb)
         row2.pack(fill="x", pady=1)
         tk.Label(row2, text="Monto:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         monto_var = tk.StringVar(value=str(self.editing_payment['monto']))
-        tk.Entry(row2, textvariable=monto_var, width=18).pack(side="left", **row_opts)
+        tk.Entry(row2, textvariable=monto_var, width=19).pack(side="left", **row_opts)
         # Método
         row3 = tk.Frame(self.edit_placeholder, bg=cb)
         row3.pack(fill="x", pady=1)
@@ -362,7 +382,7 @@ class EditDeletePaymentsView(tk.Frame):
                     self.on_navigate_to_dashboard()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.warning("Error en callback de navegación: %s", e)
             
             # Prioridad 2: Buscar MainWindow en la jerarquía
             widget = self.master
@@ -376,7 +396,7 @@ class EditDeletePaymentsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1

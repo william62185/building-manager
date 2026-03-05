@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
+from manager.app.persistence import save_json_atomic
 
 
 class PaymentService:
@@ -25,12 +27,22 @@ class PaymentService:
         try:
             with open(self.DATA_FILE, 'r', encoding='utf-8') as f:
                 self.payments = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+            if not isinstance(self.payments, list):
+                self.payments = []
+        except FileNotFoundError:
+            self.payments = []
+        except json.JSONDecodeError:
+            logger.warning("Archivo de pagos corrupto, respaldo como .bak: %s", self.DATA_FILE)
+            try:
+                bak = self.DATA_FILE.with_suffix(".json.bak")
+                self.DATA_FILE.rename(bak)
+            except Exception as e:
+                logger.warning("No se pudo renombrar archivo corrupto: %s", e)
             self.payments = []
 
     def _save_data(self):
-        with open(self.DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.payments, f, ensure_ascii=False, indent=2)
+        if not save_json_atomic(self.DATA_FILE, self.payments, ensure_ascii=False, indent=2):
+            raise IOError("No se pudo guardar payments.json")
 
     def get_all_payments(self) -> List[Dict[str, Any]]:
         return self.payments.copy()
@@ -68,9 +80,7 @@ class PaymentService:
                 # Actualizar el estado del inquilino específico (esto también recarga pagos)
                 tenant_service.update_payment_status(tenant_id)
             except Exception as e:
-                print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Error al actualizar estado de pago: %s", e)
         
         return payment.copy()
 
@@ -88,9 +98,9 @@ class PaymentService:
                     try:
                         from manager.app.services.tenant_service import tenant_service
                         tenant_service.update_payment_status(tenant_id)
-                        print(f"✅ Estado de pago actualizado para inquilino ID: {tenant_id}")
+                        logger.info("Estado de pago actualizado para inquilino ID: %s", tenant_id)
                     except Exception as e:
-                        print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+                        logger.warning("Error al actualizar estado de pago: %s", e)
                 
                 return self.payments[i].copy()
         return None
@@ -114,7 +124,7 @@ class PaymentService:
                     from manager.app.services.tenant_service import tenant_service
                     tenant_service.update_payment_status(tenant_id)
                 except Exception as e:
-                    print(f"⚠️ Error al actualizar estado de pago: {str(e)}")
+                    logger.warning("Error al actualizar estado de pago: %s", e)
             
             return True
         return False 

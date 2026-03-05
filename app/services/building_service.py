@@ -7,6 +7,7 @@ import os
 from typing import Dict, Any, Optional, List
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
+from manager.app.logger import logger
 
 BUILDING_STRUCTURE_FILE = str(DATA_DIR / "building_structure.json")
 
@@ -27,7 +28,7 @@ class BuildingService:
                 data = json.load(f)
                 return data if isinstance(data, list) else []
         except (IOError, json.JSONDecodeError) as e:
-            print(f"Error al cargar la estructura de los edificios: {e}")
+            logger.warning("Error al cargar la estructura de los edificios: %s", e)
             return []
 
     def _save_buildings(self):
@@ -36,7 +37,7 @@ class BuildingService:
             with open(BUILDING_STRUCTURE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self._buildings, f, indent=4, ensure_ascii=False)
         except IOError as e:
-            print(f"Error al guardar la estructura de los edificios: {e}")
+            logger.warning("Error al guardar la estructura de los edificios: %s", e)
 
     def _get_next_building_id(self) -> int:
         """Calcula el siguiente ID de edificio disponible."""

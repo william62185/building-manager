@@ -1615,11 +1615,6 @@ class TenantDetailsView(tk.Frame):
         scrollbar = tk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
         main_frame = tk.Frame(canvas, bg="white", padx=20, pady=15)
         
-        # Configurar scroll
-        main_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
         canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
@@ -1632,43 +1627,40 @@ class TenantDetailsView(tk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Manejar scroll del canvas y sus widgets hijos
-        def on_canvas_mousewheel(event):
-            # Obtener el widget que recibió el evento
-            widget = event.widget
-            
-            # Si es un Text widget, dejar que maneje su propio scroll
-            if isinstance(widget, tk.Text):
-                return None
-            
-            # Si es el canvas o cualquier widget dentro del canvas, hacer scroll del canvas
-            # Verificar si el widget está dentro del main_frame o es el canvas
+        # Actualizar scrollregion cuando cambie el contenido
+        def _update_scrollregion():
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        main_frame.bind("<Configure>", lambda e: _update_scrollregion())
+        
+        # Scroll unificado: si el evento es sobre el cuadro de texto, no hacer nada (él se encarga); si no, scroll del canvas
+        def _on_mousewheel(event):
+            w = event.widget
+            if w == preview_text:
+                return
             try:
-                current = widget
+                current = w
                 while current and current != modal:
-                    if current == canvas or current == main_frame or current == scroll_container:
-                        # Este widget está dentro del área scrolleable
+                    if current in (canvas, main_frame, scroll_container, body_frame, type_frame, radio_frame):
                         if event.delta:
-                            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-                        return "break"  # Prevenir propagación a la ventana principal
+                            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                        return "break"
                     current = current.master
-            except:
+            except Exception:
                 pass
-            
-            return "break"  # Bloquear scroll en otros lugares
+            return "break"
         
-        # Bind scroll en el canvas y en toda la ventana modal
-        canvas.bind("<MouseWheel>", on_canvas_mousewheel)
-        scroll_container.bind("<MouseWheel>", on_canvas_mousewheel)
+        def _notification_modal_cleanup():
+            try:
+                modal.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+            try:
+                modal.destroy()
+            except Exception:
+                pass
         
-        # También bind en el main_frame y sus hijos
-        def bind_scroll_to_widget(widget):
-            if not isinstance(widget, tk.Text):  # Los Text widgets ya manejan su propio scroll
-                widget.bind("<MouseWheel>", on_canvas_mousewheel)
-            for child in widget.winfo_children():
-                bind_scroll_to_widget(child)
-        
-        bind_scroll_to_widget(main_frame)
+        # preview_text se define más abajo; el binding se hace después de crear preview_text
         
         # Título
         title_label = tk.Label(
@@ -1692,172 +1684,83 @@ class TenantDetailsView(tk.Frame):
         
         # Separador
         separator = tk.Frame(main_frame, height=1, bg="#e0e0e0")
-        separator.pack(fill="x", pady=(0, 10))  # Reducido de 15 a 10
+        separator.pack(fill="x", pady=(0, 6))
         
-        # Tipo de notificación
+        # Tipo de notificación (compacto)
         type_frame = tk.Frame(main_frame, bg="white")
-        type_frame.pack(fill="x", pady=(0, 10))  # Reducido de 15 a 10
+        type_frame.pack(fill="x", pady=(0, 4))
         
         tk.Label(
             type_frame,
             text="Tipo de Notificación:",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
             bg="white"
-        ).pack(anchor="w", pady=(0, 5))
+        ).pack(anchor="w", pady=(0, 2))
         
         template_var = tk.StringVar(value="payment_reminder")
         templates = notification_service.get_templates()
         
-        # Frame para los radio buttons
         radio_frame = tk.Frame(type_frame, bg="white")
         radio_frame.pack(fill="x")
         
         for key, template in templates.items():
-            if key == "custom":
-                continue  # Lo manejamos después
             radio = tk.Radiobutton(
                 radio_frame,
                 text=template["name"],
                 variable=template_var,
                 value=key,
-                font=("Segoe UI", 10),
+                font=("Segoe UI", 9),
                 bg="white",
                 activebackground="white",
                 selectcolor="white"
             )
-            radio.pack(anchor="w", pady=1)  # Reducido de 2 a 1
+            radio.pack(anchor="w", pady=0)
         
-        # Opción personalizada
-        radio_custom = tk.Radiobutton(
-            radio_frame,
-            text="Mensaje Personalizado",
-            variable=template_var,
-            value="custom",
-            font=("Segoe UI", 10),
-            bg="white",
-            activebackground="white",
-            selectcolor="white"
-        )
-        radio_custom.pack(anchor="w", pady=2)
-        
-        # Campos para mensaje personalizado
-        custom_frame = tk.Frame(main_frame, bg="white")
-        
-        custom_subject_var = tk.StringVar()
-        custom_message_var = tk.StringVar()
-        
-        def on_template_change():
-            if template_var.get() == "custom":
-                custom_frame.pack(fill="x", pady=(10, 15))
-            else:
-                custom_frame.pack_forget()
-                preview_text.config(state="normal")
-                preview_text.delete(1.0, tk.END)
-                selected_template = templates.get(template_var.get())
-                if selected_template:
-                    preview_text.insert(1.0, self._generate_preview(selected_template))
-                preview_text.config(state="disabled")
-        
-        template_var.trace("w", lambda *args: on_template_change())
+        # Cuerpo del mensaje: editable, se rellena con la plantilla y el usuario puede modificar
+        body_frame = tk.Frame(main_frame, bg="white")
+        body_frame.pack(fill="both", expand=True, pady=(0, 10))
         
         tk.Label(
-            custom_frame,
-            text="Asunto:",
-            font=("Segoe UI", 10, "bold"),
-            bg="white"
-        ).pack(anchor="w", pady=(0, 5))
-        
-        custom_subject_entry = tk.Entry(
-            custom_frame,
-            textvariable=custom_subject_var,
-            font=("Segoe UI", 10),
-            width=60
-        )
-        custom_subject_entry.pack(fill="x", pady=(0, 10))
-        
-        tk.Label(
-            custom_frame,
-            text="Mensaje:",
-            font=("Segoe UI", 10, "bold"),
-            bg="white"
-        ).pack(anchor="w", pady=(0, 5))
-        
-        custom_message_text = tk.Text(
-            custom_frame,
-            font=("Segoe UI", 10),
-            height=3,  # Reducido a 3 líneas para ahorrar más espacio
-            wrap=tk.WORD
-        )
-        custom_message_text.pack(fill="both", expand=True)
-        
-        # Aislar completamente el scroll del Text widget de mensaje personalizado
-        def on_custom_text_mousewheel(event):
-            if event.delta:
-                custom_message_text.yview_scroll(int(-1*(event.delta/120)), "units")
-            return "break"
-        
-        # Permitir scroll solo cuando el mouse está sobre el Text widget
-        def on_custom_text_enter(event):
-            modal.unbind_all("<MouseWheel>")
-            custom_message_text.bind("<MouseWheel>", on_custom_text_mousewheel)
-        
-        def on_custom_text_leave(event):
-            custom_message_text.unbind("<MouseWheel>")
-            modal.bind_all("<MouseWheel>", prevent_scroll_propagation)
-        
-        custom_message_text.bind("<Enter>", on_custom_text_enter)
-        custom_message_text.bind("<Leave>", on_custom_text_leave)
-        
-        # Vista previa del mensaje
-        preview_frame = tk.Frame(main_frame, bg="white")
-        preview_frame.pack(fill="x", pady=(0, 8))  # Reducido padding para ahorrar espacio
-        
-        tk.Label(
-            preview_frame,
-            text="Vista Previa:",
+            body_frame,
+            text="Cuerpo del mensaje (puede editar antes de enviar):",
             font=("Segoe UI", 10, "bold"),
             bg="white"
         ).pack(anchor="w", pady=(0, 5))
         
         preview_text = tk.Text(
-            preview_frame,
+            body_frame,
             font=("Segoe UI", 10),
-            height=4,  # Reducido a 4 líneas para ahorrar espacio
+            height=14,
             wrap=tk.WORD,
-            bg="#f5f5f5",
+            bg="#fafafa",
             relief="solid",
-            bd=1
+            bd=1,
+            padx=8,
+            pady=8
         )
-        preview_text.pack(fill="x")  # Cambiado de expand=True a fill="x" para que no ocupe todo el espacio vertical
-        preview_text.config(state="disabled")
+        preview_text.pack(fill="both", expand=True)
         
-        # Aislar completamente el scroll del Text widget
         def on_text_mousewheel(event):
-            # Manejar scroll solo dentro del Text widget
             if event.delta:
                 preview_text.yview_scroll(int(-1*(event.delta/120)), "units")
-            return "break"  # Prevenir propagación del evento
+            return "break"
         
         preview_text.bind("<MouseWheel>", on_text_mousewheel)
         
-        # Actualizar vista previa cuando cambie el tipo
+        # Activar scroll del canvas con rueda en toda la ventana (excepto en el cuadro de texto)
+        modal.bind_all("<MouseWheel>", _on_mousewheel)
+        modal.protocol("WM_DELETE_WINDOW", _notification_modal_cleanup)
+        
         def update_preview():
-            preview_text.config(state="normal")
             preview_text.delete(1.0, tk.END)
             selected_key = template_var.get()
-            if selected_key == "custom":
-                if custom_subject_var.get() and custom_message_var.get():
-                    preview_text.insert(1.0, f"Asunto: {custom_subject_var.get()}\n\n{custom_message_var.get()}")
-            else:
-                selected_template = templates.get(selected_key)
-                if selected_template:
-                    preview_text.insert(1.0, self._generate_preview(selected_template))
-            preview_text.config(state="disabled")
+            selected_template = templates.get(selected_key)
+            if selected_template:
+                preview_text.insert(1.0, self._generate_preview(selected_template))
         
-        custom_subject_var.trace("w", lambda *args: update_preview())
-        custom_message_text.bind("<KeyRelease>", lambda e: update_preview())
+        template_var.trace("w", lambda *args: update_preview())
         
-        # Inicializar vista previa
+        # Inicializar contenido según plantilla seleccionada
         update_preview()
         
         # Opción de adjuntar recibo (solo para algunos tipos)
@@ -1868,7 +1771,7 @@ class TenantDetailsView(tk.Frame):
         
         def update_attach_options():
             selected_key = template_var.get()
-            if selected_key in ["payment_received", "custom"]:
+            if selected_key == "payment_received":
                 attach_frame.pack(fill="x", pady=(0, 8))  # Reducido de 15 a 8
                 # Cargar pagos del inquilino
                 payment_service._load_data()
@@ -1910,17 +1813,10 @@ class TenantDetailsView(tk.Frame):
         
         def send_notification():
             selected_key = template_var.get()
-            custom_subject = custom_subject_var.get().strip() if selected_key == "custom" else None
-            custom_message = custom_message_text.get(1.0, tk.END).strip() if selected_key == "custom" else None
-            
-            # Validaciones
-            if selected_key == "custom":
-                if not custom_subject:
-                    messagebox.showerror("Error", "Por favor ingrese un asunto para el mensaje personalizado.")
-                    return
-                if not custom_message:
-                    messagebox.showerror("Error", "Por favor ingrese un mensaje personalizado.")
-                    return
+            body_text = preview_text.get(1.0, tk.END).strip()
+            if not body_text:
+                messagebox.showerror("Error", "El cuerpo del mensaje no puede estar vacío.")
+                return
             
             # Obtener ID del pago si se adjunta recibo
             receipt_payment_id = None
@@ -1951,19 +1847,18 @@ class TenantDetailsView(tk.Frame):
             if not messagebox.askyesno("Confirmar envío", confirm_msg):
                 return
             
-            # Enviar notificación
+            # Enviar notificación (body_override = texto editado por el manager)
             success, message = notification_service.send_notification(
                 tenant=self.tenant_data,
                 template_key=selected_key,
-                custom_subject=custom_subject,
-                custom_message=custom_message,
+                body_override=body_text,
                 attach_receipt=attach_receipt_var.get(),
                 receipt_payment_id=receipt_payment_id
             )
             
             if success:
                 messagebox.showinfo("✅ Notificación enviada", f"La notificación ha sido enviada exitosamente a:\n{tenant_email}")
-                modal.destroy()
+                _notification_modal_cleanup()
             else:
                 messagebox.showerror("❌ Error al enviar", message)
         
@@ -1982,7 +1877,7 @@ class TenantDetailsView(tk.Frame):
             text="Cancelar",
             icon="❌",
             style="secondary",
-            command=modal.destroy
+            command=_notification_modal_cleanup
         )
         cancel_btn.pack(side="right")
         

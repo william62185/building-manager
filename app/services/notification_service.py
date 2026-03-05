@@ -93,18 +93,6 @@ Si ya entregó los documentos, por favor ignore este mensaje.
 
 Saludos cordiales,
 {sender_name}"""
-        },
-        "custom": {
-            "name": "Mensaje Personalizado",
-            "subject": "Notificación - {custom_subject}",
-            "template": """Estimado/a {tenant_name},
-
-{custom_message}
-
-Apartamento: {apartment_number}
-
-Saludos cordiales,
-{sender_name}"""
         }
     }
     
@@ -154,22 +142,14 @@ Saludos cordiales,
         template_key: str,
         custom_subject: Optional[str] = None,
         custom_message: Optional[str] = None,
+        body_override: Optional[str] = None,
         attach_receipt: bool = False,
         receipt_payment_id: Optional[int] = None
     ) -> Tuple[bool, str]:
         """
-        Envía una notificación al inquilino
-        
-        Args:
-            tenant: Datos del inquilino
-            template_key: Clave de la plantilla a usar
-            custom_subject: Asunto personalizado (solo para template "custom")
-            custom_message: Mensaje personalizado (solo para template "custom")
-            attach_receipt: Si se debe adjuntar un recibo
-            receipt_payment_id: ID del pago del recibo a adjuntar
-            
-        Returns:
-            tuple: (success: bool, message: str)
+        Envía una notificación al inquilino.
+
+        Si se pasa body_override, se usa como cuerpo del correo (permite editar el mensaje en la UI).
         """
         # Verificar que el inquilino tenga email
         tenant_email = tenant.get("email", "").strip()
@@ -226,17 +206,10 @@ Saludos cordiales,
             except Exception:
                 pass
         
-        # Construir el mensaje
-        if template_key == "custom":
-            if not custom_subject or not custom_message:
-                return False, "Para mensajes personalizados, debe proporcionar asunto y mensaje."
-            subject = custom_subject
-            body = template["template"].format(
-                tenant_name=tenant_name,
-                apartment_number=apartment_number,
-                sender_name=sender_name,
-                custom_message=custom_message
-            )
+        # Construir el mensaje (o usar cuerpo editado por el usuario)
+        if body_override is not None and body_override.strip():
+            body = body_override.strip()
+            subject = template["subject"]
         elif template_key == "payment_received" and receipt_payment_id:
             # Buscar el pago específico
             payment = None
