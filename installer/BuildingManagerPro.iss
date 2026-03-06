@@ -2,7 +2,7 @@
 ; Genera un instalador .exe para Windows
 
 #define MyAppName "Building Manager Pro"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Building Manager"
 #define MyAppURL "https://github.com/building-manager"
 #define MyAppExeName "Building Manager Pro.exe"
@@ -20,7 +20,8 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
 OutputBaseFilename=BuildingManagerPro_Setup_{#MyAppVersion}
-SetupIconFile=
+; Icono del instalador y de los accesos directos (usa assets\icon.ico)
+SetupIconFile=..\assets\icon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

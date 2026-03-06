@@ -270,3 +270,11 @@ En instalado (frozen), `BASE_PATH` suele ser `%APPDATA%/Building Manager Pro`, y
   - **Escritura JSON:** Se usa `manager.app.persistence.save_json_atomic()` en tenants, payments, users, app_config (temp + `os.replace`). En `_load_data`, si el JSON está corrupto se renombra a `.json.bak` y se arranca con datos por defecto.
   - **Instancias globales:** Las vistas usan `payment_service` y `tenant_service` (no instanciar servicios nuevos).
 - Se debe mantener `ARCHITECTURE.md` y `AUDIT_V1_0.md` actualizados cuando se apliquen cambios estructurales o se detecten nuevos hallazgos.
+
+---
+
+## 10. Cambios en la UI (v1.0.1)
+
+- **CreateAdminView** (`create_admin_view.py`): Ventana de creación del primer administrador compacta; texto de bienvenida con `wraplength` para que no se recorte; sin scroll; espaciado reducido (regla de compactación).
+- **PaymentsView — Registrar nuevo pago** (`payments_view.py`): Eliminado el listado de pagos en la misma pantalla; solo formulario de registro. Sección "Datos del pago" con card de borde sutil (mismo fondo que la vista). Campos de solo lectura que se rellenan al seleccionar inquilino: **Apartamento/Unidad** (edificio + tipo + número, vía `apartment_service` y `building_service`) y **Nombre del inquilino**. Orden: Apartamento/Unidad, Nombre del inquilino, Fecha de pago, Monto, Método, Observaciones, botón Registrar Pago.
+- **TenantsView — Búsqueda avanzada** (`tenants_view.py`): Campos de fecha de ingreso (Desde/Hasta) con fondo igual al panel de búsqueda (`#e3f2fd`) para eliminar el recuadro blanco alrededor del `DatePickerWidget`.
