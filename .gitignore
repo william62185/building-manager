@@ -137,4 +137,9 @@ dmypy.json
 cython_debug/
 
 # Cursor IDE
-.cursor/ 
+.cursor/
+
+# Datos locales y generados (cada entorno tiene los suyos)
+manager/data/
+manager/backups/
+manager/exports/ 

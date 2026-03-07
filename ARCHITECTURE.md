@@ -21,9 +21,11 @@ El código se organiza en capas claras dentro de `manager/app/`:
 manager/
 ├── app/
 │   ├── main.py              # Punto de entrada (login → MainWindow)
+│   ├── app_controller.py     # Controlador de navegación (MVP)
 │   ├── paths_config.py      # Rutas, get_icon_path(), carpetas de datos
 │   ├── logger.py            # Logging centralizado (no usar print en app)
 │   ├── persistence.py       # save_json_atomic para escritura segura de JSON
+│   ├── presenters/          # Lógica de presentación por módulo (MVP, en expansión)
 │   ├── services/            # Capa de servicios (lógica + persistencia)
 │   └── ui/
 │       ├── components/      # Componentes reutilizables (temas, widgets, iconos)
@@ -37,8 +39,12 @@ manager/
 | **`ui/views/`** | Ventanas y pantallas: `main_window.py` (layout principal con sidebar), `login_view`, `tenants_view`, `payments_view`, `expenses_view`, `reports_view`, `settings_view`, etc. Cada vista es un `tk.Frame` o ventana que usa servicios y componentes. |
 | **`ui/components/`** | Componentes reutilizables: `theme_manager` (temas, espaciado, colores por módulo), `modern_widgets` (botones, cards, badges), `icons`, `tenant_autocomplete`. |
 
-- **Navegación:** `MainWindow` mantiene un contenedor de vistas y cambia el contenido según el menú lateral (Inquilinos, Pagos, Gastos, Reportes, Administración).
-- **Temas:** `theme_manager` define paletas (light/dark) y `get_module_colors(module)` asigna color primario/hover por módulo (inquilinos, pagos, gastos, etc.).
+- **Navegación:** `AppController` (`app_controller.py`) orquesta el cambio de vista: define los títulos (`VIEW_TITLES`), y en `navigate_to(view_name)` actualiza estado, botones del menú, título, limpia el contenedor y carga la vista. No se programa refresh retardado al entrar a inquilinos (evita parpadeo). `MainWindow` expone: `set_current_view`, `update_nav_buttons`, `set_page_title`, `clear_views_container`, `load_view`, `get_root`, `force_tenants_refresh`. La creación concreta de cada vista está en `MainWindow._load_view`.
+- **Presenters:** La carpeta `presenters/` alberga la lógica de presentación por módulo (MVP). **Dashboard:** `DashboardPresenter` (estadísticas, pagos pendientes, ingresos/gastos del mes). **Inquilinos:** `TenantPresenter` (carga, filtrado, opciones de apartamentos). **Pagos:** `PaymentPresenter` (callbacks volver/notificar pago guardado, `get_active_tenants`). **Gastos:** `ExpensePresenter` (volver, `load_expenses`). **Reportes:** `ReportPresenter` (`reload_all_data`, `get_pending_payments_report_text()` para el texto del reporte de pagos pendientes; callbacks para ocupación y pagos pendientes). Cada vista delega en su presenter.
+- **Dashboard:** La vista del dashboard está en `ui/views/dashboard_view.py` (`DashboardView`), usa `DashboardPresenter` y callbacks para acciones. `MainWindow` solo instancia `DashboardView`.
+- **Reporte de pagos pendientes:** La generación del texto del reporte está en `ReportPresenter.get_pending_payments_report_text()`. La ventana modal (Toplevel con Exportar CSV/TXT, Cerrar) está en `ui/views/pending_payments_report_window.py` (`show_pending_payments_report`); el diálogo de exportación exitosa sigue en `MainWindow._show_export_success_dialog`.
+- **Módulo Inquilinos:** Al hacer clic en "Inquilinos" en el sidebar se abre directamente la vista de lista/detalles (búsqueda avanzada, cards "Nuevo inquilino" y "Reportes", lista de inquilinos). No existe la pantalla intermedia "¿Qué deseas hacer?" con tres cards. El card "Reportes" abre la vista de reportes de gestión de inquilinos (`TenantManagementReportsView`); "Volver" desde reportes vuelve a la lista de inquilinos (`_back_to_list`), no al dashboard.
+- **Temas:** `theme_manager` (`ui/components/theme_manager.py`) define la paleta del tema "light": **`header_bg`** (fondo de la barra del título de la página), **`content_bg`** (fondo del área de contenido principal). El título de página se dibuja en blanco sobre la barra. `get_module_colors(module)` asigna color primario/hover por módulo.
 
 ### 2.2 Capa de servicios
 
@@ -185,9 +191,10 @@ building_manager_cursor/          # Raíz del proyecto
     │           ├── expense_reports_view.py
     │           ├── register_expense_view.py
     │           ├── edit_delete_expenses_view.py
-    │           ├── reports_view.py
-    │           ├── tenant_management_reports_view.py
-    │           ├── reports/       # Subreportes (ocupación, tendencias, etc.)
+│           ├── reports_view.py
+│           ├── tenant_management_reports_view.py
+│           ├── pending_payments_report_window.py  # Ventana modal reporte pagos pendientes
+│           ├── reports/       # Subreportes (ocupación, tendencias, etc.)
     │           ├── building_setup_view.py
     │           ├── building_management_view.py
     │           ├── apartment_management_view.py
@@ -273,8 +280,10 @@ En instalado (frozen), `BASE_PATH` suele ser `%APPDATA%/Building Manager Pro`, y
 
 ---
 
-## 10. Cambios en la UI (v1.0.1)
+## 10. Cambios en la UI (v1.0.1 y posteriores)
 
-- **CreateAdminView** (`create_admin_view.py`): Ventana de creación del primer administrador compacta; texto de bienvenida con `wraplength` para que no se recorte; sin scroll; espaciado reducido (regla de compactación).
-- **PaymentsView — Registrar nuevo pago** (`payments_view.py`): Eliminado el listado de pagos en la misma pantalla; solo formulario de registro. Sección "Datos del pago" con card de borde sutil (mismo fondo que la vista). Campos de solo lectura que se rellenan al seleccionar inquilino: **Apartamento/Unidad** (edificio + tipo + número, vía `apartment_service` y `building_service`) y **Nombre del inquilino**. Orden: Apartamento/Unidad, Nombre del inquilino, Fecha de pago, Monto, Método, Observaciones, botón Registrar Pago.
-- **TenantsView — Búsqueda avanzada** (`tenants_view.py`): Campos de fecha de ingreso (Desde/Hasta) con fondo igual al panel de búsqueda (`#e3f2fd`) para eliminar el recuadro blanco alrededor del `DatePickerWidget`.
+- **CreateAdminView** (`create_admin_view.py`): Ventana de creación del primer administrador compacta; texto de bienvenida con `wraplength`; espaciado reducido.
+- **PaymentsView — Registrar nuevo pago** (`payments_view.py`): Solo formulario de registro; campos de solo lectura al seleccionar inquilino (Apartamento/Unidad, Nombre). Orden: Apartamento, Nombre, Fecha, Monto, Método, Observaciones, Registrar Pago.
+- **TenantsView** (`tenants_view.py`): Entrada directa a la vista de lista/detalles (sin pantalla "¿Qué deseas hacer?"). Columna izquierda: dos cards ("Nuevo inquilino", "Reportes") encima y panel de Búsqueda Avanzada debajo; derecha: lista de inquilinos. Card "Reportes" abre `TenantManagementReportsView`; "Volver" desde reportes vuelve a la lista. Búsqueda avanzada compacta; descripción "(Nombre, Cédula, …)" en la misma línea que "Búsqueda general:". Fechas de ingreso con fondo del panel (`#e3f2fd`).
+- **Tema (theme_manager.py):** **`header_bg`**: fondo de la barra del título de página (ej. `#733E24`). **`content_bg`**: fondo del área de contenido principal (ej. `#8395a7`). El título de la barra se dibuja en blanco; sin contorno. Modificar estos valores en el diccionario del tema "light" para cambiar la apariencia global.
+- **Reporte de pagos pendientes:** Texto generado por `ReportPresenter.get_pending_payments_report_text()`; ventana modal en `pending_payments_report_window.show_pending_payments_report()`. Sin refresh retardado al abrir inquilinos (evita parpadeo).
