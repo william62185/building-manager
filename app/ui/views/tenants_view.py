@@ -20,12 +20,14 @@ from datetime import datetime, timedelta
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.building_service import building_service
-from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
+from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors, bind_combobox_dropdown_on_click
+from manager.app.presenters.tenant_presenter import TenantPresenter
+from manager.app.logger import logger
 
 class TenantsView(tk.Frame):
     """Vista principal del módulo de inquilinos con diseño simplificado"""
     
-    def __init__(self, parent, on_navigate: Callable = None, on_data_change: Callable = None, on_register_payment: Callable = None):
+    def __init__(self, parent, on_navigate: Callable = None, on_data_change: Callable = None, on_register_payment: Callable = None, on_new_tenant: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         # Fondo igual al del área de contenido para que no se vea el recuadro blanco
         self.configure(bg=parent.cget("bg"))
@@ -33,218 +35,29 @@ class TenantsView(tk.Frame):
         self.on_navigate = on_navigate
         self.on_data_change = on_data_change
         self.on_register_payment_callback = on_register_payment
-        self.current_view = "dashboard"
+        self.on_new_tenant = on_new_tenant
+        self.presenter = TenantPresenter(
+            on_navigate=on_navigate,
+            on_data_change=on_data_change,
+            on_register_payment=on_register_payment,
+        )
+        self.current_view = "list"
         self.selected_tenant = None
-        
+
         # Almacenar referencia del scrollable_frame para refrescar lista
         self.scrollable_frame = None
-        
-        # Crear layout principal
-        self._create_layout()
+
+        # Abrir directamente la vista de lista/detalles (sin menú de 3 cards)
+        self._show_tenants_list()
     
     def refresh_list(self):
         """Método público para refrescar la lista de inquilinos en tiempo real"""
         try:
-            # Si estamos en la vista de lista, recargar y redisplay
             if self.current_view == "list":
-                # Recargar datos desde el archivo
-                tenant_service._load_data()
-                # Recalcular estados basándose en pagos recientes
-                tenant_service.recalculate_all_payment_statuses()
-                # Recargar datos después del recálculo
-                tenant_service._load_data()
-                # Volver a mostrar con datos actualizados
                 self._load_and_display_tenants()
-                print("✅ Lista de inquilinos refrescada en tiempo real")
+                logger.debug("Lista de inquilinos refrescada en tiempo real")
         except Exception as e:
-            print(f"Error al refrescar lista: {str(e)}")
-            import traceback
-            traceback.print_exc()
-    
-    def _create_layout(self):
-        """Crea el layout principal con 4 cards centrales"""
-        # Limpiar vista
-        for widget in self.winfo_children():
-            widget.destroy()
-        
-        # Fondo de la vista (transparente respecto al área de contenido)
-        bg_view = self.cget("bg")
-            
-        # Título principal
-        title_frame = tk.Frame(self, bg=bg_view)
-        title_frame.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Frame para botones de navegación (alineados a la derecha)
-        buttons_frame = tk.Frame(title_frame, bg=bg_view)
-        buttons_frame.pack(side="right")
-        
-        # Colores azules para módulo de inquilinos
-        colors = get_module_colors("inquilinos")
-        blue_primary = colors["primary"]
-        blue_hover = colors["hover"]
-        
-        # Botón "Dashboard" con esquinas redondeadas
-        def go_to_dashboard():
-            if self.on_navigate:
-                self.on_navigate("dashboard")
-        
-        btn_dashboard = create_rounded_button(
-            buttons_frame,
-            text=f"{Icons.APARTMENTS} Dashboard",
-            bg_color=blue_primary,
-            fg_color="white",
-            hover_bg=blue_hover,
-            hover_fg="white",
-            command=go_to_dashboard,
-            padx=18,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_dashboard.pack(side="right")
-        
-        # Pregunta principal
-        theme = theme_manager.themes[theme_manager.current_theme]
-        question_label = tk.Label(
-            self,
-            text="¿Qué deseas hacer?",
-            font=("Segoe UI", 14),
-            fg=theme["text_primary"],
-            bg=bg_view
-        )
-        question_label.pack(pady=(0, Spacing.XL))
-        
-        # Contenedor principal centrado (fondo igual al de la vista para que se vea transparente)
-        main_container = tk.Frame(self, bg=bg_view)
-        main_container.pack(pady=Spacing.LG)
-        
-        # Grid de cards 2x2 con espaciado optimizado
-        self._create_cards_grid(main_container)
-    
-    def _create_cards_grid(self, parent):
-        """Crea el grid de 3 cards principales en una sola fila"""
-        bg_view = parent.cget("bg")
-        # Centrar todo el contenido (fondo transparente)
-        grid_container = tk.Frame(parent, bg=bg_view)
-        grid_container.pack(anchor="center")
-        
-        # Fila única con las tres tarjetas
-        row = tk.Frame(grid_container, bg=bg_view)
-        row.pack()
-        
-        # Card 1: Agregar Inquilino
-        self._create_action_card(
-            row, 
-            "➕", 
-            "Agregar Inquilino",
-            "Registrar un nuevo inquilino en el sistema",
-            "#1e40af",  # primary blue
-            lambda: self._show_tenant_form()
-        ).pack(side="left", padx=Spacing.LG)
-        
-        # Card 2: Ver Inquilinos  
-        self._create_action_card(
-            row,
-            "👥",
-            "Ver/Editar Inquilinos", 
-            "Consultar lista completa de inquilinos",
-            "#1e40af",  # mismo color que Agregar Inquilino para consistencia
-            lambda: self._show_tenants_list()
-        ).pack(side="left", padx=Spacing.LG)
-        
-        # Card 3: Reportes
-        self._create_action_card(
-            row,
-            "📊",
-            "Reportes", 
-            "Generar reportes y estadísticas",
-            "#1e40af",  # mismo color que Agregar Inquilino para consistencia
-            lambda: self._show_reports()
-        ).pack(side="left", padx=Spacing.LG)
-    
-    def _create_action_card(self, parent, icon, title, description, color, command):
-        """Crea una card de acción con hover effects estilo módulo pagos"""
-        # Color azul más intenso para el fondo base de las tarjetas (similar al hover anterior)
-        light_blue_bg = "#dbeafe"  # blue-100 - azul claro más intenso para mejor contraste con iconos azules
-        
-        card_frame = tk.Frame(
-            parent,
-            bg=light_blue_bg,
-            relief="raised",
-            bd=2,
-            width=260,
-            height=220  # Igualar altura a cards de pagos
-        )
-        card_frame.pack_propagate(False)
-        
-        # Contenedor principal con padding uniforme para centrar verticalmente
-        content_frame = tk.Frame(card_frame, bg=light_blue_bg)
-        content_frame.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
-        
-        # Frame espaciador superior para centrar el contenido
-        top_spacer = tk.Frame(content_frame, bg=light_blue_bg, height=1)
-        top_spacer.pack(fill="x", expand=True)
-        
-        # Contenedor del contenido (icono, título, descripción)
-        content_container = tk.Frame(content_frame, bg=light_blue_bg)
-        content_container.pack()
-        
-        icon_label = tk.Label(
-            content_container,
-            text=icon,
-            font=("Segoe UI", 28),
-            bg=light_blue_bg,
-            fg=color
-        )
-        icon_label.pack(pady=(0, Spacing.MD))
-        
-        title_label = tk.Label(
-            content_container,
-            text=title,
-            font=("Segoe UI", 14, "bold"),
-            bg=light_blue_bg,
-            fg="#000000"
-        )
-        title_label.pack()
-        
-        # Textos descriptivos eliminados según solicitud del usuario
-        
-        # Frame espaciador inferior para centrar el contenido
-        bottom_spacer = tk.Frame(content_frame, bg=light_blue_bg, height=1)
-        bottom_spacer.pack(fill="x", expand=True)
-        
-        def on_enter(event):
-            hover_color = "#bfdbfe"  # blue-200 - azul más intenso para hover
-            card_frame.configure(bg=hover_color)
-            content_frame.configure(bg=hover_color)
-            top_spacer.configure(bg=hover_color)
-            content_container.configure(bg=hover_color)
-            bottom_spacer.configure(bg=hover_color)
-            icon_label.configure(bg=hover_color)
-            title_label.configure(bg=hover_color)
-        
-        def on_leave(event):
-            card_frame.configure(bg=light_blue_bg)
-            content_frame.configure(bg=light_blue_bg)
-            top_spacer.configure(bg=light_blue_bg)
-            content_container.configure(bg=light_blue_bg)
-            bottom_spacer.configure(bg=light_blue_bg)
-            icon_label.configure(bg=light_blue_bg)
-            title_label.configure(bg=light_blue_bg)
-        
-        def on_card_click(event):
-            command()
-        
-        # Hacer TODO el card clickeable - bind a todos los elementos
-        # Esto asegura que cualquier parte del card responda al clic
-        all_widgets = [card_frame, content_frame, top_spacer, content_container, bottom_spacer, icon_label, title_label]
-        for widget in all_widgets:
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.bind("<Button-1>", on_card_click)
-            widget.configure(cursor="hand2")
-        
-        return card_frame
+            logger.warning("Error al refrescar lista: %s", e)
     
     def _show_tenant_form(self):
         """Muestra el formulario de nuevo inquilino"""
@@ -273,15 +86,6 @@ class TenantsView(tk.Frame):
         bg_view = self.cget("bg")
         header_frame = tk.Frame(self, bg=bg_view)
         header_frame.pack(fill="x", pady=(0, 15))
-        title_label = tk.Label(
-            header_frame,
-            text="👁️ Ver detalles inquilinos",
-            font=("Segoe UI", 18, "bold"),
-            bg=bg_view,
-            fg="#000000"
-        )
-        title_label.pack(side="left", padx=10)
-        
         # Frame para botones de navegación
         buttons_frame = tk.Frame(header_frame, bg=bg_view)
         buttons_frame.pack(side="right", padx=10)
@@ -291,9 +95,12 @@ class TenantsView(tk.Frame):
         # =================== CONTAINER PRINCIPAL ===================
         main_container = tk.Frame(self, bg=bg_view)
         main_container.pack(fill="both", expand=True, padx=20, pady=(6, 2))
-        # =================== PANEL BÚSQUEDA (30%) ===================
-        search_panel = self._create_search_panel(main_container)
-        search_panel.pack(side="left", fill="y", padx=(0, 15))
+        # =================== COLUMNA IZQUIERDA: cards arriba, búsqueda debajo ===================
+        left_column = tk.Frame(main_container, bg=bg_view)
+        left_column.pack(side="left", fill="y", padx=(0, 15))
+        self._create_action_cards(left_column)
+        search_panel = self._create_search_panel(left_column)
+        search_panel.pack(fill="both", expand=True, pady=(10, 0))
         # =================== PANEL LISTA (70%) ===================
         list_panel = self._create_list_panel(main_container)
         list_panel.pack(side="right", fill="both", expand=True)
@@ -303,102 +110,86 @@ class TenantsView(tk.Frame):
         self.after(150, self._focus_search_entry)
     
     def _create_search_panel(self, parent):
-        """Crea el panel de búsqueda avanzada"""
-        # Panel más alto para usar el espacio inferior (reducido padding global)
-        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=380, height=640)
-        panel.pack_propagate(False)
+        """Crea el panel de búsqueda avanzada (compacto, altura según contenido)."""
+        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=380)
+        panel.pack_propagate(True)
         panel.grid_propagate(False)
-        # Header del panel
-        header = tk.Frame(panel, bg="#1976d2", height=50)
+        # Header más bajo
+        header = tk.Frame(panel, bg="#1976d2", height=36)
         header.pack(fill="x")
         header.pack_propagate(False)
         title = tk.Label(
             header,
             text="🔍 Búsqueda Avanzada",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 11, "bold"),
             bg="#1976d2",
             fg="white"
         )
         title.pack(expand=True)
-        # Contenido del panel - REDUCIR PADDING para dar más espacio a los botones
+        # Contenido: sin expand para que el frame termine justo debajo de los botones
         content = tk.Frame(panel, bg="#e3f2fd")
-        content.pack(fill="both", expand=True, padx=8, pady=8)
+        content.pack(fill="x", padx=6, pady=4)
         
-        # === BÚSQUEDA POR TEXTO ===
-        tk.Label(content, text="Búsqueda general:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,2))
-        tk.Label(content, text="(Nombre, Cédula, Apartamento, Email, Teléfono)", font=("Segoe UI", 8), bg="#e3f2fd", fg="#666666").pack(anchor="w", pady=(0,5))
+        # === BÚSQUEDA POR TEXTO: título y descripción en la misma línea ===
+        search_title_row = tk.Frame(content, bg="#e3f2fd")
+        search_title_row.pack(anchor="w", pady=(0, 2))
+        tk.Label(search_title_row, text="Búsqueda general:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(side="left")
+        tk.Label(search_title_row, text=" (Nombre, Cédula, Apartamento, Email, Teléfono)", font=("Segoe UI", 8), bg="#e3f2fd", fg="#666666").pack(side="left")
         self.search_entry = tk.Entry(content, font=("Segoe UI", 10), relief="solid", bd=1)
-        self.search_entry.pack(fill="x", pady=(0,8))
+        self.search_entry.pack(fill="x", pady=(0, 4))
         self.search_entry.bind('<KeyRelease>', self._on_search_change)
         
         # === FILTRO POR APARTAMENTO ===
-        tk.Label(content, text="Filtro por apartamento:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,5))
+        tk.Label(content, text="Filtro por apartamento:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0, 2))
         self.apartment_var = tk.StringVar(value="Todos")
-        apartment_combo = ttk.Combobox(content, textvariable=self.apartment_var, font=("Segoe UI", 10))
-        
-        # Obtener apartamentos reales de la base de datos
-        apartment_options = ["Todos"]
-        try:
-            from manager.app.services.apartment_service import apartment_service
-            apartments = apartment_service.get_all_apartments()
-            for apt in apartments:
-                apt_number = apt.get('number', '')
-                apt_type = apt.get('unit_type', 'Apartamento Estándar')
-                if apt_type == "Apartamento Estándar":
-                    apartment_options.append(apt_number)
-                else:
-                    apartment_options.append(f"{apt_type} {apt_number}")
-        except Exception as e:
-            print(f"Error al cargar apartamentos: {e}")
-            # Fallback a valores básicos si hay error
-            apartment_options.extend(["101", "102", "201", "202", "301", "302"])
-        
+        apartment_combo = ttk.Combobox(content, textvariable=self.apartment_var, font=("Segoe UI", 9))
+        apartment_options = self.presenter.get_apartment_options()
         apartment_combo['values'] = apartment_options
-        apartment_combo.pack(fill="x", pady=(0,8))
+        apartment_combo.pack(fill="x", pady=(0, 4))
         apartment_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
+        bind_combobox_dropdown_on_click(apartment_combo)
         
         # === FILTRO POR ESTADO ===
-        tk.Label(content, text="Estado:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0,5))
+        tk.Label(content, text="Estado:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(0, 2))
         self.status_var = tk.StringVar(value="Todos")
-        status_combo = ttk.Combobox(content, textvariable=self.status_var, font=("Segoe UI", 10))
+        status_combo = ttk.Combobox(content, textvariable=self.status_var, font=("Segoe UI", 9))
         status_combo['values'] = ("Todos", "Al Día", "Pendiente Registro", "En Mora", "Inactivo")
-        status_combo.pack(fill="x", pady=(0,8))
+        status_combo.pack(fill="x", pady=(0, 4))
         status_combo.bind('<<ComboboxSelected>>', self._on_filter_change)
+        bind_combobox_dropdown_on_click(status_combo)
         
-        # === RANGO DE FECHAS (CON SELECTOR DE CALENDARIO) ===
-        tk.Label(content, text="Fecha de ingreso:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
-        
+        # === RANGO DE FECHAS ===
+        tk.Label(content, text="Fecha de ingreso:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(2, 1))
         date_frame = tk.Frame(content, bg="#e3f2fd")
-        date_frame.pack(fill="x", pady=(0,3))
-        
-        # Una sola línea: campos de fecha con ancho y altura fijos (botón calendario visible)
+        date_frame.pack(fill="x", pady=(0, 2))
         tk.Label(date_frame, text="Desde:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
-        wrap_from = tk.Frame(date_frame, bg="#e3f2fd", width=118, height=30)
-        wrap_from.pack(side="left", padx=(3, 8))
+        wrap_from = tk.Frame(date_frame, bg="#e3f2fd", width=110, height=26)
+        wrap_from.pack(side="left", padx=(2, 6))
         wrap_from.pack_propagate(False)
         self.date_from = DatePickerWidget(wrap_from)
         self.date_from.pack(fill="both", expand=True)
-        
-        tk.Label(date_frame, text="Hasta:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left", padx=(4, 0))
-        wrap_to = tk.Frame(date_frame, bg="#e3f2fd", width=118, height=30)
-        wrap_to.pack(side="left", padx=3)
+        tk.Label(date_frame, text="Hasta:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left", padx=(2, 0))
+        wrap_to = tk.Frame(date_frame, bg="#e3f2fd", width=110, height=26)
+        wrap_to.pack(side="left", padx=2)
         wrap_to.pack_propagate(False)
         self.date_to = DatePickerWidget(wrap_to)
         self.date_to.pack(fill="both", expand=True)
+        search_bg = "#e3f2fd"
+        for dp in (self.date_from, self.date_to):
+            dp.configure(bg=search_bg)
+            dp.date_entry.configure(bg=search_bg)
+            dp.calendar_btn.configure(bg=search_bg)
         
-        # === RANGO DE ARRIENDO (COMPACTO) ===
-        tk.Label(content, text="Rango de arriendo:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(3,2))
-        
+        # === RANGO DE ARRIENDO ===
+        tk.Label(content, text="Rango de arriendo:", font=("Segoe UI", 9, "bold"), bg="#e3f2fd").pack(anchor="w", pady=(2, 1))
         rent_frame = tk.Frame(content, bg="#e3f2fd")
-        rent_frame.pack(fill="x", pady=(0,3))
-        
+        rent_frame.pack(fill="x", pady=(0, 2))
         tk.Label(rent_frame, text="Min:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
         self.rent_min = tk.Entry(rent_frame, width=8, font=("Segoe UI", 8))
-        self.rent_min.pack(side="left", padx=(3,8))
-        
+        self.rent_min.pack(side="left", padx=(2, 6))
         tk.Label(rent_frame, text="Max:", bg="#e3f2fd", font=("Segoe UI", 8)).pack(side="left")
         self.rent_max = tk.Entry(rent_frame, width=8, font=("Segoe UI", 8))
-        self.rent_max.pack(side="left", padx=3)
+        self.rent_max.pack(side="left", padx=2)
         
         # === INDICADOR DE RESULTADOS ===
         self.results_indicator = tk.Label(
@@ -406,44 +197,93 @@ class TenantsView(tk.Frame):
             text="📊 Resultados: mostrando todos",
             font=("Segoe UI", 8),
             bg="#e3f2fd",
-            fg="#1e40af"  # Azul oscuro para mantener tonalidad azul
+            fg="#1e40af"
         )
-        self.results_indicator.pack(anchor="w", pady=(5,5))
+        self.results_indicator.pack(anchor="w", pady=(3, 2))
         
-        # === BOTONES ===
+        # === BOTONES (más pequeños) ===
         btn_frame = tk.Frame(content, bg="#e3f2fd")
-        btn_frame.pack(fill="x", pady=(5,0))
-        
+        btn_frame.pack(fill="x", pady=(2, 0))
         btn_search = tk.Button(
             btn_frame,
             text="🔍 Aplicar",
-            font=("Segoe UI", 10, "bold"),
-            bg="#2563eb",  # Azul para mantener tonalidad azul del módulo
+            font=("Segoe UI", 9, "bold"),
+            bg="#2563eb",
             fg="white",
             relief="flat",
-            padx=20,
-            pady=8,
+            padx=12,
+            pady=4,
             cursor="hand2",
             command=self._apply_filters
         )
-        btn_search.pack(side="left", padx=(0,8))
-        
+        btn_search.pack(side="left", padx=(0, 6))
         btn_clear = tk.Button(
             btn_frame,
             text="🧹 Limpiar",
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 9),
             bg="#ff9800",
             fg="white",
             relief="flat",
-            padx=20,
-            pady=8,
+            padx=12,
+            pady=4,
             cursor="hand2",
             command=self._clear_filters
         )
         btn_clear.pack(side="left")
         
         return panel
-    
+
+    def _create_action_cards(self, parent):
+        """Dos cards encima del panel de búsqueda (Nuevo inquilino y Reportes de inquilinos)."""
+        bg_view = parent.cget("bg")
+        colors = get_module_colors("inquilinos")
+        card_bg = colors.get("primary", "#2563eb")
+        card_hover = colors.get("hover", "#1d4ed8")
+        cards_frame = tk.Frame(parent, bg=bg_view)
+        cards_frame.pack(fill="x", pady=(0, 10))
+        # Card Nuevo inquilino (expandido para cubrir espacio)
+        btn_new = tk.Button(
+            cards_frame,
+            text="➕ Nuevo inquilino",
+            font=("Segoe UI", 11, "bold"),
+            bg=card_bg,
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=12,
+            cursor="hand2",
+            command=self._on_new_tenant_card,
+        )
+        btn_new.pack(fill="both", expand=True, pady=(0, 8))
+        btn_new.bind("<Enter>", lambda e: btn_new.config(bg=card_hover))
+        btn_new.bind("<Leave>", lambda e: btn_new.config(bg=card_bg))
+        # Card Reportes (expandido para cubrir espacio)
+        btn_reports = tk.Button(
+            cards_frame,
+            text="📊 Reportes",
+            font=("Segoe UI", 11, "bold"),
+            bg="#6b7280",
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=12,
+            cursor="hand2",
+            command=self._on_reports_card,
+        )
+        btn_reports.pack(fill="both", expand=True)
+        btn_reports.bind("<Enter>", lambda e: btn_reports.config(bg="#4b5563"))
+        btn_reports.bind("<Leave>", lambda e: btn_reports.config(bg="#6b7280"))
+
+    def _on_new_tenant_card(self):
+        if self.on_new_tenant:
+            self.on_new_tenant()
+        elif self.on_navigate:
+            self.on_navigate("dashboard")
+
+    def _on_reports_card(self):
+        """Abre la vista de reportes de gestión de inquilinos (no reportes generales)."""
+        self._show_reports()
+
     def _create_list_panel(self, parent):
         """Crea el panel de lista de inquilinos con tonalidad azul"""
         # Aplicando regla 60-30-10: 60% azul claro, 30% blanco, 10% azul oscuro
@@ -498,25 +338,12 @@ class TenantsView(tk.Frame):
         return panel
     
     def _load_and_display_tenants(self):
-        """Carga y muestra todos los inquilinos (excluyendo inactivos por defecto)"""
+        """Carga y muestra todos los inquilinos (excluyendo inactivos por defecto)."""
         try:
-            # Recargar datos desde el archivo para asegurar datos actualizados
-            tenant_service._load_data()
-            
-            # Recalcular estados de pago automáticamente antes de cargar
-            # Esto asegura que los estados se actualicen basándose en los pagos más recientes
-            tenant_service.recalculate_all_payment_statuses()
-            
-            # Recargar datos nuevamente después del recálculo para obtener estados actualizados
-            tenant_service._load_data()
-            
-            # Cargar inquilinos actualizados (después de recargar y recalcular)
-            self.all_tenants = tenant_service.get_all_tenants()
-            
-            # Aplicar filtros (esto excluirá inactivos por defecto si el estado es "Todos")
+            self.all_tenants = self.presenter.load_tenants()
             self._apply_filters()
         except Exception as e:
-            print(f"Error al cargar inquilinos: {str(e)}")
+            logger.warning("Error al cargar inquilinos: %s", e)
             self.all_tenants = []
             self._display_tenants([])
     
@@ -887,7 +714,7 @@ class TenantsView(tk.Frame):
         
         reports_view = TenantManagementReportsView(
             self,
-            on_back=self._back_to_dashboard,
+            on_back=self._back_to_list,
             on_navigate=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         reports_view.pack(fill="both", expand=True)
@@ -913,9 +740,10 @@ class TenantsView(tk.Frame):
         deactivate_view.pack(fill="both", expand=True)
     
     def _back_to_dashboard(self):
-        """Vuelve al dashboard principal"""
-        self.current_view = "dashboard"
-        self._create_layout()
+        """Vuelve al dashboard principal de la aplicación"""
+        self.current_view = "list"
+        if self.on_navigate:
+            self.on_navigate("dashboard")
     
     def _back_to_list(self):
         """Vuelve a la lista de inquilinos"""
@@ -927,29 +755,11 @@ class TenantsView(tk.Frame):
             self.on_navigate("dashboard")
     
     def _create_navigation_buttons_list_view(self, parent, on_back_command):
-        """Crea los botones Volver y Dashboard con estilo moderno y colores azules del módulo de inquilinos"""
+        """Crea el botón Dashboard (sin Volver) con estilo moderno y colores azules del módulo de inquilinos"""
         # Colores azules para módulo de inquilinos
         colors = get_module_colors("inquilinos")
         blue_primary = colors["primary"]
         blue_hover = colors["hover"]
-        blue_light = colors["light"]
-        blue_text = colors["text"]
-        
-        # Botón "Volver" con esquinas ligeramente redondeadas y borde negro
-        btn_back = create_rounded_button(
-            parent,
-            text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color="white",
-            fg_color=blue_primary,
-            hover_bg=blue_light,
-            hover_fg=blue_text,
-            command=on_back_command,
-            padx=16,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_back.pack(side="right", padx=(Spacing.MD, 0))
         
         # Botón "Dashboard" con esquinas ligeramente redondeadas y borde negro
         def go_to_dashboard():
@@ -976,6 +786,20 @@ class TenantsView(tk.Frame):
         if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
             self.search_entry.focus_set()
 
+    def _get_filter_state(self) -> dict:
+        """Devuelve el estado actual de los filtros para el presenter."""
+        if not hasattr(self, "search_entry") or not self.search_entry.winfo_exists():
+            return {}
+        return {
+            "search_text": self.search_entry.get().strip(),
+            "apartment": self.apartment_var.get() if hasattr(self, "apartment_var") else "Todos",
+            "status": self.status_var.get() if hasattr(self, "status_var") else "Todos",
+            "date_from": self.date_from.get().strip() if hasattr(self, "date_from") and hasattr(self.date_from, "get") else "",
+            "date_to": self.date_to.get().strip() if hasattr(self, "date_to") and hasattr(self.date_to, "get") else "",
+            "rent_min": self.rent_min.get().strip() if hasattr(self, "rent_min") else "",
+            "rent_max": self.rent_max.get().strip() if hasattr(self, "rent_max") else "",
+        }
+
     def _on_search_change(self, event=None):
         """Búsqueda en tiempo real"""
         self._apply_filters()
@@ -985,147 +809,11 @@ class TenantsView(tk.Frame):
         self._apply_filters()
 
     def _apply_filters(self):
-        """Aplica todos los filtros activos"""
-        if not hasattr(self, 'all_tenants'):
+        """Aplica todos los filtros activos usando el presenter."""
+        if not hasattr(self, "all_tenants"):
             return
-        filtered = self.all_tenants.copy()
-        # Filtro por texto - BÚSQUEDA MEJORADA
-        search_text = self.search_entry.get().lower().strip()
-        if search_text:
-            def matches_apartment_number(tenant):
-                from manager.app.services.apartment_service import apartment_service
-                apt_id = tenant.get('apartamento', None)
-                if apt_id is not None:
-                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
-                    if not apt:
-                        all_apts = apartment_service.get_all_apartments()
-                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
-                    if apt:
-                        num = str(apt.get('number', '')).lower()
-                        return search_text in num
-                return False
-            filtered = [t for t in filtered if 
-                       search_text in str(t.get('nombre', '')).lower() or
-                       search_text in str(t.get('numero_documento', '')).lower() or
-                       matches_apartment_number(t) or
-                       search_text in str(t.get('email', '')).lower() or
-                       search_text in str(t.get('telefono', '')).lower()]
-        # Filtro por apartamento (combo) - Solo aplica si no se buscó apartamento en texto
-        apartment = self.apartment_var.get()
-        if apartment != "Todos" and not search_text:
-            # Buscar inquilinos que coincidan con el apartamento seleccionado
-            def matches_apartment_filter(tenant):
-                from manager.app.services.apartment_service import apartment_service
-                apt_id = tenant.get('apartamento', None)
-                if apt_id is not None:
-                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
-                    if not apt:
-                        all_apts = apartment_service.get_all_apartments()
-                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
-                    if apt:
-                        apt_number = apt.get('number', '')
-                        apt_type = apt.get('unit_type', 'Apartamento Estándar')
-                        if apt_type == "Apartamento Estándar":
-                            apt_display = apt_number
-                        else:
-                            apt_display = f"{apt_type} {apt_number}"
-                        return apt_display == apartment
-                return False
-            filtered = [t for t in filtered if matches_apartment_filter(t)]
-        elif apartment != "Todos" and search_text:
-            # Si hay búsqueda de texto, aplicar el mismo filtro
-            def matches_apartment_filter(tenant):
-                from manager.app.services.apartment_service import apartment_service
-                apt_id = tenant.get('apartamento', None)
-                if apt_id is not None:
-                    apt = apartment_service.get_apartment_by_id(apt_id) if hasattr(apartment_service, 'get_apartment_by_id') else None
-                    if not apt:
-                        all_apts = apartment_service.get_all_apartments()
-                        apt = next((a for a in all_apts if a.get('id') == apt_id), None)
-                    if apt:
-                        apt_number = apt.get('number', '')
-                        apt_type = apt.get('unit_type', 'Apartamento Estándar')
-                        if apt_type == "Apartamento Estándar":
-                            apt_display = apt_number
-                        else:
-                            apt_display = f"{apt_type} {apt_number}"
-                        return apt_display == apartment
-                return False
-            filtered = [t for t in filtered if matches_apartment_filter(t)]
-        # Filtro por estado
-        status = self.status_var.get()
-        if status != "Todos":
-            status_mapping = {
-                "Al Día": "al_dia",
-                "Pendiente Registro": "pendiente_registro",
-                "En Mora": "moroso",
-                "Inactivo": "inactivo"
-            }
-            target_status = status_mapping.get(status, status.lower())
-            filtered = [t for t in filtered if t.get('estado_pago') == target_status]
-        else:
-            # Por defecto, cuando es "Todos", excluir inquilinos inactivos
-            filtered = [t for t in filtered if t.get('estado_pago') != 'inactivo']
-        # Filtro por rango de fecha de ingreso
-        date_from_str = self.date_from.get().strip() if hasattr(self.date_from, 'get') else ''
-        date_to_str = self.date_to.get().strip() if hasattr(self.date_to, 'get') else ''
-        if date_from_str or date_to_str:
-            def parse_date(s):
-                try:
-                    return datetime.strptime(s.strip(), "%d/%m/%Y").date()
-                except (ValueError, AttributeError):
-                    return None
-            d_from = parse_date(date_from_str) if date_from_str else None
-            d_to = parse_date(date_to_str) if date_to_str else None
-            def in_date_range(tenant):
-                fi = tenant.get('fecha_ingreso') or ''
-                if not fi:
-                    return False
-                d = parse_date(fi)
-                if d is None:
-                    return False
-                if d_from is not None and d < d_from:
-                    return False
-                if d_to is not None and d > d_to:
-                    return False
-                return True
-            filtered = [t for t in filtered if in_date_range(t)]
-        # Filtro por rango de arriendo (Min / Max)
-        rent_min_str = self.rent_min.get().strip()
-        rent_max_str = self.rent_max.get().strip()
-        if rent_min_str or rent_max_str:
-            def parse_rent(s):
-                """Convierte a número: acepta 400000, 500000.0 (decimal), 400.000 o 1.000.000 (miles)."""
-                try:
-                    s = str(s).strip().replace(",", "")
-                    if not s:
-                        return None
-                    # Si hay punto: puede ser decimal (500000.0) o miles (1.000.000)
-                    if "." in s:
-                        parts = s.split(".")
-                        # Un solo punto y 1-2 dígitos después = decimal (ej. 500000.0)
-                        if len(parts) == 2 and len(parts[1]) <= 2 and parts[1].isdigit():
-                            return float(s)
-                        # Varios puntos o 3 dígitos después = separador de miles
-                        return float(s.replace(".", ""))
-                    return float(s)
-                except (ValueError, TypeError):
-                    return None
-            r_min = parse_rent(rent_min_str) if rent_min_str else None
-            r_max = parse_rent(rent_max_str) if rent_max_str else None
-            def in_rent_range(tenant):
-                val = tenant.get('valor_arriendo')
-                if val is None or val == "":
-                    return False
-                rent = parse_rent(val)
-                if rent is None:
-                    return False
-                if r_min is not None and rent < r_min:
-                    return False
-                if r_max is not None and rent > r_max:
-                    return False
-                return True
-            filtered = [t for t in filtered if in_rent_range(t)]
+        filter_state = self._get_filter_state()
+        filtered = self.presenter.get_filtered_tenants(self.all_tenants, filter_state)
         self._display_tenants(filtered)
 
     def _clear_filters(self):
@@ -1151,7 +839,7 @@ class TenantsView(tk.Frame):
                     from manager.app.services.apartment_service import apartment_service
                     apartment_service.update_apartment(apt_id, {"status": "Disponible"})
                 except Exception as e:
-                    print(f"Error al actualizar el estado del apartamento: {e}")
+                    logger.warning("Error al actualizar el estado del apartamento: %s", e)
             success = tenant_service.delete_tenant(tenant.get("id"))
             if success:
                 self._load_and_display_tenants()

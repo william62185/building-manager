@@ -3,19 +3,18 @@ from tkinter import messagebox, ttk
 from datetime import datetime
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
-from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
+from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors, bind_combobox_dropdown_on_click
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, ModernSeparator
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
 import webbrowser
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
 from .edit_delete_payments_view import EditDeletePaymentsView
 from .register_expense_view import DatePickerWidget
 from manager.app.services.apartment_service import apartment_service
+from manager.app.services.building_service import building_service
 from manager.app.logger import logger
+from manager.app.presenters.payment_presenter import PaymentPresenter
 
 class PaymentsView(tk.Frame):
     """Vista profesional para gestión de pagos de inquilinos"""
@@ -29,136 +28,10 @@ class PaymentsView(tk.Frame):
         self.on_back = on_back
         self.preselected_tenant = preselected_tenant
         self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
-        self._create_layout()
-        # self._load_payments()  # Eliminado: solo se usará en la funcionalidad específica
+        self.presenter = PaymentPresenter(on_back=on_back, on_payment_saved=on_payment_saved)
+        # Abrir directamente la vista de listado/edición (sin menú de 3 cards)
+        self._show_edit_delete_payments()
 
-    def _create_layout(self):
-        # Limpiar vista
-        for widget in self.winfo_children():
-            widget.destroy()
-        self.configure(bg=self._content_bg)
-        bg_view = self._content_bg
-        # Header
-        header = tk.Frame(self, bg=bg_view)
-        header.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Frame para botones de navegación (alineados a la derecha)
-        buttons_frame = tk.Frame(header, bg=bg_view)
-        buttons_frame.pack(side="right")
-        
-        # Agregar solo botón Dashboard (sin Volver porque es redundante)
-        self._create_navigation_buttons(buttons_frame, self._on_back, show_back_button=False)
-        
-        # Pregunta principal
-        theme = theme_manager.themes[theme_manager.current_theme]
-        question_label = tk.Label(
-            self,
-            text="¿Qué deseas hacer?",
-            font=("Segoe UI", 14),
-            fg=theme["text_primary"],
-            bg=bg_view
-        )
-        question_label.pack(pady=(0, Spacing.XL))
-        
-        # Cards principales (fondo igual al de la vista para que se vea transparente)
-        cards_frame = tk.Frame(self, bg=bg_view)
-        cards_frame.pack(pady=Spacing.LG)
-        self._create_action_card(
-            cards_frame,
-            icon=Icons.PAYMENT_RECEIVED,
-            title="Registrar nuevo pago",
-            description="Registra un nuevo pago de arriendo para cualquier inquilino.",
-            color="#166534",  # verde oscuro - paleta verde armoniosa
-            command=self._show_register_payment
-        ).pack(side="left", padx=Spacing.LG)
-        self._create_action_card(
-            cards_frame,
-            icon=Icons.EDIT,
-            title="Editar/Eliminar pago",
-            description="Consulta, edita o elimina pagos registrados previamente.",
-            color="#166534",  # mismo color que Registrar nuevo pago para consistencia
-            command=self._show_edit_delete_payments
-        ).pack(side="left", padx=Spacing.LG)
-        self._create_action_card(
-            cards_frame,
-            icon=Icons.REPORTS,
-            title="Reportes",
-            description="Visualiza reportes y estadísticas de pagos.",
-            color="#166534",  # mismo color que Registrar nuevo pago para consistencia
-            command=self._show_reports
-        ).pack(side="left", padx=Spacing.LG)
-
-    def _create_action_card(self, parent, icon, title, description, color, command):
-        """Crea una card de acción con hover effects - mismo estilo que módulo inquilinos"""
-        # Color verde más intenso para el fondo base de las tarjetas (similar al hover anterior)
-        light_green_bg = "#dcfce7"  # green-100 - verde claro más intenso para mejor contraste con iconos verdes
-        
-        card = tk.Frame(parent, bg=light_green_bg, bd=2, relief="raised", width=260, height=220)
-        card.pack_propagate(False)  # Mantener tamaño fijo
-        
-        # Contenedor principal con padding uniforme para centrar verticalmente
-        content_frame = tk.Frame(card, bg=light_green_bg)
-        content_frame.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
-        
-        # Frame espaciador superior para centrar el contenido
-        top_spacer = tk.Frame(content_frame, bg=light_green_bg, height=1)
-        top_spacer.pack(fill="x", expand=True)
-        
-        # Contenedor del contenido (icono, título)
-        content_container = tk.Frame(content_frame, bg=light_green_bg)
-        content_container.pack()
-        
-        # Ícono
-        icon_label = tk.Label(content_container, text=icon, font=("Segoe UI", 28), fg=color, bg=light_green_bg)
-        icon_label.pack(pady=(0, Spacing.MD))
-        
-        # Título
-        title_label = tk.Label(content_container, text=title, font=("Segoe UI", 14, "bold"), fg="#000000", bg=light_green_bg)
-        title_label.pack()
-        
-        # Textos descriptivos eliminados según solicitud del usuario
-        
-        # Frame espaciador inferior para centrar el contenido
-        bottom_spacer = tk.Frame(content_frame, bg=light_green_bg, height=1)
-        bottom_spacer.pack(fill="x", expand=True)
-        
-        # Función para manejar clics - se ejecuta desde cualquier parte del card
-        def on_card_click(e):
-            # Prevenir propagación adicional si es necesario
-            e.widget.focus_set()  # Asegurar que el widget tenga foco
-            command()
-            return "break"  # Detener propagación del evento
-        
-        # Hover effect (más intenso que el fondo base)
-        def on_enter(e):
-            hover_color = "#bbf7d0"  # green-200 - verde más intenso para hover
-            card.configure(bg=hover_color)
-            content_frame.configure(bg=hover_color)
-            top_spacer.configure(bg=hover_color)
-            content_container.configure(bg=hover_color)
-            bottom_spacer.configure(bg=hover_color)
-            icon_label.configure(bg=hover_color)
-            title_label.configure(bg=hover_color)
-        
-        def on_leave(e):
-            card.configure(bg=light_green_bg)
-            content_frame.configure(bg=light_green_bg)
-            top_spacer.configure(bg=light_green_bg)
-            content_container.configure(bg=light_green_bg)
-            bottom_spacer.configure(bg=light_green_bg)
-            icon_label.configure(bg=light_green_bg)
-            title_label.configure(bg=light_green_bg)
-        
-        # Hacer TODO el card clickeable - bind a todos los elementos
-        # Esto asegura que cualquier parte del card responda al clic
-        all_widgets = [card, content_frame, top_spacer, content_container, bottom_spacer, icon_label, title_label]
-        for widget in all_widgets:
-            widget.bind("<Button-1>", on_card_click)
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.configure(cursor="hand2")
-        
-        return card
     
     def _create_navigation_buttons(self, parent, on_back_command, show_back_button=True):
         """Crea los botones Volver y Dashboard con estilo moderno y colores verdes del módulo de pagos"""
@@ -260,19 +133,13 @@ class PaymentsView(tk.Frame):
             tenant_id = preselected_tenant.get('id')
             match = next((t for t in self.tenants if t.get('id') == tenant_id), None)
             self.selected_tenant = match if match else preselected_tenant
-        # Sección central: formulario de pago (padding mínimo)
+        # Sección central: formulario de pago (sin listado)
         self.form_frame = tk.Frame(self, bg=self._content_bg)
-        self.form_frame.pack(fill="x", padx=2, pady=(0, 2))
+        self.form_frame.pack(fill="both", expand=True, padx=2, pady=(0, Spacing.LG))
         self._build_register_payment_form()
-        # Sección inferior: listado de pagos con scroll profesional
-        self._create_payments_list_with_scroll()
-        # Si hay un inquilino preseleccionado, autocompletar el campo y filtrar la tabla por ese inquilino
+        # Si hay un inquilino preseleccionado, autocompletar el campo
         if self.selected_tenant:
             self.tenant_autocomplete._select_tenant(self.selected_tenant)
-            pagos = [p for p in self._get_all_payments() if p.get('id_inquilino') == self.selected_tenant.get('id')]
-            self._display_register_payments(pagos)
-        else:
-            self._display_register_payments(self._get_all_payments())
         # Posicionar cursor en el cuadro de búsqueda al abrir la vista
         self.after(150, self._focus_search_entry_register)
 
@@ -284,25 +151,78 @@ class PaymentsView(tk.Frame):
 
     def _restore_global_title(self):
         try:
-            self.master.master.page_title.configure(text="Control de Pagos")
+            self.master.master.page_title.configure(text="Gestión de Pagos")
         except Exception:
             pass
-        self._create_layout()
+        self._show_edit_delete_payments()
+
+    def _get_tenant_apartment_display(self, tenant):
+        """Devuelve texto tipo 'Edificio X - 101' o 'N/A' para el inquilino."""
+        if not tenant:
+            return "—"
+        apt_id = tenant.get("apartamento", None)
+        if apt_id is None:
+            return "—"
+        try:
+            apt_id = int(apt_id) if isinstance(apt_id, str) and apt_id.isdigit() else apt_id
+            apt = apartment_service.get_apartment_by_id(apt_id)
+        except (TypeError, ValueError):
+            return "—"
+        if not apt:
+            return "—"
+        building = None
+        if hasattr(building_service, "get_building_by_id"):
+            building = building_service.get_building_by_id(apt.get("building_id"))
+        if not building:
+            all_buildings = building_service.get_all_buildings()
+            building = next((b for b in all_buildings if b.get("id") == apt.get("building_id")), None)
+        building_name = building.get("name", "") if building else ""
+        tipo = apt.get("unit_type", "Apartamento Estándar")
+        numero = apt.get("number", "")
+        if building_name:
+            return f"{building_name} - {tipo} {numero}" if tipo != "Apartamento Estándar" else f"{building_name} - {numero}"
+        return f"{tipo} {numero}" if tipo != "Apartamento Estándar" else str(numero)
 
     def _build_register_payment_form(self):
         for widget in self.form_frame.winfo_children():
             widget.destroy()
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        row_opts = {'padx': (0, 8), 'pady': 2}
+        row_opts = {'padx': (0, 12), 'pady': 2}
+        # Título de la sección
+        tk.Label(
+            self.form_frame,
+            text="Datos del pago",
+            font=("Segoe UI", 12, "bold"),
+            bg=cb,
+            fg=theme["text_primary"]
+        ).pack(anchor="w", pady=(0, Spacing.SM))
+        # Contenedor de campos: mismo fondo que la vista, borde sutil en tono oliva
+        border_color = "#c4bc8a"
+        card_wrap = tk.Frame(self.form_frame, bg=border_color, padx=1, pady=1)
+        card_wrap.pack(fill="x", pady=(0, Spacing.MD))
+        card = tk.Frame(card_wrap, bg=cb, padx=Spacing.LG, pady=Spacing.LG)
+        card.pack(fill="x")
+        # Variables para datos que se arrastran del inquilino seleccionado
+        self._var_apt_display = tk.StringVar(value=self._get_tenant_apartment_display(getattr(self, "selected_tenant", None)))
+        self._var_tenant_name = tk.StringVar(value=(self.selected_tenant.get("nombre", "—") if getattr(self, "selected_tenant", None) else "—"))
+        # Apartamento/Unidad (solo lectura)
+        row_apt = tk.Frame(card, bg=cb)
+        row_apt.pack(fill="x", pady=(0, Spacing.SM))
+        tk.Label(row_apt, text="Apartamento/Unidad:", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        tk.Label(row_apt, textvariable=self._var_apt_display, anchor="w", bg=cb, fg=theme["text_secondary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        # Nombre del inquilino (solo lectura)
+        row_name = tk.Frame(card, bg=cb)
+        row_name.pack(fill="x", pady=(0, Spacing.SM))
+        tk.Label(row_name, text="Nombre del inquilino:", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        tk.Label(row_name, textvariable=self._var_tenant_name, anchor="w", bg=cb, fg=theme["text_secondary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
         # Fecha (con mini selector de calendario)
-        row1 = tk.Frame(self.form_frame, bg=cb)
-        row1.pack(fill="x", pady=1)
-        tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
+        row1 = tk.Frame(card, bg=cb)
+        row1.pack(fill="x", pady=(0, Spacing.SM))
+        tk.Label(row1, text="Fecha de pago (DD/MM/YYYY):", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
         self.date_picker = DatePickerWidget(row1)
         self.date_picker.pack(side="left", **row_opts)
         self.date_picker.set(self.fecha_var.get())
-        # Mantener fecha_var en sync con el date picker
         def _on_date_change(event=None):
             val = self.date_picker.get()
             if val:
@@ -320,54 +240,56 @@ class PaymentsView(tk.Frame):
         self.date_picker._select_date = _wrapped_select
         self.date_picker._select_today = _wrapped_today
         # Monto
-        row2 = tk.Frame(self.form_frame, bg=cb)
-        row2.pack(fill="x", pady=1)
-        tk.Label(row2, text="Monto:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        tk.Entry(row2, textvariable=self.monto_var, width=27).pack(side="left", **row_opts)
+        row2 = tk.Frame(card, bg=cb)
+        row2.pack(fill="x", pady=(0, Spacing.SM))
+        tk.Label(row2, text="Monto:", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        tk.Entry(row2, textvariable=self.monto_var, width=28, font=("Segoe UI", 10)).pack(side="left", **row_opts)
         # Método
-        row3 = tk.Frame(self.form_frame, bg=cb)
-        row3.pack(fill="x", pady=1)
-        tk.Label(row3, text="Método:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        metodo_combo = ttk.Combobox(row3, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=24)
+        row3 = tk.Frame(card, bg=cb)
+        row3.pack(fill="x", pady=(0, Spacing.SM))
+        tk.Label(row3, text="Método:", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        metodo_combo = ttk.Combobox(row3, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=26, font=("Segoe UI", 10))
         metodo_combo.pack(side="left", **row_opts)
+        bind_combobox_dropdown_on_click(metodo_combo)
         # Observaciones
-        row4 = tk.Frame(self.form_frame, bg=cb)
-        row4.pack(fill="x", pady=1)
-        tk.Label(row4, text="Observaciones:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
-        tk.Entry(row4, textvariable=self.obs_var, width=40).pack(side="left", **row_opts)
-        # Botón guardar alineado a la IZQUIERDA - Verde para mantener tonalidad verde del módulo
+        row4 = tk.Frame(card, bg=cb)
+        row4.pack(fill="x", pady=(0, Spacing.MD))
+        tk.Label(row4, text="Observaciones:", width=24, anchor="w", bg=cb, fg=theme["text_primary"], font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        tk.Entry(row4, textvariable=self.obs_var, width=42, font=("Segoe UI", 10)).pack(side="left", **row_opts)
+        # Botón Registrar Pago debajo del card
         btn_save = tk.Button(
             self.form_frame,
             text="Registrar Pago",
             command=self._save_register_payment,
-            bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
+            bg="#22c55e",
             fg="#000000",
             font=("Segoe UI", 10, "bold"),
             relief="flat",
-            padx=15,
-            pady=6,
+            padx=20,
+            pady=8,
             cursor="hand2"
         )
-        btn_save.pack(pady=(4, 0), anchor="w")
-        
-        # Hover effect para botón registrar
+        btn_save.pack(pady=(Spacing.SM, 0), anchor="w")
         def on_enter_save(e):
-            btn_save.configure(bg="#16a34a")  # green-600 - verde más oscuro para hover
+            btn_save.configure(bg="#16a34a")
         def on_leave_save(e):
-            btn_save.configure(bg="#22c55e")  # green-500 - verde original
+            btn_save.configure(bg="#22c55e")
         btn_save.bind("<Enter>", on_enter_save)
         btn_save.bind("<Leave>", on_leave_save)
 
     def _clear_tenant_search(self):
         self.tenant_autocomplete.set_tenants(self.tenants)
         self.selected_tenant = None
+        if hasattr(self, "_var_apt_display"):
+            self._var_apt_display.set("—")
+        if hasattr(self, "_var_tenant_name"):
+            self._var_tenant_name.set("—")
         self.monto_var.set("")
         self.fecha_var.set(datetime.now().strftime("%d/%m/%Y"))
         if hasattr(self, "date_picker") and self.date_picker.winfo_exists():
             self.date_picker.set(self.fecha_var.get())
         self.metodo_var.set("Efectivo")
         self.obs_var.set("")
-        self._display_register_payments(self._get_all_payments())
 
     def _get_all_payments(self):
         pagos = self.payment_service.get_all_payments()
@@ -376,13 +298,16 @@ class PaymentsView(tk.Frame):
 
     def _on_register_tenant_selected(self, tenant):
         self.selected_tenant = tenant
+        if hasattr(self, "_var_apt_display"):
+            self._var_apt_display.set(self._get_tenant_apartment_display(tenant))
+        if hasattr(self, "_var_tenant_name"):
+            self._var_tenant_name.set(tenant.get("nombre", "—"))
         if hasattr(self, 'monto_var'):
             self.monto_var.set(str(tenant.get('valor_arriendo', '')))
-        pagos = [p for p in self._get_all_payments() if p['id_inquilino'] == tenant['id']]
-        # Ya vienen ordenados por fecha descendente desde _get_all_payments
-        self._display_register_payments(pagos)
 
     def _display_register_payments(self, payments):
+        if not hasattr(self, "list_frame") or not self.list_frame.winfo_exists():
+            return
         for widget in self.list_frame.winfo_children():
             widget.destroy()
         theme = theme_manager.themes[theme_manager.current_theme]
@@ -482,7 +407,6 @@ class PaymentsView(tk.Frame):
         if self.on_payment_saved:
             self.on_payment_saved()
         
-        self._display_register_payments(self._get_all_payments())
         self.fecha_var.set(datetime.now().strftime("%d/%m/%Y"))
         if hasattr(self, "date_picker") and self.date_picker.winfo_exists():
             self.date_picker.set(self.fecha_var.get())
@@ -492,6 +416,7 @@ class PaymentsView(tk.Frame):
 
     def _generate_payment_receipt_pdf(self, pago):
         from manager.app.paths_config import DOCUMENTOS_INQUILINOS_DIR, ensure_dirs, get_tenant_document_folder_name
+        from manager.app.receipt_pdf import generate_payment_receipt_pdf
         ensure_dirs()
         tenant = self.selected_tenant or {}
         folder_name = get_tenant_document_folder_name(tenant)
@@ -499,65 +424,7 @@ class PaymentsView(tk.Frame):
         tenant_dir.mkdir(parents=True, exist_ok=True)
         fecha = pago.get("fecha_pago", "").replace("/", "-")
         filepath = str(tenant_dir / f"recibo_{fecha}.pdf")
-        c = canvas.Canvas(filepath, pagesize=letter)
-        width, height = letter
-        # Logo placeholder
-        c.setFillColorRGB(0.2, 0.4, 0.7)
-        c.rect(40, height-80, 80, 40, fill=1)
-        c.setFillColorRGB(1,1,1)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, height-60, "LOGO")
-        # Encabezado
-        c.setFillColorRGB(0,0,0)
-        c.setFont("Helvetica-Bold", 18)
-        c.drawString(140, height-60, "RECIBO DE PAGO DE ARRENDAMIENTO")
-        c.setFont("Helvetica", 10)
-        c.drawString(140, height-80, f"Emitido: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        # Datos del inquilino y pago
-        y = height-120
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "Datos del Inquilino:")
-        c.setFont("Helvetica", 11)
-        y -= 18
-        c.drawString(50, y, f"Nombre: {pago.get('nombre_inquilino', '')}")
-        y -= 15
-        # Obtener el número real del apartamento (no el ID)
-        apt_display = "N/A"
-        if self.selected_tenant:
-            apt_id = self.selected_tenant.get('apartamento', '')
-            if apt_id:
-                try:
-                    apt = apartment_service.get_apartment_by_id(int(apt_id))
-                    if apt and 'number' in apt:
-                        apt_display = apt['number']
-                    else:
-                        apt_display = str(apt_id)
-                except Exception:
-                    apt_display = str(apt_id)
-        c.drawString(50, y, f"Apartamento: {apt_display}")
-        y -= 15
-        c.drawString(50, y, f"Documento: {self.selected_tenant.get('numero_documento', '') if self.selected_tenant else 'N/A'}")
-        y -= 25
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "Detalles del Pago:")
-        c.setFont("Helvetica", 11)
-        y -= 18
-        c.drawString(50, y, f"Fecha de pago: {pago.get('fecha_pago', '')}")
-        y -= 15
-        c.drawString(50, y, f"Monto: ${pago.get('monto', 0):,.2f}")
-        y -= 15
-        c.drawString(50, y, f"Método: {pago.get('metodo', '')}")
-        y -= 15
-        c.drawString(50, y, f"Observaciones: {pago.get('observaciones', '')}")
-        y -= 30
-        c.setFont("Helvetica-Oblique", 10)
-        c.drawString(40, y, "Este recibo certifica que el inquilino ha realizado el pago correspondiente al arriendo en la fecha indicada.")
-        y -= 40
-        c.setFont("Helvetica", 10)
-        c.drawString(40, y, "Firma administrador: _____________________________")
-        c.drawString(320, y, "Firma inquilino: _____________________________")
-        c.save()
-        return filepath
+        return generate_payment_receipt_pdf(pago, tenant, filepath)
 
     def _show_edit_delete_payments(self):
         from .edit_delete_payments_view import EditDeletePaymentsView
@@ -587,10 +454,12 @@ class PaymentsView(tk.Frame):
                 self.on_back()
         
         edit_delete_view = EditDeletePaymentsView(
-            self, 
-            on_back=self._create_layout,
+            self,
+            on_back=self.on_back,
             on_payment_saved=self.on_payment_saved,
-            on_navigate_to_dashboard=go_to_dashboard
+            on_navigate_to_dashboard=go_to_dashboard,
+            on_register_new_payment=self._show_register_payment,
+            on_show_reports=self._show_reports,
         )
         edit_delete_view.pack(fill="both", expand=True)
 
@@ -626,14 +495,14 @@ class PaymentsView(tk.Frame):
         
         reports_view = PaymentReportsView(
             self,
-            on_back=self._create_layout,
+            on_back=self._show_edit_delete_payments,
             on_navigate_to_dashboard=go_to_dashboard
         )
         reports_view.pack(fill="both", expand=True)
 
     def _on_back(self):
-        if self.on_back:
-            self.on_back()
+        """Delega en el presenter para volver al dashboard."""
+        self.presenter.go_back()
 
     def _open_new_payment_modal(self):
         # Pasar el inquilino seleccionado en el filtro principal, si existe
@@ -644,15 +513,19 @@ class PaymentsView(tk.Frame):
         PaymentModal(self, self.tenant_service.get_all_tenants(), payment=payment, on_save=self._on_payment_saved)
 
     def _on_payment_saved(self, _):
-        messagebox.showinfo("Éxito", "Pago registrado correctamente.")
-        # Aquí podrías recargar la lista de pagos o refrescar la vista si lo deseas en el futuro
+        # Solo sonido de confirmación (sin mensaje "Éxito"), según checkpoint Pagos UX
+        self.presenter.notify_payment_saved()
 
     def _confirm_delete_payment(self, payment):
         if messagebox.askyesno("Confirmar eliminación", f"¿Seguro que deseas eliminar este pago?"):
             success = self.payment_service.delete_payment(payment['id'])
             if success:
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
                 self._load_payments()
-                messagebox.showinfo("Eliminado", "Pago eliminado correctamente.")
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el pago.")
 
@@ -720,53 +593,152 @@ class PaymentsView(tk.Frame):
         self.list_frame.bind('<Leave>', _unbind_mousewheel)
 
 class PaymentModal(tk.Toplevel):
-    def __init__(self, parent, tenants, payment=None, on_save=None, preselected_tenant=None):
+    def __init__(self, parent, tenants, payment=None, on_save=None, preselected_tenant=None, compact=False):
         super().__init__(parent)
         self.title("Registrar Pago" if payment is None else "Editar Pago")
-        self.geometry("400x400")
+        self.compact = compact
+        if compact:
+            self.geometry("420x440")
+        else:
+            self.geometry("400x400")
         self.payment_service = payment_service
         self.payment = payment
         self.on_save = on_save
         self.tenants = tenants
         self.preselected_tenant = preselected_tenant
         self._create_form()
+        self._close_modal = self._make_close_modal()
+        self.bind_all("<Escape>", self._close_modal)
+        self.protocol("WM_DELETE_WINDOW", lambda: self._close_modal(None))
         self.transient(parent)
         self.grab_set()
         self.wait_window(self)
 
+    def _make_close_modal(self):
+        """Cierra el modal y quita el binding global de Escape (así Esc cierra sin dar foco al modal)."""
+        def close(_e=None):
+            try:
+                self.unbind_all("<Escape>")
+            except Exception:
+                pass
+            self.destroy()
+        return close
+
+    def _get_tenant_apartment_display(self, tenant):
+        """Texto tipo 'Edificio X - 101' o '—' para el inquilino."""
+        if not tenant:
+            return "—"
+        apt_id = tenant.get("apartamento", None)
+        if apt_id is None:
+            return "—"
+        try:
+            apt_id = int(apt_id) if isinstance(apt_id, str) and apt_id.isdigit() else apt_id
+            apt = apartment_service.get_apartment_by_id(apt_id)
+        except (TypeError, ValueError):
+            return "—"
+        if not apt:
+            return "—"
+        building = None
+        if hasattr(building_service, "get_building_by_id"):
+            building = building_service.get_building_by_id(apt.get("building_id"))
+        if not building:
+            all_buildings = building_service.get_all_buildings()
+            building = next((b for b in all_buildings if b.get("id") == apt.get("building_id")), None)
+        building_name = building.get("name", "") if building else ""
+        tipo = apt.get("unit_type", "Apartamento Estándar")
+        numero = apt.get("number", "")
+        if building_name:
+            return f"{building_name} - {tipo} {numero}" if tipo != "Apartamento Estándar" else f"{building_name} - {numero}"
+        return f"{tipo} {numero}" if tipo != "Apartamento Estándar" else str(numero)
+
     def _create_form(self):
+        pad = (16, 12) if self.compact else (20, 20)
+        pady_field = (0, 6) if self.compact else (0, 8)
         frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        frame.pack(fill="both", expand=True, padx=pad[0], pady=pad[1])
         self.vars = {}
         self._form_ready = False  # Flag para evitar callbacks prematuros
-        # Fecha
-        tk.Label(frame, text="Fecha de pago (DD/MM/YYYY):").pack(anchor="w")
+        # En modo compacto: primero cuadro de búsqueda + botón Limpiar, luego las 3 líneas de datos (negrita)
+        if self.compact:
+            tk.Label(frame, text="Cambiar inquilino:", font=("Segoe UI", 9), fg="#666").pack(anchor="w")
+            search_row = tk.Frame(frame)
+            search_row.pack(fill="x", pady=pady_field)
+            self.tenant_autocomplete = TenantAutocompleteEntry(
+                search_row, self.tenants, on_select=self._on_tenant_selected, width=32
+            )
+            self.tenant_autocomplete.pack(side="left", fill="x", expand=True)
+            btn_clear_tenant = tk.Button(
+                search_row,
+                text="Limpiar",
+                font=("Segoe UI", 9),
+                bg="#e5e7eb",
+                fg="#374151",
+                relief="flat",
+                padx=10,
+                pady=4,
+                cursor="hand2",
+                command=self._clear_tenant_in_modal,
+            )
+            btn_clear_tenant.pack(side="right", padx=(8, 0))
+            btn_clear_tenant.bind("<Enter>", lambda e: btn_clear_tenant.config(bg="#d1d5db"))
+            btn_clear_tenant.bind("<Leave>", lambda e: btn_clear_tenant.config(bg="#e5e7eb"))
+            tenant_info = tk.Frame(frame)
+            tenant_info.pack(fill="x", pady=(4, 6))
+            self._lbl_tenant_name = tk.Label(tenant_info, text="Inquilino: —", font=("Segoe UI", 10, "bold"), anchor="w")
+            self._lbl_tenant_name.pack(fill="x")
+            self._lbl_tenant_id = tk.Label(tenant_info, text="Identificación: —", font=("Segoe UI", 10, "bold"), anchor="w")
+            self._lbl_tenant_id.pack(fill="x")
+            self._lbl_tenant_apt = tk.Label(tenant_info, text="Apartamento: —", font=("Segoe UI", 10, "bold"), anchor="w")
+            self._lbl_tenant_apt.pack(fill="x")
+        # Fecha (con mini selector de fecha en modo compacto)
+        tk.Label(frame, text="Fecha de pago (DD/MM/YYYY):", font=("Segoe UI", 10)).pack(anchor="w")
         self.fecha_var = tk.StringVar(value=self.payment['fecha_pago'] if self.payment else datetime.now().strftime("%d/%m/%Y"))
-        tk.Entry(frame, textvariable=self.fecha_var).pack(fill="x", pady=(0, 8))
+        if self.compact:
+            date_row = tk.Frame(frame)
+            date_row.pack(fill="x", pady=pady_field)
+            self.date_picker = DatePickerWidget(date_row)
+            self.date_picker.pack(side="left")
+            self.date_picker.set(self.fecha_var.get())
+            def _on_date_change(_e=None):
+                v = self.date_picker.get()
+                if v:
+                    self.fecha_var.set(v)
+            self.date_picker.date_entry.bind("<KeyRelease>", _on_date_change)
+            self.date_picker.date_entry.bind("<FocusOut>", _on_date_change)
+            _orig_select = self.date_picker._select_date
+            _orig_today = self.date_picker._select_today
+            def _wrapped_select(day):
+                _orig_select(day)
+                self.fecha_var.set(self.date_picker.get())
+            def _wrapped_today():
+                _orig_today()
+                self.fecha_var.set(self.date_picker.get())
+            self.date_picker._select_date = _wrapped_select
+            self.date_picker._select_today = _wrapped_today
+        else:
+            tk.Entry(frame, textvariable=self.fecha_var, font=("Segoe UI", 10)).pack(fill="x", pady=pady_field)
         # Monto
-        tk.Label(frame, text="Monto:").pack(anchor="w")
+        tk.Label(frame, text="Monto:", font=("Segoe UI", 10)).pack(anchor="w")
         self.monto_var = tk.StringVar(value=str(self.payment['monto']) if self.payment else "")
-        tk.Entry(frame, textvariable=self.monto_var).pack(fill="x", pady=(0, 8))
+        tk.Entry(frame, textvariable=self.monto_var, font=("Segoe UI", 10)).pack(fill="x", pady=pady_field)
         # Método
-        tk.Label(frame, text="Método:").pack(anchor="w")
+        tk.Label(frame, text="Método:", font=("Segoe UI", 10)).pack(anchor="w")
         self.metodo_var = tk.StringVar(value=self.payment['metodo'] if self.payment else "Efectivo")
-        metodo_combo = ttk.Combobox(frame, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=20)
-        metodo_combo.pack(fill="x", pady=(0, 8))
+        metodo_combo = ttk.Combobox(frame, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=28, font=("Segoe UI", 10))
+        metodo_combo.pack(fill="x", pady=pady_field)
+        bind_combobox_dropdown_on_click(metodo_combo)
         # Observaciones
-        tk.Label(frame, text="Observaciones:").pack(anchor="w")
+        tk.Label(frame, text="Observaciones:", font=("Segoe UI", 10)).pack(anchor="w")
         self.obs_var = tk.StringVar(value=self.payment.get('observaciones', '') if self.payment else "")
-        tk.Entry(frame, textvariable=self.obs_var).pack(fill="x", pady=(0, 8))
-        # Inquilino (autocomplete al final para que los campos ya existan)
-        tk.Label(frame, text="Inquilino:").pack(anchor="w")
-        self.tenant_autocomplete = TenantAutocompleteEntry(
-            frame,
-            self.tenants,
-            on_select=self._on_tenant_selected,
-            width=30
-        )
-        self.tenant_autocomplete.pack(fill="x", pady=(0, 8))
-        self._form_ready = True  # Ahora sí se pueden autocompletar campos
-        # Seleccionar automáticamente el inquilino si viene preseleccionado
+        tk.Entry(frame, textvariable=self.obs_var, font=("Segoe UI", 10)).pack(fill="x", pady=pady_field)
+        # Inquilino (si no es compacto va al final)
+        if not self.compact:
+            tk.Label(frame, text="Inquilino:").pack(anchor="w")
+            self.tenant_autocomplete = TenantAutocompleteEntry(
+                frame, self.tenants, on_select=self._on_tenant_selected, width=30
+            )
+            self.tenant_autocomplete.pack(fill="x", pady=pady_field)
+        self._form_ready = True
         if self.payment:
             for t in self.tenants:
                 if t['id'] == self.payment['id_inquilino']:
@@ -777,12 +749,12 @@ class PaymentModal(tk.Toplevel):
                 if t['id'] == self.preselected_tenant['id']:
                     self.tenant_autocomplete._select_tenant(t)
                     break
-        # Botón guardar - Verde para mantener tonalidad verde del módulo
+        btn_label = "Registrar Pago" if self.compact else "Guardar"
         btn_save = tk.Button(
-            frame, 
-            text="Guardar", 
+            frame,
+            text=btn_label,
             command=self._save,
-            bg="#22c55e",  # green-500 - verde para mantener tonalidad verde del módulo
+            bg="#22c55e",
             fg="white",
             font=("Segoe UI", 10, "bold"),
             relief="flat",
@@ -790,7 +762,7 @@ class PaymentModal(tk.Toplevel):
             pady=6,
             cursor="hand2"
         )
-        btn_save.pack(pady=(20, 0))
+        btn_save.pack(pady=(12 if self.compact else 20, 16))
         
         # Hover effect para botón guardar
         def on_enter_save(e):
@@ -800,15 +772,37 @@ class PaymentModal(tk.Toplevel):
         btn_save.bind("<Enter>", on_enter_save)
         btn_save.bind("<Leave>", on_leave_save)
 
+    def _clear_tenant_in_modal(self):
+        """Limpia la selección de inquilino para poder buscar otro sin borrar el texto a mano."""
+        if not self.compact or not hasattr(self, "tenant_autocomplete"):
+            return
+        self.tenant_autocomplete.clear_selection()
+        self.selected_tenant = None
+        if hasattr(self, "_lbl_tenant_name"):
+            self._lbl_tenant_name.configure(text="Inquilino: —")
+            self._lbl_tenant_id.configure(text="Identificación: —")
+            self._lbl_tenant_apt.configure(text="Apartamento: —")
+        self.monto_var.set("")
+
     def _on_tenant_selected(self, tenant):
         if not hasattr(self, '_form_ready') or not self._form_ready:
             return
         self.selected_tenant = tenant
+        # En modo compacto, actualizar las 3 líneas de datos del inquilino
+        if self.compact and hasattr(self, '_lbl_tenant_name'):
+            if tenant:
+                self._lbl_tenant_name.configure(text=f"Inquilino: {tenant.get('nombre', '') or '—'}")
+                self._lbl_tenant_id.configure(text=f"Identificación: {tenant.get('numero_documento', '') or '—'}")
+                self._lbl_tenant_apt.configure(text=f"Apartamento: {self._get_tenant_apartment_display(tenant)}")
+            else:
+                self._lbl_tenant_name.configure(text="Inquilino: —")
+                self._lbl_tenant_id.configure(text="Identificación: —")
+                self._lbl_tenant_apt.configure(text="Apartamento: —")
         # Autocompletar el monto con el valor del arriendo solo si:
         # - Es un nuevo pago (no edición)
         # - O el campo monto está vacío
         if (not hasattr(self, 'payment') or not self.payment) or not self.monto_var.get().strip():
-            valor_arriendo = tenant.get('valor_arriendo', '')
+            valor_arriendo = tenant.get('valor_arriendo', '') if tenant else ''
             self.monto_var.set(str(valor_arriendo) if valor_arriendo else '')
 
     def _save(self):
@@ -817,11 +811,12 @@ class PaymentModal(tk.Toplevel):
         if not tenant:
             messagebox.showerror("Error", "Debe seleccionar un inquilino.")
             return
-        if not self.fecha_var.get():
+        fecha_str = (self.date_picker.get() if (self.compact and hasattr(self, "date_picker") and self.date_picker.winfo_exists()) else None) or self.fecha_var.get()
+        if not fecha_str:
             messagebox.showerror("Error", "Debe ingresar la fecha de pago.")
             return
         try:
-            datetime.strptime(self.fecha_var.get(), "%d/%m/%Y")
+            datetime.strptime(fecha_str, "%d/%m/%Y")
         except Exception:
             messagebox.showerror("Error", "La fecha debe tener formato DD/MM/YYYY.")
             return
@@ -835,15 +830,28 @@ class PaymentModal(tk.Toplevel):
         data = {
             "id_inquilino": tenant['id'],
             "nombre_inquilino": tenant['nombre'],
-            "fecha_pago": self.fecha_var.get(),
+            "fecha_pago": fecha_str,
             "monto": float(self.monto_var.get()),
             "metodo": self.metodo_var.get(),
             "observaciones": self.obs_var.get()
         }
+        # Evitar duplicados (misma fecha y monto para el mismo inquilino)
+        if not self.payment:
+            existing = self.payment_service.get_payments_by_tenant(tenant['id'])
+            for p in existing:
+                if p.get('fecha_pago') == data['fecha_pago'] and p.get('monto') == data['monto']:
+                    messagebox.showwarning("Advertencia", "Ya existe un pago con la misma fecha y monto para este inquilino.")
+                    return
         if self.payment:
             self.payment_service.update_payment(self.payment['id'], data)
         else:
             self.payment_service.add_payment(data)
+        # Solo sonido de confirmación (mismo que el del cuadro de éxito), sin mensaje
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
         if self.on_save:
             self.on_save(data)
         self.destroy()
@@ -902,6 +910,7 @@ class PaymentsManagerWindow(tk.Toplevel):
         tk.Label(self.form_frame, text="Método:").pack(anchor="w")
         metodo_combo = ttk.Combobox(self.form_frame, textvariable=self.metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=20)
         metodo_combo.pack(fill="x", pady=(0, 6))
+        bind_combobox_dropdown_on_click(metodo_combo)
         # Observaciones
         tk.Label(self.form_frame, text="Observaciones:").pack(anchor="w")
         tk.Entry(self.form_frame, textvariable=self.obs_var).pack(fill="x", pady=(0, 6))

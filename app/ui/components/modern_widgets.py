@@ -432,3 +432,25 @@ class DetailedMetricCard(tk.Frame):
                            font=("Segoe UI", 10, "bold"))  # aumentado de 7 a 10 para mejor visibilidad
             value.pack(side="right")
 
+
+def bind_combobox_dropdown_on_click(combobox):
+    """Hace que el listado del combobox se abra al hacer clic en el campo de texto (no solo en la flecha).
+    En clic en la flecha no se interfiere para que el menú abra de forma nativa.
+    Aplicar a todos los ttk.Combobox de la aplicación (ver ARCHITECTURE.md y reglas Cursor)."""
+    def _on_click(event):
+        widget = event.widget
+        if not widget.winfo_exists():
+            return
+        try:
+            w = widget.winfo_width()
+            if w > 0 and event.x >= max(0, w - 28):
+                return  # clic en la flecha: dejar comportamiento nativo
+        except Exception:
+            pass
+        def _post():
+            if widget.winfo_exists():
+                widget.focus_set()
+                widget.event_generate('<Down>')
+        widget.after(30, _post)
+    combobox.bind('<Button-1>', _on_click)
+

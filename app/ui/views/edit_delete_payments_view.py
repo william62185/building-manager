@@ -3,7 +3,7 @@ from tkinter import messagebox, ttk
 from datetime import datetime
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
-from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
+from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors, bind_combobox_dropdown_on_click
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
@@ -13,7 +13,7 @@ from manager.app.ui.views.register_expense_view import DatePickerWidget
 
 class EditDeletePaymentsView(tk.Frame):
     """Vista profesional para editar/eliminar pagos (independiente, duplicado de registrar pago)"""
-    def __init__(self, parent, on_back=None, on_payment_saved=None, on_navigate_to_dashboard=None):
+    def __init__(self, parent, on_back=None, on_payment_saved=None, on_navigate_to_dashboard=None, on_register_new_payment=None, on_show_reports=None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
@@ -23,6 +23,8 @@ class EditDeletePaymentsView(tk.Frame):
         self.on_back = on_back
         self.on_payment_saved = on_payment_saved  # Callback para actualizar otras vistas
         self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
+        self.on_register_new_payment = on_register_new_payment  # Callback para abrir registrar nuevo pago
+        self.on_show_reports = on_show_reports  # Callback para abrir reportes de pagos
         self.selected_tenant = None
         self.editing_payment = None
         self._create_layout()
@@ -32,25 +34,19 @@ class EditDeletePaymentsView(tk.Frame):
             widget.destroy()
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        # Header
+        # Header solo con botones de navegación (sin título "Editar/Eliminar Pagos")
         header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.LG))
-        
-        # Título a la izquierda
-        title = tk.Label(header, text="Editar/Eliminar Pagos", font=("Segoe UI", 16, "bold"), bg=cb, fg=theme["text_primary"])
-        title.pack(side="left", padx=(0, Spacing.LG))
-        
-        # Frame para botones de navegación (alineados a la derecha)
+        header.pack(fill="x", pady=(0, Spacing.SM))
         buttons_frame = tk.Frame(header, bg=cb)
         buttons_frame.pack(side="right")
-        
-        # Agregar botones Volver y Dashboard
         self._create_navigation_buttons(buttons_frame, self._on_back)
-        # Contenedor fijo (igual que en gastos): búsqueda y formulario de edición
+        # Cards: Registrar nuevo pago y Reportes (encima del cuadro de búsqueda)
+        self._create_action_cards(self)
+        # Contenedor: búsqueda y formulario de edición
         fixed_container = tk.Frame(self, bg=cb)
-        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.MD))
+        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(6, 4))
         search_frame = tk.Frame(fixed_container, bg=cb)
-        search_frame.pack(fill="x", pady=(0, Spacing.SM))
+        search_frame.pack(fill="x", pady=(0, 2))
         tk.Label(search_frame, text="Búsqueda:", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
         self.tenants = self.tenant_service.get_all_tenants()
         self.tenant_autocomplete = TenantAutocompleteEntry(
@@ -65,15 +61,74 @@ class EditDeletePaymentsView(tk.Frame):
         self.tenant_autocomplete.pack(side="left", fill="x", expand=True, padx=(0, Spacing.SM))
         btn_clear = ModernButton(search_frame, text="Limpiar búsqueda", icon=Icons.CANCEL, style="warning", command=self._clear_tenant_search, small=True, fg="#000000")
         btn_clear.pack(side="left", padx=(Spacing.MD, 0))
-        # Placeholder para el formulario de edición (igual que en gastos)
         self.edit_placeholder = tk.Frame(fixed_container, bg=cb)
         self.edit_placeholder.pack_forget()
-        # Separador y listado (mismo orden que en gastos)
+        # Separador y listado con poco espacio entre búsqueda y tabla
         separator = tk.Frame(self, height=2, bg=theme.get("border_light", "#e0e0e0"))
-        separator.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.SM))
+        separator.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
         self._create_payments_list()
         # Posicionar cursor en el cuadro de búsqueda al abrir la vista
         self.after(150, self._focus_search_entry)
+
+    def _create_action_cards(self, parent):
+        """Dos cards del mismo tamaño: Registrar nuevo pago y Reportes."""
+        cb = self._content_bg
+        colors = get_module_colors("pagos")
+        card_bg = colors.get("primary", "#166534")
+        card_hover = colors.get("hover", "#15803d")
+        cards_frame = tk.Frame(parent, bg=cb)
+        cards_frame.pack(fill="x", padx=Spacing.LG, pady=(0, 8))
+        cards_frame.grid_columnconfigure(0, weight=1)
+        cards_frame.grid_columnconfigure(1, weight=1)
+        btn_register = tk.Button(
+            cards_frame,
+            text=f"{Icons.PAYMENT_RECEIVED} Registrar nuevo pago",
+            font=("Segoe UI", 11, "bold"),
+            bg=card_bg,
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=10,
+            cursor="hand2",
+            command=self._on_register_card,
+        )
+        btn_register.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        btn_register.bind("<Enter>", lambda e: btn_register.config(bg=card_hover))
+        btn_register.bind("<Leave>", lambda e: btn_register.config(bg=card_bg))
+        btn_reports = tk.Button(
+            cards_frame,
+            text=f"{Icons.REPORTS} Reportes",
+            font=("Segoe UI", 11, "bold"),
+            bg="#6b7280",
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=10,
+            cursor="hand2",
+            command=self._on_reports_card,
+        )
+        btn_reports.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        btn_reports.bind("<Enter>", lambda e: btn_reports.config(bg="#4b5563"))
+        btn_reports.bind("<Leave>", lambda e: btn_reports.config(bg="#6b7280"))
+
+    def _on_register_card(self):
+        """Abre ventana compacta para registrar pago usando el inquilino del filtro (sin cambiar de vista)."""
+        from .payments_view import PaymentModal
+        def _after_save(_data):
+            if self.on_payment_saved:
+                self.on_payment_saved()
+            self._create_payments_list()
+        PaymentModal(
+            self,
+            self.tenants,
+            on_save=_after_save,
+            preselected_tenant=self.selected_tenant,
+            compact=True,
+        )
+
+    def _on_reports_card(self):
+        if self.on_show_reports:
+            self.on_show_reports()
 
     def _focus_search_entry(self):
         """Coloca el foco en el cuadro de búsqueda al abrir la vista Editar/Eliminar pagos."""
@@ -113,7 +168,7 @@ class EditDeletePaymentsView(tk.Frame):
         ]
         # --- Un solo grid (como en gastos): encabezado y cuerpo comparten columnas para alineación exacta ---
         self.list_container = tk.Frame(self, bg=cb)
-        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.LG))
+        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(4, Spacing.LG))
         sep_color = theme.get("border_light", "#d1d5db")
         table_grid = tk.Frame(self.list_container, bg=cb)
         table_grid.pack(fill="both", expand=True)
@@ -156,7 +211,12 @@ class EditDeletePaymentsView(tk.Frame):
                 canvas.itemconfig(list_window, width=event.width)
         canvas.bind("<Configure>", _on_canvas_configure)
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            if not canvas.winfo_exists():
+                return
+            try:
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except tk.TclError:
+                pass
         def _bind_mousewheel(event):
             canvas.bind_all("<MouseWheel>", _on_mousewheel)
         def _unbind_mousewheel(event):
@@ -269,14 +329,15 @@ class EditDeletePaymentsView(tk.Frame):
         row2.pack(fill="x", pady=1)
         tk.Label(row2, text="Monto:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         monto_var = tk.StringVar(value=str(self.editing_payment['monto']))
-        tk.Entry(row2, textvariable=monto_var, width=19).pack(side="left", **row_opts)
+        tk.Entry(row2, textvariable=monto_var, width=27).pack(side="left", **row_opts)
         # Método
         row3 = tk.Frame(self.edit_placeholder, bg=cb)
         row3.pack(fill="x", pady=1)
         tk.Label(row3, text="Método:", width=22, anchor="w", bg=cb, fg=theme["text_primary"]).pack(side="left", **row_opts)
         metodo_var = tk.StringVar(value=self.editing_payment['metodo'])
-        metodo_combo = ttk.Combobox(row3, textvariable=metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=16)
+        metodo_combo = ttk.Combobox(row3, textvariable=metodo_var, values=["Efectivo", "Transferencia", "Cheque"], width=24)
         metodo_combo.pack(side="left", **row_opts)
+        bind_combobox_dropdown_on_click(metodo_combo)
         # Observaciones
         row4 = tk.Frame(self.edit_placeholder, bg=cb)
         row4.pack(fill="x", pady=1)
@@ -338,34 +399,21 @@ class EditDeletePaymentsView(tk.Frame):
         if messagebox.askyesno("Eliminar pago", "¿Seguro que deseas eliminar este pago?"):
             success = self.payment_service.delete_payment(payment['id'])
             if success:
-                messagebox.showinfo("Eliminado", "Pago eliminado correctamente.")
-                
-                # Llamar callback para actualizar otras vistas (como la lista de inquilinos)
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
                 if self.on_payment_saved:
                     self.on_payment_saved()
-                
                 self._create_payments_list()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el pago.")
 
-    def _create_navigation_buttons(self, parent, on_back_command):
-        """Crea los botones Volver y Dashboard con estilo consistente"""
+    def _create_navigation_buttons(self, parent, on_back_command, show_back_button=False):
+        """Crea el botón Dashboard y opcionalmente Volver (en esta vista solo Dashboard)."""
         theme = theme_manager.themes[theme_manager.current_theme]
         hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
-        
-        # Configuración común para ambos botones (misma altura)
-        button_config = {
-            "font": ("Segoe UI", 10, "bold"),
-            "bg": theme["btn_secondary_bg"],
-            "fg": theme["btn_secondary_fg"],
-            "activebackground": hover_bg,
-            "activeforeground": theme["btn_secondary_fg"],
-            "bd": 1,
-            "relief": "solid",
-            "padx": 12,
-            "pady": 5,
-            "cursor": "hand2"
-        }
         
         # Colores verdes para módulo de pagos
         colors = get_module_colors("pagos")
@@ -405,21 +453,22 @@ class EditDeletePaymentsView(tk.Frame):
             if self.on_back:
                 self.on_back()
         
-        # Botón "Volver"
-        btn_back = create_rounded_button(
-            parent,
-            text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color="white",
-            fg_color=green_primary,
-            hover_bg=green_light,
-            hover_fg=green_text,
-            command=on_back_command,
-            padx=16,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_back.pack(side="right", padx=(Spacing.MD, 0))
+        # Botón "Volver" (solo si se pide; en esta vista no se muestra, ya hay Dashboard)
+        if show_back_button:
+            btn_back = create_rounded_button(
+                parent,
+                text=f"{Icons.ARROW_LEFT} Volver",
+                bg_color="white",
+                fg_color=green_primary,
+                hover_bg=green_light,
+                hover_fg=green_text,
+                command=on_back_command,
+                padx=16,
+                pady=8,
+                radius=4,
+                border_color="#000000"
+            )
+            btn_back.pack(side="right", padx=(Spacing.MD, 0))
         
         # Botón "Dashboard"
         btn_dashboard = create_rounded_button(
