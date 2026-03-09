@@ -100,7 +100,7 @@ class TenantsView(tk.Frame):
         left_column.pack(side="left", fill="y", padx=(0, 15))
         self._create_action_cards(left_column)
         search_panel = self._create_search_panel(left_column)
-        search_panel.pack(fill="both", expand=True, pady=(10, 0))
+        search_panel.pack(fill="both", expand=True, pady=(4, 0))
         # =================== PANEL LISTA (70%) ===================
         list_panel = self._create_list_panel(main_container)
         list_panel.pack(side="right", fill="both", expand=True)
@@ -126,9 +126,9 @@ class TenantsView(tk.Frame):
             fg="white"
         )
         title.pack(expand=True)
-        # Contenido: sin expand para que el frame termine justo debajo de los botones
+        # Contenido: padding inferior justo para que los botones no se corten
         content = tk.Frame(panel, bg="#e3f2fd")
-        content.pack(fill="x", padx=6, pady=4)
+        content.pack(fill="x", padx=6, pady=(4, 6))
         
         # === BÚSQUEDA POR TEXTO: título y descripción en la misma línea ===
         search_title_row = tk.Frame(content, bg="#e3f2fd")
@@ -199,11 +199,11 @@ class TenantsView(tk.Frame):
             bg="#e3f2fd",
             fg="#1e40af"
         )
-        self.results_indicator.pack(anchor="w", pady=(3, 2))
+        self.results_indicator.pack(anchor="w", pady=(2, 1))
         
         # === BOTONES (más pequeños) ===
         btn_frame = tk.Frame(content, bg="#e3f2fd")
-        btn_frame.pack(fill="x", pady=(2, 0))
+        btn_frame.pack(fill="x", pady=(1, 2))
         btn_search = tk.Button(
             btn_frame,
             text="🔍 Aplicar",
@@ -240,10 +240,14 @@ class TenantsView(tk.Frame):
         card_bg = colors.get("primary", "#2563eb")
         card_hover = colors.get("hover", "#1d4ed8")
         cards_frame = tk.Frame(parent, bg=bg_view)
-        cards_frame.pack(fill="x", pady=(0, 10))
+        cards_frame.pack(fill="x", pady=(0, 4))
+        # Borde negro: contenedor con fondo negro y relleno para que se vea el borde
+        border_width = 2
         # Card Nuevo inquilino (expandido para cubrir espacio)
+        wrap_new = tk.Frame(cards_frame, bg="black")
+        wrap_new.pack(fill="both", expand=True, pady=(0, 8))
         btn_new = tk.Button(
-            cards_frame,
+            wrap_new,
             text="➕ Nuevo inquilino",
             font=("Segoe UI", 11, "bold"),
             bg=card_bg,
@@ -254,12 +258,14 @@ class TenantsView(tk.Frame):
             cursor="hand2",
             command=self._on_new_tenant_card,
         )
-        btn_new.pack(fill="both", expand=True, pady=(0, 8))
+        btn_new.pack(fill="both", expand=True, padx=border_width, pady=border_width)
         btn_new.bind("<Enter>", lambda e: btn_new.config(bg=card_hover))
         btn_new.bind("<Leave>", lambda e: btn_new.config(bg=card_bg))
         # Card Reportes (expandido para cubrir espacio)
+        wrap_reports = tk.Frame(cards_frame, bg="black")
+        wrap_reports.pack(fill="both", expand=True)
         btn_reports = tk.Button(
-            cards_frame,
+            wrap_reports,
             text="📊 Reportes",
             font=("Segoe UI", 11, "bold"),
             bg="#6b7280",
@@ -270,7 +276,7 @@ class TenantsView(tk.Frame):
             cursor="hand2",
             command=self._on_reports_card,
         )
-        btn_reports.pack(fill="both", expand=True)
+        btn_reports.pack(fill="both", expand=True, padx=border_width, pady=border_width)
         btn_reports.bind("<Enter>", lambda e: btn_reports.config(bg="#4b5563"))
         btn_reports.bind("<Leave>", lambda e: btn_reports.config(bg="#6b7280"))
 

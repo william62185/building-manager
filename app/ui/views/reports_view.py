@@ -15,12 +15,15 @@ from pathlib import Path
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, create_rounded_button, get_module_colors
+from manager.app.ui.views.register_expense_view import DatePickerWidget
 from manager.app.ui.components.icons import Icons
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.building_service import building_service
 from manager.app.services.expense_service import expense_service
+from manager.app.presenters.report_presenter import ReportPresenter
+from manager.app.logger import logger
 
 
 class ReportsView(tk.Frame):
@@ -35,22 +38,18 @@ class ReportsView(tk.Frame):
         self.on_navigate_to_dashboard = on_navigate_to_dashboard
         self.on_show_occupancy_vacancy_report = on_show_occupancy_vacancy_report
         self.on_show_pending_payments_report = on_show_pending_payments_report
-        
+        self.presenter = ReportPresenter(
+            on_back=on_back,
+            on_show_occupancy_report=on_show_occupancy_vacancy_report,
+            on_show_pending_payments_report=on_show_pending_payments_report,
+        )
         # Recargar datos antes de generar reportes
         self._reload_all_data()
-        
         self._create_layout()
-    
+
     def _reload_all_data(self):
-        """Recarga todos los datos necesarios para los reportes"""
-        try:
-            tenant_service._load_data()
-            payment_service._load_data()
-            apartment_service._load_data()
-            building_service._load_buildings()
-            expense_service._load_data()
-        except Exception as e:
-            print(f"Error al recargar datos: {e}")
+        """Recarga todos los datos necesarios para los reportes (delega en el presenter)."""
+        self.presenter.reload_all_data()
     
     def _create_layout(self):
         """Crea el layout principal de la vista de reportes"""
@@ -267,7 +266,7 @@ class ReportsView(tk.Frame):
                     self.on_navigate_to_dashboard()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.warning("Error en callback de navegación: %s", e)
             
             widget = self.master
             max_depth = 10
@@ -280,7 +279,7 @@ class ReportsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1
@@ -429,59 +428,34 @@ class ReportsView(tk.Frame):
             messagebox.showerror("Error", f"Error al generar Estado de Resultados: {str(e)}")
 
     def _create_estado_resultados_period_window(self, on_generate):
-        """Ventana para seleccionar el período del Estado de Resultados (mes actual, año actual, mes/año específicos, año completo)."""
+        """Ventana compacta para seleccionar período del Estado de Resultados (misma UX que reportes de gastos/pagos)."""
         period_window = tk.Toplevel(self)
-        period_window.title("Seleccionar período")
-        period_window.geometry("550x520")
+        period_window.title("Seleccionar período - Estado de Resultados")
+        period_window.geometry("420x455")
         period_window.transient(self)
         period_window.grab_set()
+        period_window.bind("<Escape>", lambda e: period_window.destroy())
 
-        tk.Label(
+        title_label = tk.Label(
             period_window,
             text="Seleccione el período para el reporte:",
-            font=("Segoe UI", 13, "bold"),
-            pady=15
-        ).pack()
+            font=("Segoe UI", 12, "bold")
+        )
+        title_label.pack(pady=(10, 6))
 
         main_container = tk.Frame(period_window)
-        main_container.pack(fill="x", padx=25, pady=(10, 8))
+        main_container.pack(fill="x", padx=20, pady=(4, 6))
 
-        period_type = tk.StringVar(value="current_month")
+        period_type = tk.StringVar(value="specific_month")
 
-        # Opciones rápidas
-        quick_frame = tk.LabelFrame(
-            main_container,
-            text="Opciones Rápidas",
-            font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
-        )
-        quick_frame.pack(fill="x", pady=(0, 12))
-
-        tk.Radiobutton(
-            quick_frame,
-            text="Mes actual",
-            variable=period_type,
-            value="current_month",
-            font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=4)
-        tk.Radiobutton(
-            quick_frame,
-            text="Año actual",
-            variable=period_type,
-            value="current_year",
-            font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=4)
-
-        # Mes y año específicos
         specific_frame = tk.LabelFrame(
             main_container,
-            text="Seleccionar Mes y Año Específicos",
+            text="Mes y Año Específicos",
             font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
+            padx=12,
+            pady=6
         )
-        specific_frame.pack(fill="x", pady=(0, 12))
+        specific_frame.pack(fill="x", pady=(0, 8))
 
         tk.Radiobutton(
             specific_frame,
@@ -489,10 +463,11 @@ class ReportsView(tk.Frame):
             variable=period_type,
             value="specific_month",
             font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w", pady=(0, 4))
 
         month_year_frame = tk.Frame(specific_frame)
-        month_year_frame.pack(fill="x", padx=20)
+        month_year_frame.pack(fill="x", padx=16)
+
         current_year = datetime.now().year
         years = [str(y) for y in range(current_year - 9, current_year + 1)]
         years.reverse()
@@ -505,20 +480,22 @@ class ReportsView(tk.Frame):
         year_combo = ttk.Combobox(month_year_frame, values=years, width=12, state="readonly")
         year_combo.set(str(current_year))
         year_combo.pack(side="left", padx=(0, 20))
+        year_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
+
         tk.Label(month_year_frame, text="Mes:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
         month_combo = ttk.Combobox(month_year_frame, values=months, width=15, state="readonly")
         month_combo.set(months[datetime.now().month - 1])
         month_combo.pack(side="left")
+        month_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
 
-        # Año completo
         year_only_frame = tk.LabelFrame(
             main_container,
-            text="Seleccionar Año Completo",
+            text="Año Completo",
             font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
+            padx=12,
+            pady=6
         )
-        year_only_frame.pack(fill="x", pady=(0, 12))
+        year_only_frame.pack(fill="x", pady=(0, 8))
 
         tk.Radiobutton(
             year_only_frame,
@@ -526,20 +503,51 @@ class ReportsView(tk.Frame):
             variable=period_type,
             value="specific_year",
             font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w", pady=(0, 4))
+
         year_only_select_frame = tk.Frame(year_only_frame)
-        year_only_select_frame.pack(fill="x", padx=20)
+        year_only_select_frame.pack(fill="x", padx=16)
+
         tk.Label(year_only_select_frame, text="Año:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
         year_only_combo = ttk.Combobox(year_only_select_frame, values=years, width=12, state="readonly")
         year_only_combo.set(str(current_year))
         year_only_combo.pack(side="left")
+        year_only_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_year"))
 
-        # Rango personalizado (placeholders para on_generate)
-        date_from_entry = tk.Entry(main_container, width=1)
-        date_to_entry = tk.Entry(main_container, width=1)
+        custom_frame = tk.LabelFrame(
+            main_container,
+            text="Rango Personalizado",
+            font=("Segoe UI", 10, "bold"),
+            padx=12,
+            pady=6
+        )
+        custom_frame.pack(fill="x", pady=(0, 4))
+
+        tk.Radiobutton(
+            custom_frame,
+            text="Rango de fechas personalizado",
+            variable=period_type,
+            value="custom",
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=(0, 4))
+
+        date_range_frame = tk.Frame(custom_frame)
+        date_range_frame.pack(fill="x", padx=16, pady=(0, 4))
+
+        row_from = tk.Frame(date_range_frame)
+        row_from.pack(fill="x", pady=(0, 6))
+        tk.Label(row_from, text="Desde:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+        date_from_entry = DatePickerWidget(row_from, on_change=lambda: period_type.set("custom"))
+        date_from_entry.pack(side="left", fill="x", expand=True)
+
+        row_to = tk.Frame(date_range_frame)
+        row_to.pack(fill="x")
+        tk.Label(row_to, text="Hasta:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+        date_to_entry = DatePickerWidget(row_to, on_change=lambda: period_type.set("custom"))
+        date_to_entry.pack(side="left", fill="x", expand=True)
 
         button_frame = tk.Frame(period_window)
-        button_frame.pack(fill="x", pady=(0, 15))
+        button_frame.pack(fill="x", pady=(6, 10))
 
         def generate_wrapper():
             on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window)
@@ -549,15 +557,17 @@ class ReportsView(tk.Frame):
         tk.Button(
             button_frame,
             text="Generar Reporte",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=btn_bg,
             fg="white",
             relief="flat",
-            padx=30,
-            pady=10,
+            padx=22,
+            pady=6,
             cursor="hand2",
             command=generate_wrapper
         ).pack()
+
+        period_window.after(50, period_window.focus_force)
 
     def _resolve_period_estado_resultados(self, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry):
         """Resuelve el período seleccionado y retorna (period_label, filter_fn). filter_fn(datetime|None) -> bool."""
@@ -566,18 +576,6 @@ class ReportsView(tk.Frame):
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ]
         period = period_type.get()
-
-        if period == "current_month":
-            now = datetime.now()
-            def fn(dt):
-                return dt is not None and dt.year == now.year and dt.month == now.month
-            return f"{months[now.month - 1]} {now.year}", fn
-
-        if period == "current_year":
-            y = datetime.now().year
-            def fn(dt):
-                return dt is not None and dt.year == y
-            return f"Año {y}", fn
 
         if period == "specific_month":
             sy = year_combo.get()
@@ -598,6 +596,24 @@ class ReportsView(tk.Frame):
             def fn(dt):
                 return dt is not None and dt.year == year_num
             return f"Año {sy}", fn
+
+        if period == "custom":
+            date_from = date_from_entry.get().strip() if hasattr(date_from_entry, "get") else ""
+            date_to = date_to_entry.get().strip() if hasattr(date_to_entry, "get") else ""
+            if not date_from or not date_to:
+                return None, None
+            try:
+                date_from_obj = datetime.strptime(date_from, "%d/%m/%Y")
+                date_to_obj = datetime.strptime(date_to, "%d/%m/%Y")
+                if date_from_obj > date_to_obj:
+                    return None, None
+                def fn(dt):
+                    if dt is None:
+                        return False
+                    return date_from_obj <= dt <= date_to_obj
+                return f"{date_from} a {date_to}", fn
+            except ValueError:
+                return None, None
 
         return None, None
 

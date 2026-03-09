@@ -25,7 +25,8 @@ SEARCH_PLACEHOLDER = "Buscar por nombre de inquilino o número de apartamento...
 class EditDeleteExpensesView(tk.Frame):
     """Vista profesional para editar/eliminar gastos"""
     
-    def __init__(self, parent, on_back: Optional[Callable] = None, on_navigate_to_dashboard: Optional[Callable] = None):
+    def __init__(self, parent, on_back: Optional[Callable] = None, on_navigate_to_dashboard: Optional[Callable] = None,
+                 on_register_new_expense: Optional[Callable] = None, on_show_reports: Optional[Callable] = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
@@ -34,6 +35,8 @@ class EditDeleteExpensesView(tk.Frame):
         self.tenant_service = TenantService()
         self.on_back = on_back
         self.on_navigate_to_dashboard = on_navigate_to_dashboard
+        self.on_register_new_expense = on_register_new_expense
+        self.on_show_reports = on_show_reports
         self.editing_expense = None
         self.filter_category = None
         self.filter_apartment = None
@@ -56,21 +59,13 @@ class EditDeleteExpensesView(tk.Frame):
         
         header = tk.Frame(self, bg=cb)
         header.pack(fill="x", pady=(0, Spacing.SM))
-        
-        title = tk.Label(
-            header,
-            text="Editar/Eliminar Gastos",
-            font=("Segoe UI", 16, "bold"),
-            bg=cb,
-            fg=theme["text_primary"]
-        )
-        title.pack(side="left", padx=(0, Spacing.LG))
-        
         buttons_frame = tk.Frame(header, bg=cb)
         buttons_frame.pack(side="right")
-        
-        self._create_navigation_buttons(buttons_frame, self._on_back)
-        
+        self._create_navigation_buttons(buttons_frame, self._on_back, show_back_button=False)
+
+        # Cards: Registrar nuevo gasto y Reportes (igual que en Pagos)
+        self._create_action_cards(self)
+
         fixed_container = tk.Frame(self, bg=cb)
         fixed_container.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
         
@@ -137,7 +132,7 @@ class EditDeleteExpensesView(tk.Frame):
         )
         category_combo.set("Todas")
         category_combo.pack(side="left", padx=(0, Spacing.SM))
-        
+
         tk.Label(filters_frame, text="Apartamento:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.apartment_filter_var = tk.StringVar()
@@ -152,7 +147,7 @@ class EditDeleteExpensesView(tk.Frame):
         )
         apartment_combo.set("Todos")
         apartment_combo.pack(side="left", padx=(0, Spacing.SM))
-        
+
         tk.Label(filters_frame, text="Año:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.year_filter_var = tk.StringVar()
@@ -168,7 +163,7 @@ class EditDeleteExpensesView(tk.Frame):
         )
         year_combo.set("Todos")
         year_combo.pack(side="left", padx=(0, Spacing.SM))
-        
+
         tk.Label(filters_frame, text="Mes:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
         
         self.month_filter_var = tk.StringVar()
@@ -184,7 +179,7 @@ class EditDeleteExpensesView(tk.Frame):
         )
         month_combo.set("Todos")
         month_combo.pack(side="left", padx=(0, Spacing.SM))
-        
+
         btn_clear_filters = ModernButton(
             filters_frame,
             text="Limpiar filtros",
@@ -201,10 +196,59 @@ class EditDeleteExpensesView(tk.Frame):
         
         separator = tk.Frame(self, height=2, bg=theme.get("border_light", "#e0e0e0"))
         separator.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
-        
-        # Listado de gastos (área scrolleable)
+
+        # Listado de gastos (altura limitada para dejar espacio a las cards)
         self._create_expenses_list()
-    
+
+    def _create_action_cards(self, parent):
+        """Dos cards del mismo tamaño: Registrar nuevo gasto y Reportes (como en Pagos)."""
+        cb = self._content_bg
+        colors = get_module_colors("gastos")
+        card_bg = colors.get("primary", "#991b1b")
+        card_hover = colors.get("hover", "#b91c1c")
+        cards_frame = tk.Frame(parent, bg=cb)
+        cards_frame.pack(fill="x", padx=Spacing.LG, pady=(0, 8))
+        cards_frame.grid_columnconfigure(0, weight=1)
+        cards_frame.grid_columnconfigure(1, weight=1)
+        btn_register = tk.Button(
+            cards_frame,
+            text=f"{Icons.EXPENSES} Registrar nuevo gasto",
+            font=("Segoe UI", 11, "bold"),
+            bg=card_bg,
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=10,
+            cursor="hand2",
+            command=self._on_register_card,
+        )
+        btn_register.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        btn_register.bind("<Enter>", lambda e: btn_register.config(bg=card_hover))
+        btn_register.bind("<Leave>", lambda e: btn_register.config(bg=card_bg))
+        btn_reports = tk.Button(
+            cards_frame,
+            text=f"{Icons.REPORTS} Reportes",
+            font=("Segoe UI", 11, "bold"),
+            bg="#6b7280",
+            fg="white",
+            relief="flat",
+            padx=12,
+            pady=10,
+            cursor="hand2",
+            command=self._on_reports_card,
+        )
+        btn_reports.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        btn_reports.bind("<Enter>", lambda e: btn_reports.config(bg="#4b5563"))
+        btn_reports.bind("<Leave>", lambda e: btn_reports.config(bg="#6b7280"))
+
+    def _on_register_card(self):
+        if self.on_register_new_expense:
+            self.on_register_new_expense()
+
+    def _on_reports_card(self):
+        if self.on_show_reports:
+            self.on_show_reports()
+
     def _focus_search_entry(self):
         """Coloca el foco en el cuadro de búsqueda al abrir la vista Editar/Eliminar gastos."""
         if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
@@ -293,8 +337,11 @@ class EditDeleteExpensesView(tk.Frame):
         header_bg = "#fee2e2"
         header_fg = "#991b1b"
         
-        self.list_container = tk.Frame(self, bg=cb)
-        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.SM))
+        # Altura limitada del listado para liberar espacio arriba (cards + filtros)
+        list_height = 320
+        self.list_container = tk.Frame(self, bg=cb, height=list_height)
+        self.list_container.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.SM))
+        self.list_container.pack_propagate(False)
         
         columns = [
             ("ID", 5),
@@ -355,15 +402,23 @@ class EditDeleteExpensesView(tk.Frame):
         
         canvas.bind("<Configure>", _on_canvas_configure)
         
-        # Scroll con mouse
+        # Scroll con mouse (comprobar que el canvas siga existiendo: la lista puede recrearse)
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        
+            if not canvas.winfo_exists():
+                return
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass
+
         def _bind_mousewheel(event):
             canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        
+
         def _unbind_mousewheel(event):
-            canvas.unbind_all("<MouseWheel>")
+            try:
+                canvas.unbind_all("<MouseWheel>")
+            except tk.TclError:
+                pass
         
         canvas.bind('<Enter>', _bind_mousewheel)
         canvas.bind('<Leave>', _unbind_mousewheel)
@@ -590,16 +645,8 @@ class EditDeleteExpensesView(tk.Frame):
         self.edit_placeholder.update_idletasks()
     
     def _cancel_edit(self):
-        """Cancela la edición y oculta el formulario"""
-        self.editing_expense = None
-        
-        # Limpiar y ocultar el formulario de edición
-        for widget in self.edit_placeholder.winfo_children():
-            widget.destroy()
-        self.edit_placeholder.pack_forget()
-        
-        # Refrescar la lista
-        self._create_expenses_list()
+        """Cancela la edición, limpia filtros y búsqueda, y vuelve al listado completo (para nueva búsqueda sin limpiar a mano)."""
+        self._clear_filters()
     
     def _delete_expense(self, expense: Dict[str, Any]):
         """Elimina un gasto"""
@@ -628,8 +675,11 @@ class EditDeleteExpensesView(tk.Frame):
             success = self.expense_service.delete_expense(expense.get('id'))
             
             if success:
-                messagebox.showinfo("Eliminado", "Gasto eliminado correctamente.")
-                
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
                 # Si estaba editando este gasto, cancelar la edición
                 if self.editing_expense and self.editing_expense.get('id') == expense.get('id'):
                     self._cancel_edit()
@@ -638,33 +688,15 @@ class EditDeleteExpensesView(tk.Frame):
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el gasto.")
     
-    def _create_navigation_buttons(self, parent, on_back_command):
-        """Crea los botones Volver y Dashboard con estilo consistente"""
+    def _create_navigation_buttons(self, parent, on_back_command, show_back_button=False):
+        """Crea el botón Dashboard y opcionalmente Volver (en esta vista solo Dashboard, como en Pagos)."""
         theme = theme_manager.themes[theme_manager.current_theme]
-        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
-        
-        # Configuración común para ambos botones (misma altura)
-        button_config = {
-            "font": ("Segoe UI", 10, "bold"),
-            "bg": theme["btn_secondary_bg"],
-            "fg": theme["btn_secondary_fg"],
-            "activebackground": hover_bg,
-            "activeforeground": theme["btn_secondary_fg"],
-            "bd": 1,
-            "relief": "solid",
-            "padx": 12,
-            "pady": 5,
-            "cursor": "hand2"
-        }
-        
-        # Colores rojos para módulo de gastos
         colors = get_module_colors("gastos")
         red_primary = colors["primary"]
         red_hover = colors["hover"]
         red_light = colors["light"]
         red_text = colors["text"]
-        
-        # Botón "Dashboard" con icono de casita (siempre navega al dashboard principal)
+
         def go_to_dashboard():
             # Prioridad 1: Usar callback directo si está disponible
             if self.on_navigate_to_dashboard:
@@ -694,23 +726,23 @@ class EditDeleteExpensesView(tk.Frame):
             # Prioridad 3: Si on_back navega al dashboard principal (desde main_window)
             if self.on_back:
                 self.on_back()
-        
-        # Botón "Volver"
-        btn_back = create_rounded_button(
-            parent,
-            text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color="white",
-            fg_color=red_primary,
-            hover_bg=red_light,
-            hover_fg=red_text,
-            command=on_back_command,
-            padx=16,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_back.pack(side="right", padx=(Spacing.MD, 0))
-        
+
+        if show_back_button:
+            btn_back = create_rounded_button(
+                parent,
+                text=f"{Icons.ARROW_LEFT} Volver",
+                bg_color="white",
+                fg_color=red_primary,
+                hover_bg=red_light,
+                hover_fg=red_text,
+                command=on_back_command,
+                padx=16,
+                pady=8,
+                radius=4,
+                border_color="#000000"
+            )
+            btn_back.pack(side="right", padx=(Spacing.MD, 0))
+
         # Botón "Dashboard"
         btn_dashboard = create_rounded_button(
             parent,
