@@ -16,7 +16,7 @@ from manager.app.ui.views.login_view import LoginView
 from manager.app.ui.views.create_admin_view import CreateAdminView
 
 
-SPLASH_DURATION_MS = 2000  # 2 segundos
+SPLASH_DURATION_MS = 1200  # 1.2 segundos
 
 
 def _on_gate_success(root: tk.Tk, user):
@@ -32,16 +32,18 @@ def _show_login_or_create_admin(root: tk.Tk):
     root.overrideredirect(False)  # Restaurar barra de título y bordes para el login
     for w in root.winfo_children():
         w.destroy()
-    win_w, win_h = 440, 280
-    root.minsize(400, 260)
+    # Ventana más alta para crear admin (más campos); login más compacto
+    is_create_admin = len(user_service.users) == 0
+    win_w = 480 if is_create_admin else 440
+    win_h = 500 if is_create_admin else 280
+    root.minsize(400, 400 if is_create_admin else 260)
     root.resizable(True, True)
-    # Posición centrada desde el inicio para que la ventana aparezca ya en su sitio
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     x = (sw - win_w) // 2
     y = (sh - win_h) // 2
     root.geometry(f"{win_w}x{win_h}+{x}+{y}")
-    if len(user_service.users) == 0:
+    if is_create_admin:
         gate = CreateAdminView(root, on_success=lambda u: _on_gate_success(root, u))
     else:
         gate = LoginView(root, on_success=lambda u: _on_gate_success(root, u))

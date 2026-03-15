@@ -31,6 +31,11 @@ from .reports_view import ReportsView
 from .reports.occupancy_vacancy_report_view import OccupancyVacancyReportView
 from .backup_view import BackupView
 from .user_management_view import UserManagementView
+from .dashboard_view import DashboardView
+from .pending_payments_report_window import show_pending_payments_report
+from manager.app.app_controller import AppController
+from manager.app.presenters.dashboard_presenter import DashboardPresenter
+from manager.app.presenters.report_presenter import ReportPresenter
 
 class MainWindow:
     """Ventana principal con diseño profesional"""
@@ -48,6 +53,9 @@ class MainWindow:
             self.current_user = {k: v for k, v in self.current_user.items() if k != "password_hash"}
 
         self._setup_window()
+        self.app_controller = AppController(self)
+        self._dashboard_presenter = DashboardPresenter()
+        self._report_presenter = ReportPresenter()
         self._create_layout()
         if not self._owns_root:
             # Primero revisar licencia/demo y luego mostrar onboarding.
@@ -539,7 +547,7 @@ class MainWindow:
             if hasattr(self, 'views_container') and self.views_container.winfo_exists():
                 self.views_container.configure(bg=content_color)
             # Actualizar barra del título (header)
-            header_color = theme.get("header_bg", getattr(self, "header_bg", "#e2e8f0"))
+            header_color = theme.get("header_bg", getattr(self, "header_bg", "#e84118"))
             self.header_bg = header_color
             if hasattr(self, 'content_header_frame') and self.content_header_frame.winfo_exists():
                 self.content_header_frame.configure(bg=header_color)
@@ -903,7 +911,7 @@ class MainWindow:
     def _create_content_header(self):
         """Crea el header del área de contenido (barra del título desde el borde superior)"""
         theme = theme_manager.themes[theme_manager.current_theme]
-        self.header_bg = theme.get("header_bg", "#e2e8f0")
+        self.header_bg = theme.get("header_bg", "#e84118")
         self.content_header_frame = tk.Frame(
             self.content_frame,
             **theme_manager.get_style("frame"),
@@ -938,47 +946,49 @@ class MainWindow:
         x, y = w // 2, h // 2
         text = getattr(self, "_page_title_text", "Dashboard")
         theme = theme_manager.themes[theme_manager.current_theme]
-        fg = theme.get("text_primary", "#1e293b")
+        fg = "#ffffff"
         font = ("Segoe UI", 32, "bold")
         # Contorno sutil: 0.5px en 4 direcciones (más fino)
-        outline_color = "#e0dcd8"
-        for dx, dy in ((0, -0.5), (0, 0.5), (-0.5, 0), (0.5, 0)):
-            c.create_text(x + dx, y + dy, text=text, font=font, fill=outline_color, anchor="center", tags="page_title")
+        #outline_color = "#e0dcd8"
+        #for dx, dy in ((0, -0.5), (0, 0.5), (-0.5, 0), (0.5, 0)):
+         #   c.create_text(x + dx, y + dy, text=text, font=font, fill=outline_color, anchor="center", tags="page_title")
         c.create_text(x, y, text=text, font=font, fill=fg, anchor="center", tags="page_title")
     
     def _navigate_to(self, view_name: str):
-        """Navega a una vista específica"""
-        # Guardar la vista actual
+        """Navega a una vista específica (delega en AppController)."""
+        self.app_controller.navigate_to(view_name)
+
+    # --- API para AppController (orquestación de navegación) ---
+    def set_current_view(self, view_name: str) -> None:
+        """Establece la vista actual (estado interno)."""
         self._current_view = view_name
-        
-        # Actualizar estado de botones de navegación
-        self._update_nav_buttons(view_name)
-        
-        # Actualizar título
-        titles = {
-            "dashboard": "Dashboard",
-            "tenants": "Gestión de Inquilinos",
-            "payments": "Gestión de Pagos",
-            "expenses": "Gestión de Gastos",
-            "administration": "Administración",
-            "reports": "Reportes y Análisis",
-            "settings": "Configuración"
-        }
-        
-        self._page_title_text = titles.get(view_name, "Building Manager")
+
+    def update_nav_buttons(self, active_view: str) -> None:
+        """Actualiza el estado visual de los botones del menú lateral."""
+        self._update_nav_buttons(active_view)
+
+    def set_page_title(self, title: str) -> None:
+        """Establece y redibuja el título de la página."""
+        self._page_title_text = title
         self._draw_page_title()
-        
-        # Limpiar contenido actual
+
+    def clear_views_container(self) -> None:
+        """Destruye todos los widgets del área de contenido."""
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        
-        # Cargar nueva vista
+
+    def load_view(self, view_name: str) -> None:
+        """Carga e inserta la vista correspondiente en el contenedor."""
         self._load_view(view_name)
-        
-        # Forzar actualización especial para la vista de inquilinos
-        if view_name == "tenants":
-            self.root.after(500, self._force_tenants_refresh)
-    
+
+    def get_root(self):
+        """Devuelve la ventana raíz (tk.Tk) para programar actualizaciones."""
+        return self.root
+
+    def force_tenants_refresh(self) -> None:
+        """Fuerza un refresh completo de la vista de inquilinos (tras navegación)."""
+        self._force_tenants_refresh()
+
     def _update_nav_buttons(self, active_view: str):
         """Actualiza el estado visual de los botones de navegación"""
         theme = theme_manager.themes[theme_manager.current_theme]
@@ -1060,7 +1070,17 @@ class MainWindow:
     def _load_view(self, view_name: str):
         """Carga una vista específica"""
         if view_name == "dashboard":
-            self._create_dashboard_view()
+            dashboard = DashboardView(
+                self.views_container,
+                presenter=self._dashboard_presenter,
+                on_new_tenant=self._show_new_tenant_form,
+                on_register_expense=self._show_register_expense_direct,
+                on_register_payment=self._show_register_payment_direct,
+                on_search=self._show_search_dialog,
+                on_occupation_status=self._show_occupation_status_direct,
+                on_pending_payments=self._show_pending_payments,
+            )
+            dashboard.pack(fill="both", expand=True)
         elif view_name == "tenants":
             # Recargar datos de inquilinos antes de crear la vista para asegurar datos actualizados
             try:
@@ -1081,7 +1101,7 @@ class MainWindow:
             payments_view = PaymentsView(
                 self.views_container, 
                 on_back=lambda: self._navigate_to("dashboard"),
-                on_payment_saved=self.refresh_tenants_view
+                on_payment_saved=self._on_payment_saved_go_to_tenants
             )
             payments_view.pack(fill="both", expand=True)
         elif view_name == "expenses":
@@ -1101,109 +1121,16 @@ class MainWindow:
             settings_view = SettingsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
             settings_view.pack(fill="both", expand=True)
     
-    def _create_dashboard_view(self):
-        """Crea la vista del dashboard"""
-        theme = theme_manager.themes[theme_manager.current_theme]
-        bg_content = getattr(self, "content_bg", theme.get("content_bg", "#f8fafc"))
-        # Contenedor de métricas con fondo del cuerpo para que no se vean franjas blancas entre cards
-        metrics_frame = tk.Frame(self.views_container, bg=bg_content)
-        metrics_frame.pack(fill="x", pady=(0, Spacing.XL))
-        
-        # Fila de métricas con mismo fondo
-        metrics_row = tk.Frame(metrics_frame, bg=bg_content)
-        metrics_row.pack(fill="x")
-        
-        # Métrica 1: Total Inquilinos (solo activos; los desactivados ya no cuentan)
-        tenant_stats = self._get_tenant_statistics()
-        inactivos = tenant_stats.get("inactivo", 0)
-        total_activos = tenant_stats["total"] - inactivos
-        metric1 = DetailedMetricCard(
-            metrics_row,
-            title="Total Inquilinos",
-            total_value=str(total_activos),
-            details=[
-                {
-                    "label": "Al día",
-                    "value": tenant_stats["al_dia"],
-                    "color": "#10b981"  # Verde
-                },
-                {
-                    "label": "En mora",
-                    "value": tenant_stats["moroso"],
-                    "color": "#ef4444"  # Rojo
-                }
-            ],
-            icon=Icons.TENANTS,
-            color_theme="primary"
-        )
-        metric1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-        
-        # Métrica 2: Pagos Pendientes
-        pagos_pendientes = self._get_pending_payments()
-        metric2 = ModernMetricCard(
-            metrics_row,
-            title="Pagos Pendientes",
-            value=f"${int(pagos_pendientes):,}",
-            icon=Icons.PAYMENT_PENDING,
-            color_theme="warning"
-        )
-        metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-        
-        # Métrica 3: Ingresos del Mes (real)
-        ingresos_mes = self._get_payments_of_current_month()
-        metric3 = ModernMetricCard(
-            metrics_row,
-            title="Ingresos del Mes",
-            value=f"${int(ingresos_mes):,}",
-            icon=Icons.PAYMENT_RECEIVED,
-            color_theme="success"
-        )
-        metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-        
-        # Métrica 4: Gastos del Mes
-        gastos_mes = self._get_expenses_of_current_month()
-        metric4 = ModernMetricCard(
-            metrics_row,
-            title="Gastos del Mes", 
-            value=f"${int(gastos_mes):,}",
-            icon=Icons.EXPENSES,
-            color_theme="error"
-        )
-        metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-        
-        # Métrica 5: Saldo Neto del Mes (ingresos reales - gastos reales)
-        saldo_neto = ingresos_mes - gastos_mes
-        if saldo_neto >= 0:
-            net_value = f"${int(saldo_neto):,}"
-            net_theme = "success"
-        else:
-            net_value = f"-${int(abs(saldo_neto)):,}"
-            net_theme = "error"
-        metric5 = ModernMetricCard(
-            metrics_row,
-            title="Saldo Neto del Mes",
-            value=net_value,
-            icon="💼",
-            color_theme=net_theme
-        )
-        metric5.pack(side="left", fill="both", expand=True)
-        
-        # Separador elegante
-        ModernSeparator(self.views_container)
-        
-        # Grid de acciones principales del administrador
-        self._create_admin_actions_grid()
-    
     def _create_tenants_view(self):
-        """Crea la vista de inquilinos con datos actualizados"""
+        """Crea la vista de inquilinos y abre directamente la vista de lista/detalles (sin menú de 3 cards)."""
         tenants_view = TenantsView(
             self.views_container,
             on_navigate=self._navigate_to,
             on_data_change=self.refresh_dashboard,  # Callback para actualizar dashboard
-            on_register_payment=self.navigate_to_payments
+            on_register_payment=self.navigate_to_payments,
+            on_new_tenant=self._show_new_tenant_form,
         )
         tenants_view.pack(fill="both", expand=True)
-        
         # Forzar actualización después de crear la vista
         self.root.update_idletasks()
         self.root.update()
@@ -1353,106 +1280,6 @@ class MainWindow:
         )
         placeholder_label.pack(expand=True)
     
-    def _create_admin_actions_grid(self):
-        """Crea el grid de acciones principales para el administrador"""
-        # Fondo igual al área de contenido para que el bloque no se vea como caja blanca
-        bg_content = getattr(self, "content_bg", theme_manager.themes[theme_manager.current_theme].get("content_bg", "#f1f5f9"))
-        # Contenedor principal (ocupa todo el ancho para poder centrar el bloque interno)
-        main_container = tk.Frame(self.views_container, bg=bg_content)
-        main_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.LG))
-        
-        # Frame interno que agrupa título + grid para centrarlo entre las dos márgenes del área de contenido
-        actions_block = tk.Frame(main_container, bg=bg_content)
-        actions_block.pack(anchor="center", expand=True)
-        
-        # Título de la sección (centrado, sin separador grande debajo)
-        title_label = tk.Label(
-            actions_block,
-            text="Acciones Principales",
-            fg=theme_manager.themes[theme_manager.current_theme]["text_primary"],
-            bg=bg_content,
-            font=("Segoe UI", 18, "bold"),
-            anchor="center"
-        )
-        title_label.pack(fill="x", pady=(0, Spacing.SM))
-        
-        # Contenedor del grid con distribución uniforme usando grid geometry
-        grid_container = tk.Frame(actions_block, bg=bg_content)
-        grid_container.pack(fill="both", expand=True)
-        
-        # Configurar el grid para distribución uniforme
-        for i in range(3):  # 3 columnas
-            grid_container.grid_columnconfigure(i, weight=1, uniform="col")
-        for i in range(2):  # 2 filas
-            grid_container.grid_rowconfigure(i, weight=1, uniform="row")
-        
-        # Datos de las cards con mejor organización (cada una con el módulo para color de fondo)
-        cards_data = [
-            # Primera fila
-            {
-                "icon": "👤", "title": "Nuevo Inquilino",
-                "description": "Registra un nuevo inquilino en el sistema con toda su información.",
-                "color": "#1e40af", "module": "inquilinos",
-                "action": lambda: self._show_new_tenant_form(),
-                "row": 0, "col": 0
-            },
-            {
-                "icon": "💸", "title": "Registrar Gasto",
-                "description": "Registra un nuevo gasto del edificio (mantenimiento, servicios, etc.).",
-                "color": "#991b1b", "module": "gastos",
-                "action": lambda: self._show_register_expense_direct(),
-                "row": 0, "col": 1
-            },
-            {
-                "icon": "💰", "title": "Registrar Pago",
-                "description": "Registra un nuevo pago de alquiler o servicio de un inquilino.",
-                "color": "#166534", "module": "pagos",
-                "action": lambda: self._show_register_payment_direct(),
-                "row": 0, "col": 2
-            },
-            # Segunda fila (iconos con mismo tono fuerte que la fila superior para buen contraste)
-            {
-                "icon": "🔍", "title": "Buscar Inquilino",
-                "description": "Busca y consulta información de inquilinos registrados en el sistema.",
-                "color": "#1e40af", "module": "inquilinos",
-                "action": lambda: self._show_search_dialog(),
-                "row": 1, "col": 0
-            },
-            {
-                "icon": "🏠", "title": "Estado de Ocupación",
-                "description": "Visualiza apartamentos disponibles y ocupados en tiempo real.",
-                "color": "#6d28d9", "module": "administración",
-                "action": lambda: self._show_occupation_status_direct(),
-                "row": 1, "col": 1
-            },
-            {
-                "icon": "⏰", "title": "Pagos Pendientes",
-                "description": "Consulta y gestiona los pagos pendientes de los inquilinos.",
-                "color": "#166534", "module": "pagos",
-                "action": lambda: self._show_pending_payments(),
-                "row": 1, "col": 2
-            }
-        ]
-        
-        # Crear las cards usando grid con dimensiones uniformes (fondo según módulo)
-        for card_info in cards_data:
-            card = self._create_dashboard_action_card(
-                grid_container,
-                card_info["icon"],
-                card_info["title"],
-                "",  # Sin descripción
-                card_info["color"],
-                card_info["action"],
-                module=card_info.get("module")
-            )
-            card.grid(
-                row=card_info["row"],
-                column=card_info["col"],
-                sticky="nsew",
-                padx=Spacing.SM,
-                pady=Spacing.SM
-            )
-    
     def _show_new_tenant_form(self):
         """Muestra directamente el formulario de nuevo inquilino"""
         # Actualizar estado de botones de navegación para inquilinos
@@ -1488,132 +1315,28 @@ class MainWindow:
             self.views_container,
             on_navigate=self._navigate_to,
             on_data_change=self.refresh_dashboard,
-            on_register_payment=self.navigate_to_payments
+            on_register_payment=self.navigate_to_payments,
+            on_new_tenant=self._show_new_tenant_form,
         )
         tenants_view._show_tenants_list()  # Ir directo a la vista de detalles
         tenants_view.pack(fill="both", expand=True)
     
     def _show_pending_payments(self):
-        """Muestra el reporte de pagos pendientes directamente"""
-        from tkinter import messagebox, ttk
-        from datetime import datetime
-        from pathlib import Path
-        import csv
-        from manager.app.services.tenant_service import tenant_service
-        from manager.app.services.payment_service import payment_service
-        from manager.app.services.apartment_service import apartment_service
-        
+        """Muestra el reporte de pagos pendientes (contenido generado por ReportPresenter)."""
         try:
-            # Recargar datos
-            tenant_service._load_data()
-            payment_service._load_data()
-            apartment_service._load_data()
-            
-            # Recalcular estados de pago
-            tenant_service.recalculate_all_payment_statuses()
-            tenant_service._load_data()
-            
-            # Obtener inquilinos con pagos pendientes
-            tenants = tenant_service.get_all_tenants()
-            pending_tenants = [t for t in tenants if t.get('estado_pago') in ['pendiente_registro', 'moroso']]
-            
-            if not pending_tenants:
-                messagebox.showinfo("Sin datos", "No hay inquilinos con pagos pendientes.")
+            report_content = self._report_presenter.get_pending_payments_report_text()
+            if not report_content:
+                messagebox.showinfo(
+                    "Sin datos", "No hay inquilinos con pagos pendientes."
+                )
                 return
-            
-            # Formatear el reporte
-            report = []
-            report.append("=" * 60)
-            report.append("REPORTE DE PAGOS PENDIENTES")
-            report.append("=" * 60)
-            report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-            report.append("")
-            report.append(f"RESUMEN: Inquilinos con pagos pendientes: {len(pending_tenants)}")
-            report.append("")
-            report.append("DETALLE DE INQUILINOS:")
-            report.append("-" * 60)
-            
-            for tenant in pending_tenants:
-                estado = tenant.get('estado_pago', 'N/A')
-                estado_text = 'En Mora' if estado == 'moroso' else 'Pendiente Registro'
-                
-                # Obtener número de apartamento
-                apt_id = tenant.get('apartamento', None)
-                apt_number = 'N/A'
-                if apt_id is not None:
-                    try:
-                        apt = apartment_service.get_apartment_by_id(int(apt_id))
-                        if apt and 'number' in apt:
-                            apt_number = apt.get('number', 'N/A')
-                    except Exception:
-                        apt_number = str(apt_id) if apt_id else 'N/A'
-                
-                # Calcular fecha de vencimiento (cuando debía pagar) y días en mora
-                fecha_vencimiento_str = "N/A"
-                dias_mora_str = "0"
-                tenant_id = tenant.get("id")
-                if tenant_id:
-                    payments = payment_service.get_payments_by_tenant(tenant_id)
-                    hoy = datetime.now()
-                    if payments:
-                        try:
-                            payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
-                            ultimo = payments[0]
-                            fecha_ultimo_str = ultimo.get("fecha_pago", "")
-                            if fecha_ultimo_str:
-                                fecha_ultimo = datetime.strptime(fecha_ultimo_str, "%d/%m/%Y")
-                                fecha_vencimiento = fecha_ultimo + timedelta(days=30)
-                                fecha_vencimiento_str = fecha_vencimiento.strftime("%d/%m/%Y")
-                                if hoy > fecha_vencimiento:
-                                    dias_mora_str = str((hoy - fecha_vencimiento).days)
-                        except Exception:
-                            pass
-                    else:
-                        # Sin pagos: vencimiento = mismo día del mes de fecha_ingreso en el mes actual (o anterior)
-                        fecha_ingreso = tenant.get("fecha_ingreso", "")
-                        if fecha_ingreso:
-                            try:
-                                if "T" in str(fecha_ingreso):
-                                    fecha_ingreso_dt = datetime.fromisoformat(fecha_ingreso.replace("Z", "+00:00")).replace(tzinfo=None)
-                                else:
-                                    fecha_ingreso_dt = datetime.strptime(fecha_ingreso, "%d/%m/%Y")
-                                dia_pago = fecha_ingreso_dt.day
-                                # Vencimiento del mes actual con ese día
-                                try:
-                                    venc_este_mes = hoy.replace(day=min(dia_pago, 28))
-                                    if venc_este_mes <= hoy:
-                                        fecha_vencimiento_str = venc_este_mes.strftime("%d/%m/%Y")
-                                        dias_mora_str = str(max(0, (hoy - venc_este_mes).days))
-                                    else:
-                                        # Aún no vence este mes; usar mes anterior como vencimiento no pagado
-                                        mes_ant = (hoy.replace(day=1) - timedelta(days=1))
-                                        venc_ant = mes_ant.replace(day=min(dia_pago, 28))
-                                        fecha_vencimiento_str = venc_ant.strftime("%d/%m/%Y")
-                                        dias_mora_str = str(max(0, (hoy - venc_ant).days))
-                                except ValueError:
-                                    venc_este_mes = hoy.replace(day=1)
-                                    fecha_vencimiento_str = venc_este_mes.strftime("%d/%m/%Y")
-                                    dias_mora_str = str(max(0, (hoy - venc_este_mes).days))
-                            except Exception:
-                                pass
-                
-                report.append(f"Inquilino: {tenant.get('nombre', 'N/A')}")
-                report.append(f"  • Apartamento: {apt_number}")
-                report.append(f"  • Documento: {tenant.get('numero_documento', 'N/A')}")
-                report.append(f"  • Teléfono: {tenant.get('telefono', 'N/A')}")
-                report.append(f"  • Estado: {estado_text}")
-                report.append(f"  • Fecha de pago (vencimiento): {fecha_vencimiento_str}")
-                report.append(f"  • Días en mora: {dias_mora_str}")
-                report.append(f"  • Valor de arriendo: ${float(tenant.get('valor_arriendo', 0)):,.2f}")
-                report.append("")
-            
-            report_content = "\n".join(report)
-            
-            # Mostrar ventana del reporte
-            self._show_pending_payments_report_window(report_content)
-            
+            show_pending_payments_report(
+                self.root, report_content, self._show_export_success_dialog
+            )
         except Exception as e:
-            messagebox.showerror("Error", f"Error al generar reporte de pendientes: {str(e)}")
+            messagebox.showerror(
+                "Error", f"Error al generar reporte de pendientes: {str(e)}"
+            )
 
     def _show_export_success_dialog(self, filepath: Path):
         """Diálogo de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
@@ -1657,106 +1380,6 @@ class MainWindow:
         tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
         tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
         tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
-    
-    def _show_pending_payments_report_window(self, content):
-        """Muestra el reporte de pagos pendientes en una ventana (reglas: orden Exportar CSV, TXT, Cerrar; colores reportes; diálogo de éxito con Copiar/Abrir)."""
-        from tkinter import messagebox, ttk
-        import csv
-        from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
-
-        colors = get_module_colors("reportes")
-        header_bg = colors.get("hover", "#ea580c")
-        btn_export_bg = colors.get("primary", "#f97316")
-
-        window = tk.Toplevel(self.root)
-        window.title("Reporte de Pagos Pendientes")
-        window.geometry("800x600")
-        window.transient(self.root)
-        window.grab_set()
-
-        header = tk.Frame(window, bg=header_bg, height=50)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        tk.Label(
-            header,
-            text="Reporte de Pagos Pendientes",
-            font=("Segoe UI", 14, "bold"),
-            bg=header_bg,
-            fg="white"
-        ).pack(side="left", padx=Spacing.LG, pady=12)
-        btn_frame = tk.Frame(header, bg=header_bg)
-        btn_frame.pack(side="right", padx=Spacing.LG)
-
-        def export_csv():
-            try:
-                ensure_dirs()
-                filename = f"pending_payments_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                filepath = EXPORTS_DIR / filename
-                with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-                    writer = csv.writer(f)
-                    for line in content.split('\n'):
-                        writer.writerow([line])
-                self._show_export_success_dialog(filepath)
-            except Exception as e:
-                messagebox.showerror("Error", f"Error al exportar CSV: {str(e)}")
-
-        def export_txt():
-            try:
-                ensure_dirs()
-                filename = f"pending_payments_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                filepath = EXPORTS_DIR / filename
-                with open(filepath, 'w', encoding='utf-8-sig') as f:
-                    f.write(content)
-                self._show_export_success_dialog(filepath)
-            except Exception as e:
-                messagebox.showerror("Error", f"Error al exportar TXT: {str(e)}")
-
-        # Orden establecido: Exportar CSV, Exportar TXT, Cerrar (con hover suave)
-        btn_export_hover = colors.get("hover", "#ea580c")
-        btn_close_bg = "#dc2626"
-        btn_close_hover = "#b91c1c"
-        btn_opts = dict(font=("Segoe UI", 9), fg="white", relief="flat", padx=14, pady=6, cursor="hand2")
-
-        btn_csv = tk.Button(btn_frame, text="💾 Exportar CSV", bg=btn_export_bg, **btn_opts, command=export_csv)
-        btn_csv.pack(side="left", padx=Spacing.SM)
-        btn_csv.bind("<Enter>", lambda e: btn_csv.config(bg=btn_export_hover))
-        btn_csv.bind("<Leave>", lambda e: btn_csv.config(bg=btn_export_bg))
-
-        btn_txt = tk.Button(btn_frame, text="📄 Exportar TXT", bg=btn_export_bg, **btn_opts, command=export_txt)
-        btn_txt.pack(side="left", padx=Spacing.SM)
-        btn_txt.bind("<Enter>", lambda e: btn_txt.config(bg=btn_export_hover))
-        btn_txt.bind("<Leave>", lambda e: btn_txt.config(bg=btn_export_bg))
-
-        btn_close = tk.Button(btn_frame, text="× Cerrar", bg=btn_close_bg, width=10, **btn_opts, command=window.destroy)
-        btn_close.pack(side="left", padx=Spacing.SM)
-        btn_close.bind("<Enter>", lambda e: btn_close.config(bg=btn_close_hover))
-        btn_close.bind("<Leave>", lambda e: btn_close.config(bg=btn_close_bg))
-
-        text_frame = tk.Frame(window)
-        text_frame.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.LG)
-        
-        text_widget = tk.Text(
-            text_frame,
-            font=("Consolas", 10),
-            wrap="word",
-            bg="#ffffff",
-            fg="#000000"
-        )
-        text_widget.pack(side="left", fill="both", expand=True)
-        
-        scrollbar = ttk.Scrollbar(text_frame, command=text_widget.yview)
-        scrollbar.pack(side="right", fill="y")
-        text_widget.config(yscrollcommand=scrollbar.set)
-        
-        text_widget.insert("1.0", content)
-        # Negrita para "Inquilino:" y "  • Apartamento:"
-        text_widget.tag_configure("bold", font=("Consolas", 10, "bold"))
-        num_lines = int(text_widget.index("end-1c").split(".")[0])
-        for i in range(1, num_lines + 1):
-            line_text = text_widget.get(f"{i}.0", f"{i}.0 lineend")
-            if line_text.strip().startswith("Inquilino:") or "• Apartamento:" in line_text:
-                text_widget.tag_add("bold", f"{i}.0", f"{i}.0 lineend")
-        text_widget.config(state="disabled")
     
     def _show_occupation_status_direct(self):
         """Navega al módulo de administración de apartamentos y muestra la vista de estado de ocupación"""
@@ -1836,115 +1459,6 @@ class MainWindow:
         """Muestra un diálogo placeholder para funcionalidades futuras"""
         messagebox.showinfo(title, f"{message}\n\nEsta funcionalidad será implementada próximamente.")
 
-    def _get_hover_color(self, color: str) -> str:
-        """Determina el color de hover basado en el color principal del card"""
-        # Mapeo de colores principales a colores de hover
-        color_to_hover = {
-            # Azules (módulo Inquilinos)
-            "#1e40af": "#dbeafe",  # azul claro
-            "#3b82f6": "#dbeafe",  # azul claro
-            "#2563eb": "#dbeafe",  # azul claro
-            # Verdes (módulo Pagos)
-            "#166534": "#dcfce7",  # verde claro
-            "#388e3c": "#dcfce7",  # verde claro
-            "#22c55e": "#dcfce7",  # verde claro
-            # Rojos (módulo Gastos)
-            "#991b1b": "#fee2e2",  # rojo claro
-            "#dc2626": "#fee2e2",  # rojo claro
-            "#ef4444": "#fee2e2",  # rojo claro
-            # Morados (módulo Administración)
-            "#7c3aed": "#f3e8ff",  # morado claro
-            "#8b5cf6": "#f3e8ff",  # morado claro
-            "#9333ea": "#f3e8ff",  # morado claro
-            "#6d28d9": "#f3e8ff",  # morado claro
-            "#a78bfa": "#f3e8ff",  # morado claro
-        }
-        return color_to_hover.get(color.lower(), "#f3e8ff")  # default morado si no se encuentra
-
-    def _create_dashboard_action_card(self, parent, icon: str, title: str, description: str, color: str, action: Callable, module: str = None):
-        """Crea una card para Acciones Principales (dashboard) con color de fondo según el módulo"""
-        if module:
-            colors = get_module_colors(module)
-            dashboard_bg = colors["light"]
-            # Hover más oscuro que el fondo para que se vea claro al pasar el cursor (tonos 300)
-            hover_map = {
-                "inquilinos": "#93c5fd",   # blue-300
-                "pagos": "#86efac",         # green-300
-                "gastos": "#fca5a5",        # red-300
-                "administración": "#d8b4fe", # purple-300
-                "reportes": "#fdba74"       # orange-300
-            }
-            dashboard_hover = hover_map.get(module, "#d8b4fe")
-        else:
-            dashboard_bg = "#f3e8ff"
-            dashboard_hover = "#e9d5ff"
-
-        card = tk.Frame(parent, bg=dashboard_bg, bd=2, relief="raised", width=280, height=220)
-        card.pack_propagate(False)
-        card.configure(cursor="hand2")
-
-        # Contenedor principal con padding reducido para que el texto no se corte
-        content_frame = tk.Frame(card, bg=dashboard_bg)
-        content_frame.pack(fill="both", expand=True, padx=Spacing.SM, pady=Spacing.SM)
-
-        # Contenedor del contenido (icono + título) sin espaciadores que recorten el texto
-        content_container = tk.Frame(content_frame, bg=dashboard_bg)
-        content_container.pack(anchor="center", pady=(Spacing.SM, 0))
-
-        icon_label = tk.Label(content_container, text=icon, font=("Segoe UI Symbol", 26),
-                              fg=color, bg=dashboard_bg)
-        icon_label.pack(pady=(0, Spacing.XS))  # Menos espacio entre icono y texto
-
-        title_label = tk.Label(content_container, text=title, font=("Segoe UI", 13, "bold"),
-                               fg="#000000", bg=dashboard_bg, wraplength=240, justify="center")
-        title_label.pack()
-
-        def on_card_click(e):
-            e.widget.focus_set()
-            action()
-            return "break"
-
-        def on_enter(e):
-            card.configure(bg=dashboard_hover)
-            content_frame.configure(bg=dashboard_hover)
-            content_container.configure(bg=dashboard_hover)
-            icon_label.configure(bg=dashboard_hover)
-            title_label.configure(bg=dashboard_hover)
-
-        def on_leave(e):
-            # Solo resetear si el puntero salió del card (evitar que se pierda el hover al pasar entre hijos)
-            def _check_leave():
-                try:
-                    root = card.winfo_toplevel()
-                    root.update_idletasks()
-                    x, y = root.winfo_pointerx(), root.winfo_pointery()
-                    w = root.winfo_containing(x, y)
-                    cur = w
-                    while cur:
-                        if cur == card:
-                            return
-                        try:
-                            cur = cur.master
-                        except (tk.TclError, AttributeError):
-                            break
-                except (tk.TclError, AttributeError):
-                    pass
-                card.configure(bg=dashboard_bg)
-                content_frame.configure(bg=dashboard_bg)
-                content_container.configure(bg=dashboard_bg)
-                icon_label.configure(bg=dashboard_bg)
-                title_label.configure(bg=dashboard_bg)
-            card.after(10, _check_leave)
-
-        all_widgets = [card, content_frame, content_container, icon_label, title_label]
-        for widget in all_widgets:
-            widget.bind("<Button-1>", on_card_click)
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.configure(cursor="hand2")
-
-        return card
-    
     def _create_admin_action_card(self, parent, icon: str, title: str, description: str, color: str, action: Callable, enabled: bool = True, disabled_message: str = ""):
         """Crea una card de acción administrativa con el mismo formato que los cards de inquilinos/pagos/gastos"""
         # Color morado más intenso para el fondo base de las tarjetas (similar al hover anterior)
@@ -2096,32 +1610,29 @@ class MainWindow:
         )
         btn_dashboard.pack(side="right")
     
-    def _get_tenant_statistics(self):
-        """Obtiene estadísticas de inquilinos actualizadas"""
-        from manager.app.services.tenant_service import tenant_service
-        from manager.app.services.payment_service import payment_service
-        
-        # Recargar datos para asegurar que estén actualizados
-        tenant_service._load_data()
-        payment_service._load_data()
-        
-        # Recalcular estados de pago para todos los inquilinos
-        tenant_service.recalculate_all_payment_statuses()
-        tenant_service._load_data()
-        
-        return tenant_service.get_statistics()
-    
     def refresh_dashboard(self):
         """Refresca las estadísticas del dashboard"""
-        # Solo refrescar si estamos en el dashboard
-        current_view = getattr(self, '_current_view', None)
+        current_view = getattr(self, "_current_view", None)
         if current_view == "dashboard":
-            # Limpiar contenido actual
             for widget in self.views_container.winfo_children():
                 widget.destroy()
-            # Recrear la vista del dashboard
-            self._create_dashboard_view()
+            dashboard = DashboardView(
+                self.views_container,
+                presenter=self._dashboard_presenter,
+                on_new_tenant=self._show_new_tenant_form,
+                on_register_expense=self._show_register_expense_direct,
+                on_register_payment=self._show_register_payment_direct,
+                on_search=self._show_search_dialog,
+                on_occupation_status=self._show_occupation_status_direct,
+                on_pending_payments=self._show_pending_payments,
+            )
+            dashboard.pack(fill="both", expand=True)
     
+    def _on_payment_saved_go_to_tenants(self):
+        """Tras registrar un pago: refresca datos y navega al listado de inquilinos."""
+        self.refresh_tenants_view()
+        self._navigate_to("tenants")
+
     def refresh_tenants_view(self):
         """Refresca la vista de inquilinos para mostrar estados actualizados en tiempo real"""
         current_view = getattr(self, '_current_view', None)
@@ -2168,37 +1679,6 @@ class MainWindow:
         except Exception as e:
             logger.warning("Error al forzar refresh: %s", e)
     
-    def _get_payments_of_current_month(self):
-        """Calcula el total de ingresos del mes actual"""
-        import datetime
-        payment_service._load_data()  # Asegurar datos actualizados
-        now = datetime.datetime.now()
-        pagos = payment_service.get_all_payments()
-        pagos_mes = [p for p in pagos if self._is_payment_in_current_month(p, now)]
-        total = sum(float(p.get('monto', 0)) for p in pagos_mes)
-        return total
-
-    def _is_payment_in_current_month(self, pago, now):
-        """Verifica si un pago pertenece al mes actual"""
-        # fecha_pago formato 'DD/MM/YYYY'
-        try:
-            fecha = pago.get('fecha_pago', '')
-            if not fecha:
-                return False
-            # Intentar parsear formato DD/MM/YYYY
-            dia, mes, anio = map(int, fecha.split('/'))
-            return mes == now.month and anio == now.year
-        except Exception:
-            # Si falla, intentar con formato ISO (YYYY-MM-DD)
-            try:
-                fecha = pago.get('fecha', '')
-                if not fecha:
-                    return False
-                fecha_dt = datetime.datetime.strptime(fecha, "%Y-%m-%d")
-                return fecha_dt.month == now.month and fecha_dt.year == now.year
-            except Exception:
-                return False
-    
     def _show_register_payment_direct(self):
         """Navega a la vista de pagos y abre directamente el registro de pago"""
         # Limpiar contenido actual
@@ -2210,7 +1690,7 @@ class MainWindow:
         payments_view = PaymentsView(
             self.views_container, 
             on_back=lambda: self._navigate_to("dashboard"),
-            on_payment_saved=self.refresh_tenants_view
+            on_payment_saved=self._on_payment_saved_go_to_tenants
         )
         payments_view.pack(fill="both", expand=True)
         payments_view._show_register_payment()
@@ -2226,7 +1706,7 @@ class MainWindow:
             self.views_container, 
             on_back=lambda: self._navigate_to("dashboard"), 
             preselected_tenant=tenant,
-            on_payment_saved=self.refresh_tenants_view
+            on_payment_saved=self._on_payment_saved_go_to_tenants
         )
         payments_view.pack(fill="both", expand=True)
         payments_view._show_register_payment(preselected_tenant=tenant)
@@ -3408,40 +2888,3 @@ class MainWindow:
         ).pack()
 
         win.protocol("WM_DELETE_WINDOW", finish)
-
-    def _get_expenses_of_current_month(self):
-        from manager.app.services.expense_service import ExpenseService
-        import datetime
-        service = ExpenseService()
-        now = datetime.datetime.now()
-        expenses = service.filter_expenses(year=now.year, month=now.month)
-        total = sum(float(e.get('monto', 0)) for e in expenses)
-        return total
-    
-    def _get_pending_payments(self):
-        """Calcula el monto total de pagos pendientes (inquilinos en mora o pendientes de registro)"""
-        from manager.app.services.tenant_service import tenant_service
-        from manager.app.services.payment_service import payment_service
-        
-        # Recargar datos para asegurar que estén actualizados
-        tenant_service._load_data()
-        payment_service._load_data()
-        
-        # Recalcular estados de pago
-        tenant_service.recalculate_all_payment_statuses()
-        tenant_service._load_data()
-        
-        # Obtener todos los inquilinos
-        tenants = tenant_service.get_all_tenants()
-        
-        # Filtrar inquilinos activos con pagos pendientes (moroso o pendiente_registro)
-        pending_tenants = [
-            t for t in tenants 
-            if t.get('estado_pago') != 'inactivo' 
-            and t.get('estado_pago') in ['moroso', 'pendiente_registro']
-        ]
-        
-        # Sumar el valor de arriendo de los inquilinos con pagos pendientes
-        total_pending = sum(float(t.get('valor_arriendo', 0)) for t in pending_tenants)
-        
-        return total_pending 

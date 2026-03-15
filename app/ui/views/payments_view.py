@@ -1,6 +1,9 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 from datetime import datetime
+if sys.platform == "win32":
+    import winsound
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors, bind_combobox_dropdown_on_click
@@ -8,7 +11,6 @@ from manager.app.ui.components.modern_widgets import ModernButton, ModernCard, M
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
-import webbrowser
 from .edit_delete_payments_view import EditDeletePaymentsView
 from .register_expense_view import DatePickerWidget
 from manager.app.services.apartment_service import apartment_service
@@ -396,14 +398,12 @@ class PaymentsView(tk.Frame):
         # Registrar el pago (esto también actualiza automáticamente el estado del inquilino)
         payment_result = self.payment_service.add_payment(data)
         
-        # Generar PDF profesional del recibo
-        pdf_path = self._generate_payment_receipt_pdf(data)
-        # Mostrar mensaje y preguntar si desea abrir el PDF
-        if messagebox.askyesno("Recibo generado", f"Recibo PDF generado exitosamente:\n{pdf_path}\n\n¿Desea abrir el recibo ahora?"):
-            webbrowser.open_new(pdf_path)
-        messagebox.showinfo("Éxito", "Pago registrado correctamente.")
+        # Generar PDF profesional del recibo (sin preguntar; el usuario puede abrirlo desde documentos del inquilino)
+        self._generate_payment_receipt_pdf(data)
+        if sys.platform == "win32":
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
         
-        # Llamar callback para actualizar otras vistas DESPUÉS de que todo se guarde
+        # Callback: actualiza vistas y navega al listado de inquilinos
         if self.on_payment_saved:
             self.on_payment_saved()
         
@@ -1008,7 +1008,8 @@ class PaymentsManagerWindow(tk.Toplevel):
             "observaciones": self.obs_var.get()
         }
         self.payment_service.add_payment(data)
-        messagebox.showinfo("Éxito", "Pago registrado correctamente.")
+        if sys.platform == "win32":
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
         # Refrescar lista de pagos
         payments = [p for p in self.payment_service.get_all_payments() if p['id_inquilino'] == self.selected_tenant['id']]
         self._display_payments(payments)
