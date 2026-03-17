@@ -15,7 +15,7 @@ from .apartment_form_view import ApartmentFormView
 class ApartmentsListView(tk.Frame):
     """Vista para gestionar la lista de apartamentos"""
 
-    def __init__(self, parent, on_back: Callable, on_edit: Callable, initial_filters: Dict[str, Any] = None, on_navigate: Callable = None):
+    def __init__(self, parent, on_back: Callable, on_edit: Callable, initial_filters: Dict[str, Any] = None, on_navigate: Callable = None, on_new: Callable = None):
         super().__init__(parent)
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
@@ -23,6 +23,7 @@ class ApartmentsListView(tk.Frame):
         self.on_back = on_back
         self.on_edit = on_edit
         self.on_navigate = on_navigate
+        self.on_new = on_new
         self.all_apartments = []
         self.canvas = None
         self.bind("<Destroy>", self._on_destroy)
@@ -42,12 +43,29 @@ class ApartmentsListView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
         fg = theme.get("text_primary", "#1f2937")
+        colors = get_module_colors("administración")
         header = tk.Frame(self, bg=cb)
         header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
         tk.Label(header, text="Listado de Apartamentos", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg).pack(side="left")
         buttons_frame = tk.Frame(header, bg=cb)
         buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self.on_back)
+        if self.on_new:
+            btn_new = create_rounded_button(
+                buttons_frame,
+                text="+ Nuevo Apartamento",
+                bg_color=colors["primary"],
+                fg_color="white",
+                hover_bg=colors["hover"],
+                hover_fg="white",
+                command=self.on_new,
+                padx=14,
+                pady=7,
+                radius=4,
+                border_color=colors["primary"],
+            )
+            btn_new.pack(side="right")
+        else:
+            self._create_navigation_buttons(buttons_frame, self.on_back)
         main_container = tk.Frame(self, bg=cb)
         main_container.pack(fill="both", expand=True, padx=Spacing.MD)
         search_panel = self._create_search_panel(main_container)

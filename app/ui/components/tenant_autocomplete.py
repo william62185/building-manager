@@ -45,12 +45,19 @@ class TenantAutocompleteEntry(tk.Frame):
         self.entry.configure(fg="#6b7280")
         self.entry.bind("<FocusIn>", self._clear_placeholder)
         self.entry.bind("<FocusOut>", self._restore_placeholder)
+        self.entry.bind("<KeyPress>", self._clear_placeholder_on_key)  # borrar placeholder al escribir sin clic
         self.entry.bind("<KeyRelease>", self._on_keyrelease)
         self.entry.bind("<Down>", self._on_down)
         self.suggestions = None
         self.placeholder = placeholder
 
     def _clear_placeholder(self, event=None):
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, tk.END)
+            self.entry.configure(fg=theme_manager.themes[theme_manager.current_theme]["text_primary"])
+
+    def _clear_placeholder_on_key(self, event=None):
+        """Al pulsar una tecla, si el contenido es el placeholder, borrarlo para que solo quede lo que escribe el usuario."""
         if self.entry.get() == self.placeholder:
             self.entry.delete(0, tk.END)
             self.entry.configure(fg=theme_manager.themes[theme_manager.current_theme]["text_primary"])
@@ -177,6 +184,15 @@ class TenantAutocompleteEntry(tk.Frame):
 
     def get_selected_tenant(self):
         return self.selected_tenant
+
+    def clear_selection(self):
+        """Limpia la selección y el texto para poder buscar otro inquilino sin borrar manualmente."""
+        self._hide_suggestions()
+        self.selected_tenant = None
+        self.var.set("")
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, self.placeholder)
+        self.entry.configure(fg="#6b7280")
 
     def set_tenants(self, tenants):
         self.tenants = tenants

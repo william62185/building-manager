@@ -21,16 +21,15 @@ from manager.app.services.apartment_service import apartment_service
 
 class DatePickerWidget(tk.Frame):
     """Widget personalizado para selección de fechas con calendario"""
-    
-    def __init__(self, parent, **kwargs):
+    _open_calendar_instance = None  # instancia con calendario abierto (para cerrar al clic fuera)
+    _click_outside_bound = False   # si ya se enlazó el clic global una vez
+
+    def __init__(self, parent, on_change=None, **kwargs):
         super().__init__(parent, **theme_manager.get_style("frame"))
-        # Usar el mismo fondo que el padre para no mostrar un recuadro blanco extra
         self.configure(bg=parent.cget("bg"))
-        
         self.selected_date = None
         self.calendar_window = None
-        
-        # Crear el widget principal
+        self.on_change = on_change
         self._create_widget()
     
     def _create_widget(self):
@@ -54,6 +53,9 @@ class DatePickerWidget(tk.Frame):
             bd=0
         )
         self.date_entry.pack(pady=1, ipady=2, padx=2)
+        if self.on_change:
+            self.date_entry.bind("<KeyRelease>", lambda e: self._notify_change())
+            self.date_entry.bind("<FocusOut>", lambda e: self._notify_change())
         # Selector de calendario inmediatamente a la derecha del campo de fecha (altura reducida)
         self.calendar_btn = tk.Button(
             self,
@@ -74,40 +76,50 @@ class DatePickerWidget(tk.Frame):
         if self.calendar_window:
             self.calendar_window.destroy()
         
-        # Crear ventana del calendario más compacta
+        # Ventana del calendario (tamaño reducido, cierra al hacer clic fuera)
+        cal_width, cal_height = 250, 268
         self.calendar_window = tk.Toplevel(self)
         self.calendar_window.title("Seleccionar Fecha")
-        self.calendar_window.geometry("280x240")
+        self.calendar_window.geometry(f"{cal_width}x{cal_height}")
         self.calendar_window.resizable(False, False)
-        
-        # Posicionar la ventana justo debajo del botón del calendario
+
         self.calendar_window.transient(self.winfo_toplevel())
-        self.calendar_window.grab_set()
-        
-        # Calcular posición relativa al botón del calendario
+        DatePickerWidget._open_calendar_instance = self
+        if not DatePickerWidget._click_outside_bound:
+            root = self.winfo_toplevel()
+            while root.master:
+                root = root.master
+            root.bind_all("<Button-1>", self._on_click_anywhere)
+            DatePickerWidget._click_outside_bound = True
+
         self.update_idletasks()
-        
-        # Obtener posición absoluta del botón del calendario
         btn_x = self.calendar_btn.winfo_rootx()
         btn_y = self.calendar_btn.winfo_rooty()
         btn_height = self.calendar_btn.winfo_height()
-        
-        # Posicionar el calendario debajo del botón
-        calendar_x = btn_x - 220
-        calendar_y = btn_y + btn_height + 5
-        
-        # Asegurar que no se salga de la pantalla
         screen_width = self.calendar_window.winfo_screenwidth()
         screen_height = self.calendar_window.winfo_screenheight()
-        
-        if calendar_x + 280 > screen_width:
-            calendar_x = screen_width - 280 - 10
+
+        # Horizontal: alineado al botón, sin salir de pantalla
+        calendar_x = btn_x - 220
+        if calendar_x + cal_width > screen_width:
+            calendar_x = screen_width - cal_width - 10
         if calendar_x < 10:
             calendar_x = 10
-        if calendar_y + 240 > screen_height:
-            calendar_y = btn_y - 240 - 5
-        
-        self.calendar_window.geometry(f"280x240+{calendar_x}+{calendar_y}")
+
+        # Vertical: abrir donde haya más espacio para que se vean Hoy/Cerrar
+        margin = 10
+        space_above = btn_y
+        space_below = screen_height - (btn_y + btn_height)
+        if space_above >= space_below and space_above >= cal_height + margin:
+            calendar_y = btn_y - cal_height - 5
+        else:
+            calendar_y = btn_y + btn_height + 5
+        if calendar_y < margin:
+            calendar_y = margin
+        if calendar_y + cal_height > screen_height - margin:
+            calendar_y = screen_height - cal_height - margin
+
+        self.calendar_window.geometry(f"{cal_width}x{cal_height}+{calendar_x}+{calendar_y}")
         
         # Obtener fecha actual o fecha seleccionada
         try:
@@ -121,19 +133,15 @@ class DatePickerWidget(tk.Frame):
             today = date.today()
             year, month = today.year, today.month
         
-        # Crear el calendario
+        # Crear el calendario (padding y fuentes compactos)
         calendar_frame = tk.Frame(self.calendar_window, **theme_manager.get_style("frame"))
-        calendar_frame.pack(fill="both", expand=True, padx=8, pady=8)
-        
-        # Header con navegación
+        calendar_frame.pack(fill="both", expand=True, padx=6, pady=6)
         header_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
-        header_frame.pack(fill="x", pady=(0, 8))
-        
-        # Botón anterior
+        header_frame.pack(fill="x", pady=(0, 4))
         prev_btn = tk.Button(
             header_frame,
             text="◀",
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 9),
             bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
             fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
             bd=1,
@@ -145,21 +153,19 @@ class DatePickerWidget(tk.Frame):
         )
         prev_btn.pack(side="left")
         
-        # Label del mes
         self.month_label = tk.Label(
             header_frame,
             text=f"{calendar.month_name[month]} {year}",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=theme_manager.themes[theme_manager.current_theme]["bg_primary"],
             fg=theme_manager.themes[theme_manager.current_theme]["text_primary"]
         )
         self.month_label.pack(side="left", fill="x", expand=True)
         
-        # Botón siguiente
         next_btn = tk.Button(
             header_frame,
             text="▶",
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 9),
             bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
             fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
             bd=1,
@@ -171,9 +177,8 @@ class DatePickerWidget(tk.Frame):
         )
         next_btn.pack(side="right")
         
-        # Frame para el grid del calendario
         self.cal_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
-        self.cal_frame.pack(fill="both", expand=True, pady=(0, 8))
+        self.cal_frame.pack(fill="both", expand=True, pady=(0, 4))
         
         # Variables para el calendario
         self.current_month = month
@@ -186,11 +191,10 @@ class DatePickerWidget(tk.Frame):
         buttons_frame = tk.Frame(calendar_frame, **theme_manager.get_style("frame"))
         buttons_frame.pack(fill="x")
         
-        # Botón "Hoy"
         today_btn = tk.Button(
             buttons_frame,
             text="Hoy",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg=theme_manager.themes[theme_manager.current_theme]["btn_primary_bg"],
             fg="white",
             bd=0,
@@ -202,11 +206,10 @@ class DatePickerWidget(tk.Frame):
         )
         today_btn.pack(side="left")
         
-        # Botón "Cerrar"
         close_btn = tk.Button(
             buttons_frame,
             text="Cerrar",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_bg"],
             fg=theme_manager.themes[theme_manager.current_theme]["btn_secondary_fg"],
             bd=1,
@@ -309,6 +312,10 @@ class DatePickerWidget(tk.Frame):
             self.current_year += 1
         self._create_calendar()
     
+    def _notify_change(self):
+        if self.on_change:
+            self.on_change()
+
     def _select_date(self, day):
         """Selecciona una fecha específica"""
         selected_date = date(self.current_year, self.current_month, day)
@@ -316,7 +323,8 @@ class DatePickerWidget(tk.Frame):
         self.date_entry.insert(0, selected_date.strftime("%d/%m/%Y"))
         self.selected_date = selected_date
         self._close_calendar()
-    
+        self._notify_change()
+
     def _select_today(self):
         """Selecciona la fecha de hoy"""
         today = date.today()
@@ -324,13 +332,30 @@ class DatePickerWidget(tk.Frame):
         self.date_entry.insert(0, today.strftime("%d/%m/%Y"))
         self.selected_date = today
         self._close_calendar()
+        self._notify_change()
     
     def _close_calendar(self):
         """Cierra la ventana del calendario"""
         if self.calendar_window:
+            DatePickerWidget._open_calendar_instance = None
             self.calendar_window.destroy()
             self.calendar_window = None
-    
+
+    def _on_click_anywhere(self, event):
+        """Si hay un calendario abierto y el clic fue fuera de él, cerrarlo."""
+        inst = DatePickerWidget._open_calendar_instance
+        if not inst or not inst.calendar_window or not inst.calendar_window.winfo_exists():
+            return
+        try:
+            w = event.widget
+            while w:
+                if w == inst.calendar_window:
+                    return
+                w = w.master if hasattr(w, "master") else None
+        except Exception:
+            return
+        inst._close_calendar()
+
     def get(self):
         """Obtiene el valor de la fecha"""
         return self.date_entry.get()
@@ -856,19 +881,24 @@ class RegisterExpenseView(tk.Frame):
                 # Modo edición
                 updated_expense = self.expense_service.update_expense(self.expense.get('id'), expense_data)
                 if updated_expense:
-                    messagebox.showinfo("Éxito", "Gasto actualizado correctamente.")
-                    # Llamar callback después de actualizar para refrescar la lista
+                    try:
+                        import winsound
+                        winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                    except Exception:
+                        pass
                     if self.on_back:
-                        # Usar after para asegurar que se ejecute después de cerrar el messagebox
                         self.after(100, self.on_back)
                 else:
                     messagebox.showerror("Error", "No se pudo actualizar el gasto.")
             else:
-                # Modo creación
+                # Modo creación: solo sonido de confirmación (sin ventana de éxito)
                 self.expense_service.add_expense(expense_data)
-                messagebox.showinfo("Éxito", "Gasto registrado correctamente.")
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
                 self._clear_form()
-                # Llamar callback si existe
                 if self.on_back:
                     self.after(100, self.on_back)
         except Exception as e:

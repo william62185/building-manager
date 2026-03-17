@@ -395,7 +395,7 @@ class TenantsView(tk.Frame):
                 inactive_tenants.append(tenant)
             elif estado == 'moroso':
                 overdue_tenants.append(tenant)
-            elif estado == 'pendiente_registro':
+            elif estado in ('pendiente_registro', 'pendiente_pago'):
                 pending_tenants.append(tenant)
             else:
                 active_tenants.append(tenant)
@@ -407,7 +407,7 @@ class TenantsView(tk.Frame):
             current_row = self._display_group("⚠️ EN MORA", overdue_tenants, "#ff9800", current_row)
 
         if pending_tenants:
-            current_row = self._display_group("⏰ PENDIENTE REGISTRO", pending_tenants, "#ffc107", current_row)
+            current_row = self._display_group("⏰ PENDIENTE DE PAGO", pending_tenants, "#ffc107", current_row)
 
         if active_tenants:
             current_row = self._display_group("✅ AL DÍA", active_tenants, "#2563eb", current_row)
@@ -464,41 +464,12 @@ class TenantsView(tk.Frame):
         return start_row + len(tenants)
     
     def _get_dias_mora(self, tenant):
-        """Calcula los días en mora para un inquilino moroso. Retorna 0 si no aplica o hay error."""
+        """Días en mora integral (desde primer período impago). Usa lógica del servicio."""
         try:
             tenant_id = tenant.get("id")
             if not tenant_id:
                 return 0
-            hoy = datetime.now()
-            payments = payment_service.get_payments_by_tenant(tenant_id)
-            if payments:
-                payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
-                ultimo = payments[0]
-                fecha_ultimo_str = ultimo.get("fecha_pago", "")
-                if fecha_ultimo_str:
-                    fecha_ultimo = datetime.strptime(fecha_ultimo_str, "%d/%m/%Y")
-                    fecha_vencimiento = fecha_ultimo + timedelta(days=30)
-                    if hoy > fecha_vencimiento:
-                        return (hoy - fecha_vencimiento).days
-            else:
-                fecha_ingreso = tenant.get("fecha_ingreso", "")
-                if fecha_ingreso:
-                    try:
-                        fecha_ingreso_dt = datetime.strptime(fecha_ingreso, "%d/%m/%Y")
-                        dia_pago = fecha_ingreso_dt.day
-                        try:
-                            venc_este_mes = hoy.replace(day=min(dia_pago, 28))
-                            if venc_este_mes <= hoy:
-                                return max(0, (hoy - venc_este_mes).days)
-                            mes_ant = (hoy.replace(day=1) - timedelta(days=1))
-                            venc_ant = mes_ant.replace(day=min(dia_pago, 28))
-                            return max(0, (hoy - venc_ant).days)
-                        except ValueError:
-                            venc_este_mes = hoy.replace(day=1)
-                            return max(0, (hoy - venc_este_mes).days)
-                    except Exception:
-                        pass
-            return 0
+            return tenant_service.get_dias_mora(tenant_id)
         except Exception:
             return 0
 
@@ -548,12 +519,29 @@ class TenantsView(tk.Frame):
         estado_texto = {
             'al_dia': 'Al día',
             'pendiente_registro': 'Pendiente Registro',
+            'pendiente_pago': 'Pendiente de pago',
             'moroso': 'En mora',
             'inactivo': 'Inactivo'
         }.get(estado_pago, 'Al día')
         if estado_pago == 'moroso':
-            dias_mora = self._get_dias_mora(tenant)
-            estado_texto = f"En mora ({dias_mora} días)" if dias_mora > 0 else "En mora"
+            info = tenant_service.get_arrears_info(tenant.get("id")) or {}
+            meses_mora = info.get("meses_mora", 0)
+            dias_del_periodo = info.get("dias_del_periodo_actual", 0)
+            if meses_mora > 0 or dias_del_periodo > 0:
+                # Si solo debe el período actual (1 mes), mostrar solo los días para no confundir
+                if meses_mora == 1:
+                    estado_texto = f"En mora ({dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''})"
+                else:
+                    # Meses completos en mora (el período actual solo cuenta como días)
+                    meses_completos = meses_mora - 1
+                    partes = []
+                    if meses_completos > 0:
+                        partes.append(f"{meses_completos} mes{'es' if meses_completos != 1 else ''}")
+                    if dias_del_periodo > 0:
+                        partes.append(f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}")
+                    estado_texto = "En mora (" + " y ".join(partes) + ")"
+            else:
+                estado_texto = "En mora"
         # Día de pago (para poner en la misma línea que el estado)
         fecha_ingreso = tenant.get('fecha_ingreso', None)
         dia_pago = None

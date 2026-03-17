@@ -29,30 +29,14 @@ class ApartmentManagementView(tk.Frame):
         self._create_layout()
 
     def _create_layout(self):
-        """Crea el layout principal con cards de acción"""
+        """Abre directamente el listado de apartamentos."""
         self.current_sub_view = None
         for widget in self.winfo_children():
             widget.destroy()
+        self._show_apartments_list()
 
-        theme = theme_manager.themes[theme_manager.current_theme]
-        cb = self._content_bg
-        header_frame = tk.Frame(self, bg=cb)
-        header_frame.pack(fill="x", pady=(0, Spacing.LG))
-
-        title = tk.Label(header_frame, text="Gestión de Apartamentos", font=("Segoe UI", 16, "bold"), bg=cb, fg=theme["text_primary"])
-        title.pack(side="left")
-
-        buttons_frame = tk.Frame(header_frame, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, lambda: self.on_navigate("administration"))
-
-        question_label = tk.Label(self, text="¿Qué deseas gestionar hoy?", font=("Segoe UI", 14), bg=cb, fg=theme["text_primary"])
-        question_label.pack(pady=(0, Spacing.MD))
-
-        main_container = tk.Frame(self, bg=cb)
-        main_container.pack(pady=Spacing.SM)
-
-        self._create_cards_grid(main_container)
+    def _create_cards_grid(self, parent):
+        pass  # Ya no se usa
 
     def _create_cards_grid(self, parent):
         """Crea el grid de tarjetas de acción 2x2 con altura calculada dinámicamente"""
@@ -65,85 +49,16 @@ class ApartmentManagementView(tk.Frame):
         cards_info = [
             {"icon": "🏢", "title": "Registrar Apartamento", "command": self._show_register_form},
             {"icon": "🔍", "title": "Ver/Gestionar Apartamentos", "command": self._show_apartments_list},
-            {"icon": "📊", "title": "Estado de Ocupación", "command": self._show_occupation_status},
-            {"icon": "📈", "title": "Reportes", "command": self._show_reports},
         ]
-        
+        card_height = 220
+
         def calculate_and_create_cards():
-            """Calcula la altura y crea los cards después de que el layout esté renderizado"""
-            # Verificar que self y cards_frame todavía existen antes de continuar
+            """Crea los cards después de que el layout esté renderizado"""
             try:
-                if not self.winfo_exists():
+                if not self.winfo_exists() or not cards_frame.winfo_exists():
                     return
             except tk.TclError:
                 return
-            
-            try:
-                if not cards_frame.winfo_exists():
-                    return
-            except (tk.TclError, AttributeError):
-                return
-            
-            # Obtener altura del contenedor principal
-            try:
-                self.update_idletasks()
-                container_height = self.winfo_height()
-            except tk.TclError:
-                return
-            
-            # Si aún no hay altura disponible, usar un valor por defecto
-            if container_height <= 1:
-                container_height = 600  # Altura por defecto
-            
-            # Obtener alturas reales de los elementos después del renderizado
-            # Buscar el header_frame y question_label
-            header_frame = None
-            question_label = None
-            try:
-                for widget in self.winfo_children():
-                    try:
-                        if isinstance(widget, tk.Frame) and len(widget.winfo_children()) > 0:
-                            # Verificar si es el header_frame (tiene el título)
-                            for child in widget.winfo_children():
-                                try:
-                                    if isinstance(child, tk.Label) and "Gestión de Apartamentos" in child.cget("text"):
-                                        header_frame = widget
-                                        break
-                                except tk.TclError:
-                                    continue
-                        elif isinstance(widget, tk.Label) and "¿Qué deseas gestionar hoy?" in widget.cget("text"):
-                            question_label = widget
-                    except tk.TclError:
-                        continue
-            except tk.TclError:
-                return
-            
-            # Calcular alturas reales o usar aproximaciones
-            try:
-                header_height = header_frame.winfo_height() if header_frame else 80
-                question_height = question_label.winfo_height() if question_label else 40
-            except tk.TclError:
-                header_height = 80
-                question_height = 40
-            
-            # Calcular espacio disponible para los cards con margen inferior muy generoso
-            container_padding_top = Spacing.SM  # Padding superior del main_container
-            padding_between_rows = Spacing.SM  # Padding entre las 2 filas
-            bottom_margin = Spacing.XL * 2  # Margen inferior MUY generoso (doble)
-            cards_frame_padding = Spacing.MD  # Padding inferior del cards_frame
-            
-            available_height = (container_height - header_height - question_height - 
-                              container_padding_top - padding_between_rows - 
-                              bottom_margin - cards_frame_padding)
-            
-            # Dividir entre 2 filas
-            num_rows = 2
-            calculated_height = int(available_height / num_rows)
-            
-            # Asegurar una altura mínima y máxima razonable (reducir max significativamente)
-            min_height = 200
-            max_height = 240  # Reducido aún más para dejar mucho más espacio inferior
-            card_height = max(min_height, min(calculated_height, max_height))
             
             # Limpiar cards_frame si ya tiene widgets
             try:
@@ -155,14 +70,13 @@ class ApartmentManagementView(tk.Frame):
             except tk.TclError:
                 return
             
-            # Crear los cards con la altura calculada
+            # Crear los cards
             try:
                 for i, info in enumerate(cards_info):
-                    row = i // 2
                     col = i % 2
                     self._create_action_card(
                         cards_frame, info["icon"], info["title"], icon_color, info["command"], card_height
-                    ).grid(row=row, column=col, padx=Spacing.MD, pady=Spacing.SM)
+                    ).grid(row=0, column=col, padx=Spacing.MD, pady=Spacing.SM)
             except tk.TclError:
                 return
         
@@ -221,57 +135,30 @@ class ApartmentManagementView(tk.Frame):
         """Muestra el formulario para registrar un nuevo apartamento."""
         for widget in self.winfo_children():
             widget.destroy()
-        
-        # Verificar que on_navigate esté disponible antes de pasarlo
-        navigate_callback = self.on_navigate if hasattr(self, 'on_navigate') and self.on_navigate is not None else None
-        if navigate_callback is None:
-            print(f"DEBUG: on_navigate es None en ApartmentManagementView. Buscando en jerarquía...")
-            # Buscar el callback desde el parent
-            widget = self.master
-            depth = 0
-            while widget and depth < 10:
-                if hasattr(widget, '_navigate_to'):
-                    navigate_callback = widget._navigate_to
-                    break
-                widget = getattr(widget, 'master', None)
-                depth += 1
-        
+
         form_view = ApartmentFormView(
             self,
-            on_back=self._back_to_dashboard,
+            on_back=self._show_apartments_list,
             on_save_success=self._on_data_changed,
-            apartment_data=None,  # Explicitly for new apartment
-            on_navigate=navigate_callback  # Pasar el callback de navegación
+            apartment_data=None,
+            on_navigate=self.on_navigate,
         )
         form_view.pack(fill="both", expand=True)
         self.current_sub_view = form_view
 
     def _show_edit_form(self, apartment_data: dict, filter_state: dict):
         """Muestra el formulario para editar un apartamento existente."""
-        self._last_list_filters = filter_state  # Guardar el estado del filtro
-        
+        self._last_list_filters = filter_state
+
         for widget in self.winfo_children():
             widget.destroy()
-        
-        # Verificar que on_navigate esté disponible antes de pasarlo
-        navigate_callback = self.on_navigate if hasattr(self, 'on_navigate') and self.on_navigate is not None else None
-        if navigate_callback is None:
-            # Buscar el callback desde el parent
-            widget = self.master
-            depth = 0
-            while widget and depth < 10:
-                if hasattr(widget, '_navigate_to'):
-                    navigate_callback = widget._navigate_to
-                    break
-                widget = getattr(widget, 'master', None)
-                depth += 1
-        
+
         form_view = ApartmentFormView(
             self,
-            on_back=self._show_apartments_list, # Volver a la lista
+            on_back=self._show_apartments_list,
             on_save_success=self._on_data_changed,
             apartment_data=apartment_data,
-            on_navigate=navigate_callback  # Pasar el callback de navegación
+            on_navigate=self.on_navigate,
         )
         form_view.pack(fill="both", expand=True)
         self.current_sub_view = form_view
@@ -280,26 +167,14 @@ class ApartmentManagementView(tk.Frame):
         """Muestra la lista para ver y gestionar apartamentos."""
         for widget in self.winfo_children():
             widget.destroy()
-        
-        # Verificar que on_navigate esté disponible antes de pasarlo
-        navigate_callback = self.on_navigate if hasattr(self, 'on_navigate') and self.on_navigate is not None else None
-        if navigate_callback is None:
-            # Buscar el callback desde el parent
-            widget = self.master
-            depth = 0
-            while widget and depth < 10:
-                if hasattr(widget, '_navigate_to'):
-                    navigate_callback = widget._navigate_to
-                    break
-                widget = getattr(widget, 'master', None)
-                depth += 1
-        
+
         list_view = ApartmentsListView(
             self,
             on_back=self._back_to_dashboard,
             on_edit=self._show_edit_form,
-            initial_filters=self._last_list_filters, # Pasar el estado guardado
-            on_navigate=navigate_callback  # Pasar el callback de navegación
+            initial_filters=self._last_list_filters,
+            on_navigate=self.on_navigate,
+            on_new=self._show_register_form,
         )
         list_view.pack(fill="both", expand=True)
         self.current_sub_view = list_view

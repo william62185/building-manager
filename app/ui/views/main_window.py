@@ -21,13 +21,14 @@ from manager.app.logger import logger
 from .payments_view import PaymentsView
 from .tenants_view import TenantsView
 from .expenses_view import ExpensesView
+from .accounting.accounting_view import AccountingView
 from .apartment_management_view import ApartmentManagementView
 from .building_setup_view import BuildingSetupView
 from .apartment_form_view import ApartmentFormView
 from .apartments_list_view import ApartmentsListView
 from .building_management_view import BuildingManagementView
 from .settings_view import SettingsView
-from .reports_view import ReportsView
+from .administration_view import AdministrationView
 from .reports.occupancy_vacancy_report_view import OccupancyVacancyReportView
 from .backup_view import BackupView
 from .user_management_view import UserManagementView
@@ -267,17 +268,17 @@ class MainWindow:
                 "active": False
             },
             {
+                "text": "Contabilidad",
+                "icon": "📒",
+                "command": lambda: self._navigate_to("accounting"),
+                "active": False
+            },
+            {
                 "text": "Administración",
                 "icon": "🔧",
                 "command": lambda: self._navigate_to("administration"),
                 "active": False
             },
-            {
-                "text": "Reportes",
-                "icon": Icons.REPORTS,
-                "command": lambda: self._navigate_to("reports"),
-                "active": False
-            }
         ]
         
         self.nav_buttons = {}
@@ -375,6 +376,14 @@ class MainWindow:
                 else:
                     hover_bg = "#fee2e2"  # red-100 - rojo claro para fondo
                     hover_fg = "#991b1b"  # red-800 - rojo oscuro para texto
+            elif btn_frame.button_name == "contabilidad":
+                # Teal para módulo de contabilidad en hover
+                if theme_manager.current_theme == "dark":
+                    hover_bg = "#134e4a"  # teal-900 - teal oscuro para modo oscuro
+                    hover_fg = "#5eead4"  # teal-300 - teal claro para modo oscuro
+                else:
+                    hover_bg = "#ccfbf1"  # teal-100 - teal claro para fondo
+                    hover_fg = "#0f766e"  # teal-700 - teal oscuro para texto
             elif btn_frame.button_name == "administración":
                 # Morado para módulo de administración en hover
                 if theme_manager.current_theme == "dark":
@@ -383,14 +392,6 @@ class MainWindow:
                 else:
                     hover_bg = "#f3e8ff"  # purple-100 - morado claro para fondo
                     hover_fg = "#7c3aed"  # purple-600 - morado oscuro para texto
-            elif btn_frame.button_name == "reportes":
-                # Naranja para módulo de reportes en hover
-                if theme_manager.current_theme == "dark":
-                    hover_bg = "#7c2d12"  # orange-900 - naranja oscuro para modo oscuro
-                    hover_fg = "#fdba74"  # orange-300 - naranja claro para modo oscuro
-                else:
-                    hover_bg = "#ffedd5"  # orange-100 - naranja claro para fondo
-                    hover_fg = "#c2410c"  # orange-800 - naranja oscuro para texto
             else:
                 # Dashboard y Configuración: mismo hover que Inquilinos (no el del botón de usuario)
                 if theme_manager.current_theme == "dark":
@@ -435,15 +436,15 @@ class MainWindow:
                 "tenants": "inquilinos",
                 "payments": "pagos",
                 "expenses": "gastos",
+                "accounting": "contabilidad",
                 "administration": "administración",
-                "reports": "reportes",
-                "settings": "configuración"
+                "settings": "configuración",
             }
             active_button_name = view_to_button.get(current_view, "").lower()
             is_active = btn_frame.button_name == active_button_name
             
             if is_active:
-                # Mantener estilo activo - Azul para Inquilinos, Verde para Pagos, Rojo para Gastos, Morado para Administración, Naranja para Reportes
+                # Mantener estilo activo - Azul para Inquilinos, Verde para Pagos, Rojo para Gastos, Teal para Contabilidad, Morado para Administración
                 t = theme_manager.themes[theme_manager.current_theme]
                 if btn_frame.button_name == "inquilinos":
                     # Azul para módulo de inquilinos
@@ -469,6 +470,14 @@ class MainWindow:
                     else:
                         active_bg = "#fee2e2"  # red-100 - rojo claro para fondo
                         active_fg = "#991b1b"  # red-800 - rojo oscuro para texto
+                elif btn_frame.button_name == "contabilidad":
+                    # Teal para módulo de contabilidad
+                    if theme_manager.current_theme == "dark":
+                        active_bg = "#134e4a"  # teal-900 - teal oscuro para modo oscuro
+                        active_fg = "#5eead4"  # teal-300 - teal claro para modo oscuro
+                    else:
+                        active_bg = "#ccfbf1"  # teal-100 - teal claro para fondo
+                        active_fg = "#0f766e"  # teal-700 - teal oscuro para texto
                 elif btn_frame.button_name == "administración":
                     # Morado para módulo de administración
                     if theme_manager.current_theme == "dark":
@@ -477,14 +486,6 @@ class MainWindow:
                     else:
                         active_bg = "#f3e8ff"  # purple-100 - morado claro para fondo
                         active_fg = "#7c3aed"  # purple-600 - morado oscuro para texto
-                elif btn_frame.button_name == "reportes":
-                    # Naranja para módulo de reportes
-                    if theme_manager.current_theme == "dark":
-                        active_bg = "#7c2d12"  # orange-900 - naranja oscuro para modo oscuro
-                        active_fg = "#fdba74"  # orange-300 - naranja claro para modo oscuro
-                    else:
-                        active_bg = "#ffedd5"  # orange-100 - naranja claro para fondo
-                        active_fg = "#c2410c"  # orange-800 - naranja oscuro para texto
                 else:
                     # Dashboard y Configuración: mismo estilo activo que Inquilinos
                     if theme_manager.current_theme == "dark":
@@ -627,16 +628,16 @@ class MainWindow:
                 "tenants": "inquilinos",
                 "payments": "pagos",
                 "expenses": "gastos",
+                "accounting": "contabilidad",
                 "administration": "administración",
-                "reports": "reportes",
-                "settings": "configuración"
+                "settings": "configuración",
             }
             active_button_name = view_to_button.get(current_view, "").lower()
             button_name = getattr(btn_frame, 'button_name', '').lower()
             is_active = button_name == active_button_name
             
             if is_active:
-                # Aplicar estilo activo - Azul para Inquilinos, Verde para Pagos, Rojo para Gastos, Morado para Administración, Naranja para Reportes
+                # Aplicar estilo activo - Azul para Inquilinos, Verde para Pagos, Rojo para Gastos, Teal para Contabilidad, Morado para Administración, Naranja para Reportes
                 if button_name == "inquilinos":
                     # Azul para módulo de inquilinos
                     if theme_manager.current_theme == "dark":
@@ -661,6 +662,14 @@ class MainWindow:
                     else:
                         active_bg = "#fee2e2"  # red-100 - rojo claro para fondo
                         active_fg = "#991b1b"  # red-800 - rojo oscuro para texto
+                elif button_name == "contabilidad":
+                    # Teal para módulo de contabilidad
+                    if theme_manager.current_theme == "dark":
+                        active_bg = "#134e4a"  # teal-900 - teal oscuro para modo oscuro
+                        active_fg = "#5eead4"  # teal-300 - teal claro para modo oscuro
+                    else:
+                        active_bg = "#ccfbf1"  # teal-100 - teal claro para fondo
+                        active_fg = "#0f766e"  # teal-700 - teal oscuro para texto
                 elif button_name == "administración":
                     # Morado para módulo de administración
                     if theme_manager.current_theme == "dark":
@@ -669,14 +678,6 @@ class MainWindow:
                     else:
                         active_bg = "#f3e8ff"  # purple-100 - morado claro para fondo
                         active_fg = "#7c3aed"  # purple-600 - morado oscuro para texto
-                elif button_name == "reportes":
-                    # Naranja para módulo de reportes
-                    if theme_manager.current_theme == "dark":
-                        active_bg = "#7c2d12"  # orange-900 - naranja oscuro para modo oscuro
-                        active_fg = "#fdba74"  # orange-300 - naranja claro para modo oscuro
-                    else:
-                        active_bg = "#ffedd5"  # orange-100 - naranja claro para fondo
-                        active_fg = "#c2410c"  # orange-800 - naranja oscuro para texto
                 else:
                     # Dashboard y Configuración: mismo estilo activo que Inquilinos
                     if theme_manager.current_theme == "dark":
@@ -900,7 +901,7 @@ class MainWindow:
             **theme_manager.get_style("frame")
         )
         self.views_container.configure(bg=self.content_bg)
-        self.views_container.pack(fill="both", expand=True, padx=Spacing.XL, pady=(0, Spacing.MD))
+        self.views_container.pack(fill="both", expand=True, padx=Spacing.XL, pady=(0, 0))
         
         # Cargar vista inicial
         self._navigate_to("dashboard")
@@ -999,9 +1000,9 @@ class MainWindow:
             "tenants": "inquilinos",
             "payments": "pagos",
             "expenses": "gastos",
+            "accounting": "contabilidad",
             "administration": "administración",
-            "reports": "reportes",
-            "settings": "configuración"
+            "settings": "configuración",
         }
         
         active_button_name = view_to_button.get(active_view, "").lower()
@@ -1107,16 +1108,19 @@ class MainWindow:
         elif view_name == "expenses":
             expenses_view = ExpensesView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
             expenses_view.pack(fill="both", expand=True)
-        elif view_name == "administration":
-            self._create_administration_view()
-        elif view_name == "reports":
-            reports_view = ReportsView(
+        elif view_name == "accounting":
+            accounting_view = AccountingView(
                 self.views_container,
                 on_back=lambda: self._navigate_to("dashboard"),
-                on_show_occupancy_vacancy_report=self._show_occupancy_vacancy_report_from_reports,
-                on_show_pending_payments_report=self._show_pending_payments
+                on_navigate_to_dashboard=lambda: self._navigate_to("dashboard"),
             )
-            reports_view.pack(fill="both", expand=True)
+            accounting_view.pack(fill="both", expand=True)
+        elif view_name == "administration":
+            admin_view = AdministrationView(
+                self.views_container,
+                on_navigate=self._navigate_to,
+            )
+            admin_view.pack(fill="both", expand=True)
         elif view_name == "settings":
             settings_view = SettingsView(self.views_container, on_back=lambda: self._navigate_to("dashboard"))
             settings_view.pack(fill="both", expand=True)
@@ -1134,151 +1138,6 @@ class MainWindow:
         # Forzar actualización después de crear la vista
         self.root.update_idletasks()
         self.root.update()
-    
-    def _create_administration_view(self):
-        """Crea la vista de administración"""
-        # Grid de acciones administrativas
-        self._create_administration_actions_grid()
-    
-    def _create_administration_actions_grid(self):
-        """Crea el grid de acciones administrativas"""
-        # Fondo igual al área de contenido para que el frame se vea transparente
-        bg_content = getattr(self, "content_bg", theme_manager.themes[theme_manager.current_theme].get("content_bg", "#f1f5f9"))
-        admin_frame = tk.Frame(self.views_container, bg=bg_content)
-        admin_frame.pack(fill="both", expand=True)
-        
-        # Header con botones de navegación
-        header_frame = tk.Frame(admin_frame, bg=bg_content)
-        header_frame.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.XL)
-        
-        # Frame para botones de navegación (alineados a la derecha)
-        buttons_frame = tk.Frame(header_frame, bg=bg_content)
-        buttons_frame.pack(side="right")
-        
-        # Agregar solo botón Dashboard (sin Volver porque es redundante)
-        self._create_navigation_buttons(buttons_frame, lambda: self._navigate_to("dashboard"), show_back_button=False)
-
-        # Título encima de los cards (como en el módulo de Gastos: "¿Qué deseas hacer?")
-        theme = theme_manager.themes[theme_manager.current_theme]
-        question_label = tk.Label(
-            admin_frame,
-            text="¿Qué gestión desea hacer?",
-            font=("Segoe UI", 14),
-            fg=theme["text_primary"],
-            bg=bg_content
-        )
-        question_label.pack(pady=(0, Spacing.XL))
-
-        # Verificar si ya existe un edificio para la versión profesional
-        from manager.app.services.building_service import building_service
-        has_existing_building = building_service.has_buildings()
-
-        actions_grid = [
-            {
-                "icon": "🏗️",
-                "title": "Crear Nuevo Edificio",
-                "description": "Configura un nuevo edificio con sus apartamentos y características.",
-                "color": "#6d28d9",  # morado más intenso para mayor contraste
-                "action": self._show_building_setup_view,
-                "enabled": not has_existing_building,  # Deshabilitar si ya existe un edificio
-                "disabled_message": "Ya existe un edificio configurado"
-            },
-            {
-                "icon": "🏢",
-                "title": "Gestionar Edificio" if has_existing_building else "Gestionar Edificios",
-                "description": "Edita los detalles del edificio, dirección y configuración general.",
-                "color": "#6d28d9",  # morado más intenso para mayor contraste
-                "action": self._show_building_management_view,
-                "enabled": True
-            },
-            {
-                "icon": "🛋️",
-                "title": "Gestión de Apartamentos",
-                "description": "Administra apartamentos, estados de ocupación y detalles.",
-                "color": "#6d28d9",  # morado más intenso para mayor contraste
-                "action": self._show_apartment_management_view,
-                "enabled": True
-            },
-            {
-                "icon": "💾",
-                "title": "Backup de Datos",
-                "description": "Crea y restaura copias de seguridad completas del sistema.",
-                "color": "#6d28d9",  # morado más intenso para mayor contraste
-                "action": self._show_backup_view,
-                "enabled": True
-            },
-            {
-                "icon": "⚙️",
-                "title": "Gestión de Usuarios",
-                "description": "Administra usuarios del sistema, roles y permisos de acceso.",
-                "color": "#6d28d9",  # morado más intenso para mayor contraste
-                "action": self._show_user_management_view,
-                "enabled": True
-            }
-        ]
-        
-        # Crear filas de 3 tarjetas cada una con tamaño uniforme usando grid
-        num_columns = 3
-        num_rows = (len(actions_grid) + num_columns - 1) // num_columns  # Calcular número de filas
-        
-        # Contenedor para el grid con distribución uniforme (fondo transparente)
-        grid_container = tk.Frame(admin_frame, bg=bg_content)
-        grid_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=Spacing.MD)
-        
-        # Tamaño similar a Reportes (175x130) para que quepan las 2 filas en vista
-        CARD_HEIGHT = 150
-        row_minsize = CARD_HEIGHT + 2 * Spacing.MD
-        # Configurar el grid para distribución uniforme
-        for col in range(num_columns):
-            grid_container.grid_columnconfigure(col, weight=1, uniform="col")
-        for row in range(num_rows):
-            grid_container.grid_rowconfigure(row, weight=1, uniform="row", minsize=row_minsize)
-        
-        row_num = 0
-        for i in range(0, len(actions_grid), num_columns):
-            row_items = actions_grid[i:i+num_columns]
-            for col, item in enumerate(row_items):
-                card = self._create_admin_action_card(
-                    grid_container, item["icon"], item["title"], item.get("description", ""), item["color"], 
-                    item["action"], item.get("enabled", True), item.get("disabled_message", "")
-                )
-                card.grid(row=row_num, column=col, sticky="nsew", padx=Spacing.MD, pady=Spacing.MD)
-            row_num += 1
-
-    def _create_placeholder_view(self, title: str, subtitle: str):
-        """Crea una vista placeholder"""
-        card = ModernCard(self.views_container)
-        card.pack(fill="both", expand=True, padx=Spacing.XL, pady=Spacing.XL)
-        
-        # Contenedor interno
-        content_frame = tk.Frame(card, **theme_manager.get_style("frame"))
-        content_frame.pack(fill="both", expand=True, padx=Spacing.XL, pady=Spacing.XL)
-        
-        # Título
-        title_label = tk.Label(
-            content_frame,
-            text=title,
-            **theme_manager.get_style("label_title")
-        )
-        title_label.pack(pady=(0, Spacing.MD))
-        
-        # Subtítulo
-        if subtitle:
-            subtitle_label = tk.Label(
-                content_frame,
-                text=subtitle,
-                **theme_manager.get_style("label_body")
-            )
-            subtitle_label.pack(pady=(0, Spacing.LG))
-        
-        # Mensaje placeholder
-        placeholder_label = tk.Label(
-            content_frame,
-            text="Modulo en desarrollo\n\nEste modulo sera implementado proximamente.",
-            **theme_manager.get_style("label_body"),
-            justify="center"
-        )
-        placeholder_label.pack(expand=True)
     
     def _show_new_tenant_form(self):
         """Muestra directamente el formulario de nuevo inquilino"""
@@ -1399,175 +1258,22 @@ class MainWindow:
         # Mostrar directamente la vista de estado de ocupación dentro del módulo
         apartment_view._show_occupation_status()
 
-    def _show_occupancy_vacancy_report_from_reports(self):
-        """Muestra la misma vista del reporte de ocupación y vacancia (desde el card Reporte Financiero Consolidado)."""
-        self._update_nav_buttons("reports")
-        self._page_title_text = "Reportes y Análisis"
+    def _show_new_tenant_form(self):
+        """Muestra directamente el formulario de nuevo inquilino"""
+        self._update_nav_buttons("tenants")
+        self._page_title_text = "Nuevo Inquilino"
         self._draw_page_title()
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        report_view = OccupancyVacancyReportView(
+        from .tenant_form_view import TenantFormView
+        form_view = TenantFormView(
             self.views_container,
-            on_back=lambda: self._navigate_to("reports"),
-            on_navigate=self._navigate_to,
-            module_context="reportes"
+            on_back=lambda: self._navigate_to("tenants"),
+            on_save_success=self.refresh_dashboard,
+            on_navigate_to_dashboard=lambda: self._navigate_to("dashboard")
         )
-        report_view.pack(fill="both", expand=True)
-        self.current_view = report_view
+        form_view.pack(fill="both", expand=True)
 
-    def _show_backup_view(self):
-        """Muestra la vista de gestión de backups"""
-        # Limpiar contenido actual
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        
-        # Crear la vista de backup
-        backup_view = BackupView(
-            self.views_container,
-            on_back=lambda: self._navigate_to("administration"),
-            on_navigate=self._navigate_to
-        )
-        backup_view.pack(fill="both", expand=True)
-        
-        self.current_view = backup_view
-    
-    def _show_user_management_view(self):
-        """Muestra la vista de gestión de usuarios"""
-        # Limpiar contenido actual
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        
-        # Crear la vista de gestión de usuarios
-        user_view = UserManagementView(
-            self.views_container,
-            on_back=lambda: self._navigate_to("administration"),
-            on_navigate=self._navigate_to
-        )
-        user_view.pack(fill="both", expand=True)
-    
-    def _show_apartment_management_view(self):
-        """Muestra la vista de gestión de apartamentos"""
-        self._page_title_text = "Gestión de Apartamentos"
-        self._draw_page_title()
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        
-        apartment_view = ApartmentManagementView(self.views_container, on_navigate=self._navigate_to)
-        apartment_view.pack(fill="both", expand=True)
-
-    def _show_placeholder_dialog(self, title: str, message: str):
-        """Muestra un diálogo placeholder para funcionalidades futuras"""
-        messagebox.showinfo(title, f"{message}\n\nEsta funcionalidad será implementada próximamente.")
-
-    def _create_admin_action_card(self, parent, icon: str, title: str, description: str, color: str, action: Callable, enabled: bool = True, disabled_message: str = ""):
-        """Crea una card de acción administrativa con el mismo formato que los cards de inquilinos/pagos/gastos"""
-        # Color morado más intenso para el fondo base de las tarjetas (similar al hover anterior)
-        light_purple_bg = "#f3e8ff"  # purple-100 - morado claro más intenso para mejor contraste con iconos morados
-        
-        # Ajustar estilo según si está habilitada o no
-        if enabled:
-            bg_color = light_purple_bg
-            cursor = "hand2"
-        else:
-            bg_color = "#f5f5f5"  # Gris claro para deshabilitado
-            cursor = "arrow"
-            color = "#999999"  # Gris para icono y texto deshabilitado
-        
-        # Tamaño reducido para que quepan las 6 cards en vista (similar a Reportes)
-        card = tk.Frame(parent, bg=bg_color, bd=2, relief="raised", width=200, height=150)
-        card.pack_propagate(False)
-        card.configure(cursor=cursor)
-        
-        # Contenedor principal con padding uniforme para centrar verticalmente
-        content_frame = tk.Frame(card, bg=bg_color)
-        content_frame.pack(fill="both", expand=True, padx=Spacing.SM, pady=Spacing.SM)
-        
-        # Frame espaciador superior para centrar el contenido
-        top_spacer = tk.Frame(content_frame, bg=bg_color, height=1)
-        top_spacer.pack(fill="x", expand=True)
-        
-        # Contenedor del contenido (icono, título) - centrado verticalmente
-        content_container = tk.Frame(content_frame, bg=bg_color)
-        content_container.pack()
-        
-        # Ícono con tamaño reducido (similar a reportes)
-        icon_label = tk.Label(content_container, text=icon, font=("Segoe UI Symbol", 22), 
-                             fg=color, bg=bg_color)
-        icon_label.pack(pady=(0, Spacing.SM))
-        
-        # Título con color morado unificado
-        title_color = "#000000" if enabled else "#999999"  # Título en negro para mayor contraste
-        title_label = tk.Label(content_container, text=title, font=("Segoe UI", 11, "bold"), 
-                              fg=title_color, bg=bg_color, wraplength=180, justify="center")
-        title_label.pack()
-        
-        # Textos descriptivos eliminados según solicitud del usuario
-        
-        # Frame espaciador inferior para centrar el contenido
-        bottom_spacer = tk.Frame(content_frame, bg=bg_color, height=1)
-        bottom_spacer.pack(fill="x", expand=True)
-        
-        # Función para manejar clics - se ejecuta desde cualquier parte del card
-        def on_card_click(e):
-            if enabled:
-                e.widget.focus_set()
-                action()
-                return "break"
-        
-        # Hover effect solo si está habilitada
-        if enabled:
-            hover_bg_color = "#e9d5ff"  # purple-200 - morado más intenso para hover
-            def on_enter(e):
-                hover_bg = hover_bg_color
-                card.configure(bg=hover_bg)
-                content_frame.configure(bg=hover_bg)
-                top_spacer.configure(bg=hover_bg)
-                content_container.configure(bg=hover_bg)
-                bottom_spacer.configure(bg=hover_bg)
-                icon_label.configure(bg=hover_bg)
-                title_label.configure(bg=hover_bg, fg=title_color)
-            
-            def on_leave(e):
-                card.configure(bg=bg_color)
-                content_frame.configure(bg=bg_color)
-                top_spacer.configure(bg=bg_color)
-                content_container.configure(bg=bg_color)
-                bottom_spacer.configure(bg=bg_color)
-                icon_label.configure(bg=bg_color)
-                title_label.configure(bg=bg_color, fg=title_color)
-            
-            # Hacer TODO el card clickeable - bind a todos los elementos
-            all_widgets = [card, content_frame, top_spacer, content_container, bottom_spacer, icon_label, title_label]
-            
-            for widget in all_widgets:
-                widget.bind("<Button-1>", on_card_click)
-                widget.bind("<Enter>", on_enter)
-                widget.bind("<Leave>", on_leave)
-                widget.configure(cursor="hand2")
-        else:
-            # Si está deshabilitada, mostrar tooltip al hacer hover
-            def show_disabled_tooltip(e):
-                if disabled_message:
-                    tooltip = tk.Toplevel(card)
-                    tooltip.wm_overrideredirect(True)
-                    tooltip.wm_geometry(f"+{e.x_root+10}+{e.y_root+10}")
-                    
-                    label = tk.Label(tooltip, text=disabled_message, 
-                                   justify="left", background="#ffffe0", 
-                                   relief="solid", borderwidth=1,
-                                   font=("Segoe UI", 9))
-                    label.pack()
-                    
-                    def hide_tooltip(e):
-                        tooltip.destroy()
-                    
-                    tooltip.bind("<Leave>", hide_tooltip)
-                    card.bind("<Leave>", hide_tooltip)
-            
-            card.bind("<Enter>", show_disabled_tooltip)
-        
-        return card
-    
     def _create_navigation_buttons(self, parent, on_back_command, show_back_button=True, module_name="administración"):
         """Crea los botones Volver y Dashboard con estilo moderno y colores del módulo"""
         # Colores según el módulo (por defecto administración/morado)
@@ -1725,31 +1431,6 @@ class MainWindow:
         expenses_view.pack(fill="both", expand=True)
         expenses_view._show_register_expense()
     
-    def _show_building_setup_view(self):
-        """Muestra el asistente de configuración del edificio."""
-        self._page_title_text = "Configuración del Edificio"
-        self._draw_page_title()
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        
-        setup_view = BuildingSetupView(self.views_container, on_back=lambda: self._navigate_to("administration"))
-        setup_view.pack(fill="both", expand=True)
-
-    def _show_building_management_view(self):
-        """Muestra la vista para gestionar edificios existentes."""
-        self._page_title_text = "Gestión de Edificios"
-        self._draw_page_title()
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        
-        # Pasar referencia a MainWindow para que pueda navegar al dashboard
-        management_view = BuildingManagementView(
-            self.views_container, 
-            on_back=lambda: self._navigate_to("administration"),
-            main_window_ref=self  # Pasar referencia para navegación al dashboard
-        )
-        management_view.pack(fill="both", expand=True)
-
     def _hide_license_warning_tooltip(self):
         """Oculta el tooltip de aviso de licencia por vencer (si existe)."""
         aid = getattr(self, "_license_warning_after_id", None)

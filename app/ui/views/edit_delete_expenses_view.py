@@ -43,12 +43,13 @@ class EditDeleteExpensesView(tk.Frame):
         self.filter_year = None
         self.filter_month = None
         self.search_text = ""
-        
+        self._updating_filters = False  # flag para evitar recreaciones múltiples
+
         apartment_service._load_data()
         self.apartments = apartment_service.get_all_apartments()
         self.tenants = self.tenant_service.get_all_tenants()
-        
-        self._create_layout()
+
+        self.after(0, self._create_layout)
     
     def _create_layout(self):
         """Crea el layout principal"""
@@ -114,13 +115,16 @@ class EditDeleteExpensesView(tk.Frame):
         # Posicionar cursor en el cuadro de búsqueda al abrir la vista
         self.after(150, self._focus_search_entry)
         
+        from manager.app.ui.components.modern_widgets import bind_combobox_dropdown_on_click
+
         filters_frame = tk.Frame(fixed_container, bg=cb)
         filters_frame.pack(fill="x", pady=(0, 4))
-        
+
         tk.Label(filters_frame, text="Filtros:", font=("Segoe UI", 11, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
-        
+
         tk.Label(filters_frame, text="Categoría:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
-        
+
+        self._updating_filters = True
         self.category_filter_var = tk.StringVar()
         self.category_filter_var.trace("w", lambda *args: self._apply_filters())
         category_combo = ttk.Combobox(
@@ -132,9 +136,10 @@ class EditDeleteExpensesView(tk.Frame):
         )
         category_combo.set("Todas")
         category_combo.pack(side="left", padx=(0, Spacing.SM))
+        bind_combobox_dropdown_on_click(category_combo)
 
         tk.Label(filters_frame, text="Apartamento:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
-        
+
         self.apartment_filter_var = tk.StringVar()
         self.apartment_filter_var.trace("w", lambda *args: self._apply_filters())
         apartment_options = ["Todos"] + ["--- (General)"] + [apt.get('number', 'N/A') for apt in self.apartments]
@@ -147,9 +152,10 @@ class EditDeleteExpensesView(tk.Frame):
         )
         apartment_combo.set("Todos")
         apartment_combo.pack(side="left", padx=(0, Spacing.SM))
+        bind_combobox_dropdown_on_click(apartment_combo)
 
         tk.Label(filters_frame, text="Año:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
-        
+
         self.year_filter_var = tk.StringVar()
         self.year_filter_var.trace("w", lambda *args: self._apply_filters())
         current_year = datetime.now().year
@@ -163,9 +169,10 @@ class EditDeleteExpensesView(tk.Frame):
         )
         year_combo.set("Todos")
         year_combo.pack(side="left", padx=(0, Spacing.SM))
+        bind_combobox_dropdown_on_click(year_combo)
 
         tk.Label(filters_frame, text="Mes:", font=("Segoe UI", 10), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, 4))
-        
+
         self.month_filter_var = tk.StringVar()
         self.month_filter_var.trace("w", lambda *args: self._apply_filters())
         months = ["Todos", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -179,6 +186,8 @@ class EditDeleteExpensesView(tk.Frame):
         )
         month_combo.set("Todos")
         month_combo.pack(side="left", padx=(0, Spacing.SM))
+        bind_combobox_dropdown_on_click(month_combo)
+        self._updating_filters = False  # habilitar traces ahora que todos los combos están inicializados
 
         btn_clear_filters = ModernButton(
             filters_frame,
@@ -256,23 +265,25 @@ class EditDeleteExpensesView(tk.Frame):
     
     def _on_search_change(self):
         """Maneja cambios en el campo de búsqueda"""
+        if self._updating_filters:
+            return
         search_value = self.search_var.get()
         if search_value == SEARCH_PLACEHOLDER or not search_value.strip():
             self.search_text = ""
         else:
             self.search_text = search_value.strip().lower()
         self._create_expenses_list()
-    
+
     def _apply_filters(self):
         """Aplica los filtros seleccionados"""
-        # Verificar que las variables existan antes de acceder
+        if self._updating_filters:
+            return
         if not hasattr(self, 'category_filter_var'):
             return
-        
-        # Actualizar filtros
+
         category = self.category_filter_var.get()
         self.filter_category = None if category == "Todas" else category
-        
+
         if hasattr(self, 'apartment_filter_var'):
             apartment = self.apartment_filter_var.get()
             if apartment == "Todos":
@@ -283,13 +294,13 @@ class EditDeleteExpensesView(tk.Frame):
                 self.filter_apartment = apartment
         else:
             self.filter_apartment = None
-        
+
         if hasattr(self, 'year_filter_var'):
             year = self.year_filter_var.get()
             self.filter_year = None if year == "Todos" else int(year)
         else:
             self.filter_year = None
-        
+
         if hasattr(self, 'month_filter_var'):
             month = self.month_filter_var.get()
             month_map = {
@@ -300,17 +311,19 @@ class EditDeleteExpensesView(tk.Frame):
             self.filter_month = None if month == "Todos" else month_map.get(month)
         else:
             self.filter_month = None
-        
-        # Recrear la lista con los filtros aplicados
+
         self._create_expenses_list()
     
     def _clear_filters(self):
         """Limpia todos los filtros y restaura el placeholder de búsqueda sin mezclarlo con texto."""
+        self._updating_filters = True
         self.category_filter_var.set("Todas")
         self.apartment_filter_var.set("Todos")
         self.year_filter_var.set("Todos")
         self.month_filter_var.set("Todos")
         self.search_var.set(SEARCH_PLACEHOLDER)
+        self._updating_filters = False
+
         if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
             self.search_entry.configure(fg="#999")
         self.filter_category = None
@@ -318,286 +331,152 @@ class EditDeleteExpensesView(tk.Frame):
         self.filter_year = None
         self.filter_month = None
         self.search_text = ""
-        
+
         self.editing_expense = None
         for widget in self.edit_placeholder.winfo_children():
             widget.destroy()
         self.edit_placeholder.pack_forget()
-        
+
         self._create_expenses_list()
     
     def _create_expenses_list(self):
-        """Crea el listado de gastos con scroll"""
+        """Crea el listado de gastos usando Treeview para máximo rendimiento."""
         if hasattr(self, 'list_container'):
             self.list_container.destroy()
-        
+
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        bg_alt = theme.get("bg_tertiary", "#f0f4fa")
-        header_bg = "#fee2e2"
-        header_fg = "#991b1b"
-        
-        # Altura limitada del listado para liberar espacio arriba (cards + filtros)
-        list_height = 320
-        self.list_container = tk.Frame(self, bg=cb, height=list_height)
-        self.list_container.pack(fill="x", padx=Spacing.LG, pady=(0, Spacing.SM))
-        self.list_container.pack_propagate(False)
-        
-        columns = [
-            ("ID", 5),
-            ("Fecha", 14),
-            ("Categoría", 18),
-            ("Subtipo", 18),
-            ("Apartamento", 12),
-            ("Monto", 14),
-            ("Descripción", 32),
-            ("Acciones", 12)
-        ]
-        
-        sep_color = theme.get("border_light", "#d1d5db")
-        # Un solo grid: encabezado y cuerpo comparten las mismas columnas para alineación exacta
-        table_grid = tk.Frame(self.list_container, bg=cb)
-        table_grid.pack(fill="both", expand=True)
-        for i in range(8):
-            table_grid.grid_columnconfigure(i, weight=1)
-        table_grid.grid_columnconfigure(8, weight=0, minsize=17)
-        # Fila 0: encabezado (columnas 0-7)
-        header_frame = tk.Frame(table_grid, bg=header_bg)
-        header_frame.grid(row=0, column=0, columnspan=8, sticky="nsew")
-        for idx in range(8):
-            header_frame.grid_columnconfigure(idx, weight=1)
-        col_anchors = ["w", "w", "w", "w", "w", "w", "w", "c"]  # Monto a la izquierda como el resto
-        for idx, (col, width) in enumerate(columns):
-            anc = col_anchors[idx] if idx < len(col_anchors) else "w"
-            tk.Label(header_frame, text=col, font=("Segoe UI", 10, "bold"), width=width, anchor=anc, bg=header_bg, fg=header_fg).grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
-        scrollbar_header_placeholder = tk.Frame(table_grid, width=17, bg=header_bg)
-        scrollbar_header_placeholder.grid(row=0, column=8, sticky="ns")
-        scrollbar_header_placeholder.pack_propagate(False)
-        # Fila 1: línea separadora
-        header_sep = tk.Frame(table_grid, height=2, bg=sep_color)
-        header_sep.grid(row=1, column=0, columnspan=8, sticky="ew")
-        header_sep.grid_propagate(False)
-        tk.Frame(table_grid, width=17, bg=cb).grid(row=1, column=8)
-        # Fila 2: canvas (columnas 0-7) + scrollbar (columna 8)
-        table_grid.grid_rowconfigure(2, weight=1)
-        canvas_holder = tk.Frame(table_grid, bg=cb)
-        canvas_holder.grid(row=2, column=0, columnspan=8, sticky="nsew")
-        canvas = tk.Canvas(canvas_holder, bg=cb, borderwidth=0, highlightthickness=0)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar = tk.Scrollbar(table_grid, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=2, column=8, sticky="ns")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        content_frame = tk.Frame(canvas, bg=cb)
-        list_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        
-        def _on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        
-        content_frame.bind("<Configure>", _on_frame_configure)
-        
-        def _on_canvas_configure(event):
-            if event.width > 0:
-                canvas.itemconfig(list_window, width=event.width)
-        
-        canvas.bind("<Configure>", _on_canvas_configure)
-        
-        # Scroll con mouse (comprobar que el canvas siga existiendo: la lista puede recrearse)
-        def _on_mousewheel(event):
-            if not canvas.winfo_exists():
-                return
-            try:
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except tk.TclError:
-                pass
 
-        def _bind_mousewheel(event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.list_container = tk.Frame(self, bg=cb)
+        self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.SM))
 
-        def _unbind_mousewheel(event):
-            try:
-                canvas.unbind_all("<MouseWheel>")
-            except tk.TclError:
-                pass
-        
-        canvas.bind('<Enter>', _bind_mousewheel)
-        canvas.bind('<Leave>', _unbind_mousewheel)
-        content_frame.bind('<Enter>', _bind_mousewheel)
-        content_frame.bind('<Leave>', _unbind_mousewheel)
-        
-        # Obtener gastos filtrados
+        # Obtener y filtrar gastos
         expenses = self.expense_service.get_all_expenses()
-        
-        # Aplicar búsqueda inteligente (por nombre de inquilino o número de apartamento)
+
         if self.search_text:
-            # Buscar apartamentos relacionados con inquilinos que coincidan
-            matching_apartments = set()
-            
-            # Buscar por número de apartamento directamente
+            # Pre-construir mapa apt_number → set para búsqueda eficiente
+            apt_map_search = {str(a.get('number', '')).lower(): str(a.get('number', '')) for a in self.apartments}
+            matching_apts = set()
             for apt in self.apartments:
-                apt_number = str(apt.get('number', '')).lower()
-                if self.search_text in apt_number:
-                    matching_apartments.add(apt_number)
-                    matching_apartments.add(str(apt.get('number', '')))  # También el número original
-            
-            # Buscar por nombre de inquilino
+                if self.search_text in str(apt.get('number', '')).lower():
+                    matching_apts.add(str(apt.get('number', '')))
             for tenant in self.tenants:
-                tenant_name = str(tenant.get('nombre', '')).lower()
-                if self.search_text in tenant_name:
-                    # Obtener el apartamento del inquilino
+                if self.search_text in str(tenant.get('nombre', '')).lower():
                     apt_id = tenant.get('apartamento')
                     if apt_id is not None:
-                        try:
-                            apt = apartment_service.get_apartment_by_id(int(apt_id))
-                            if apt and 'number' in apt:
-                                apt_number = str(apt.get('number', ''))
-                                matching_apartments.add(apt_number)
-                                matching_apartments.add(apt_number.lower())
-                        except:
-                            pass
-            
-            # Filtrar gastos que coincidan con la búsqueda
-            filtered_expenses = []
-            for e in expenses:
-                expense_apt = str(e.get("apartamento", "")).lower()
-                expense_apt_original = str(e.get("apartamento", ""))
-                
-                # Verificar si el apartamento del gasto coincide
-                if (expense_apt in matching_apartments or 
-                    expense_apt_original in matching_apartments or
-                    self.search_text in expense_apt or
-                    self.search_text in expense_apt_original):
-                    filtered_expenses.append(e)
-            
-            expenses = filtered_expenses
-        
-        # Aplicar filtros
+                        apt_obj = next((a for a in self.apartments if a.get('id') == apt_id), None)
+                        if apt_obj:
+                            matching_apts.add(str(apt_obj.get('number', '')))
+            expenses = [
+                e for e in expenses
+                if (self.search_text in str(e.get("apartamento", "")).lower()
+                    or str(e.get("apartamento", "")) in matching_apts)
+            ]
+
         if self.filter_category:
             expenses = [e for e in expenses if e.get("categoria") == self.filter_category]
-        
         if self.filter_apartment:
             expenses = [e for e in expenses if str(e.get("apartamento", "")) == str(self.filter_apartment)]
-        
         if self.filter_year is not None or self.filter_month is not None:
             filtered = []
             for e in expenses:
-                fecha_str = e.get("fecha", "")
-                if fecha_str:
-                    try:
-                        fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
-                        if self.filter_year is not None and fecha.year != self.filter_year:
-                            continue
-                        if self.filter_month is not None and fecha.month != self.filter_month:
-                            continue
-                        filtered.append(e)
-                    except:
+                try:
+                    fecha = datetime.strptime(e.get("fecha", ""), "%Y-%m-%d")
+                    if self.filter_year is not None and fecha.year != self.filter_year:
                         continue
+                    if self.filter_month is not None and fecha.month != self.filter_month:
+                        continue
+                    filtered.append(e)
+                except Exception:
+                    continue
             expenses = filtered
-        
-        # Ordenar por fecha (más recientes primero)
+
         expenses.sort(key=lambda x: x.get("fecha", ""), reverse=True)
-        
-        zebra_colors = (cb, bg_alt)
-        
+
+        # Hint prominente encima de la tabla
+        hint_frame = tk.Frame(self.list_container, bg=theme.get("bg_tertiary", "#f0f4fa"))
+        hint_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            hint_frame,
+            text="  ✎ Doble clic para editar   ✕ Supr para eliminar",
+            font=("Segoe UI", 9),
+            bg=theme.get("bg_tertiary", "#f0f4fa"),
+            fg=theme.get("text_secondary", "#6b7280"),
+            anchor="w",
+            pady=4,
+        ).pack(fill="x", padx=6)
+
+        # Treeview
+        columns = ("fecha", "categoria", "subtipo", "apartamento", "monto", "descripcion")
+        self._exp_tree = ttk.Treeview(
+            self.list_container, columns=columns,
+            show="headings", selectmode="browse",
+        )
+        col_cfg = [
+            ("fecha",       "Fecha",        90),
+            ("categoria",   "Categoría",   130),
+            ("subtipo",     "Subtipo",      130),
+            ("apartamento", "Apartamento",  100),
+            ("monto",       "Monto",         90),
+            ("descripcion", "Descripción",  280),
+        ]
+        for col_id, heading, width in col_cfg:
+            self._exp_tree.heading(col_id, text=heading)
+            self._exp_tree.column(col_id, width=width, minwidth=50, anchor="w")
+
+        self._exp_tree.tag_configure("odd",  background=cb)
+        self._exp_tree.tag_configure("even", background=theme.get("bg_tertiary", "#f0f4fa"))
+
+        scrollbar = ttk.Scrollbar(self.list_container, orient="vertical", command=self._exp_tree.yview)
+        self._exp_tree.configure(yscrollcommand=scrollbar.set)
+        self._exp_tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self._expenses_index = {}
         if not expenses:
-            no_data_frame = tk.Frame(content_frame, bg=cb)
-            no_data_frame.grid(row=0, column=0, columnspan=8, sticky="ew", pady=20)
-            tk.Label(
-                no_data_frame,
-                text="No se encontraron gastos con los filtros seleccionados.",
-                font=("Segoe UI", 11),
-                fg=theme.get("text_secondary", "#666"),
-                bg=cb
-            ).pack()
-            content_frame.grid_columnconfigure(0, weight=1)
+            self._exp_tree.insert("", "end", values=(
+                "", "No se encontraron gastos.", "", "", "", "",
+            ))
         else:
-            for row_idx, expense in enumerate(expenses):
-                bg_color = zebra_colors[row_idx % 2]
-                row = tk.Frame(content_frame, bg=bg_color)
-                row.grid(row=row_idx, column=0, columnspan=8, sticky="ew")
-                
-                # Formatear fecha
+            for idx, expense in enumerate(expenses):
                 fecha_str = expense.get("fecha", "")
-                fecha_display = ""
-                if fecha_str:
-                    try:
-                        fecha_obj = datetime.strptime(fecha_str, "%Y-%m-%d")
-                        fecha_display = fecha_obj.strftime("%d/%m/%Y")
-                    except:
-                        fecha_display = fecha_str
-                
-                # Formatear apartamento
+                try:
+                    fecha_display = datetime.strptime(fecha_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+                except Exception:
+                    fecha_display = fecha_str
                 apt = expense.get("apartamento", "---")
                 apt_display = "General" if apt == "---" else apt
-                
-                # Formatear descripción (truncar si es muy larga)
                 desc = expense.get("descripcion", "")
-                desc_display = desc[:50] + "..." if len(desc) > 50 else desc
-                
-                values = [
-                    str(expense.get("id", "")),
+                tag = "odd" if idx % 2 == 0 else "even"
+                iid = self._exp_tree.insert("", "end", tags=(tag,), values=(
                     fecha_display,
                     expense.get("categoria", ""),
                     expense.get("subtipo", ""),
                     apt_display,
                     f"${expense.get('monto', 0):,.2f}",
-                    desc_display
-                ]
-                
-                # Configurar columnas del row para que coincidan con el encabezado
-                for idx in range(len(columns)):
-                    row.grid_columnconfigure(idx, weight=1)
-                
-                # Monto (col 5) alineado a la derecha; el resto a la izquierda
-                data_anchors = ["w", "w", "w", "w", "w", "w", "w"]  # Todas a la izquierda, incluido Monto
-                for col_idx, (val, (_, width)) in enumerate(zip(values, columns)):
-                    anc = data_anchors[col_idx] if col_idx < len(data_anchors) else "w"
-                    tk.Label(
-                        row,
-                        text=val,
-                        font=("Segoe UI", 10),
-                        width=width,
-                        anchor=anc,
-                        bg=bg_color,
-                        fg=theme["text_primary"]
-                    ).grid(row=0, column=col_idx, padx=(0, 1), sticky="nsew")
-                
-                # Acciones: botones editar y eliminar
-                actions_frame = tk.Frame(row, bg=bg_color)
-                actions_frame.grid(row=0, column=len(values), padx=(0, 1), sticky="nsew")
-                
-                btn_edit = tk.Button(
-                    actions_frame,
-                    text=Icons.EDIT,
-                    font=("Segoe UI", 12),
-                    fg="#1976d2",
-                    bg=bg_color,
-                    bd=0,
-                    relief="flat",
-                    cursor="hand2",
-                    command=lambda e=expense: self._show_edit_form(e)
-                )
-                btn_edit.pack(side="left", padx=(0, 6))
-                
-                btn_delete = tk.Button(
-                    actions_frame,
-                    text=Icons.DELETE,
-                    font=("Segoe UI", 12),
-                    fg="#d32f2f",
-                    bg=bg_color,
-                    bd=0,
-                    relief="flat",
-                    cursor="hand2",
-                    command=lambda e=expense: self._delete_expense(e)
-                )
-                btn_delete.pack(side="left")
-                
-                row.grid_columnconfigure(len(values), weight=1)
+                    desc[:80] + "..." if len(desc) > 80 else desc,
+                ))
+                self._expenses_index[iid] = expense
+
+        self._exp_tree.bind("<Double-1>", self._on_exp_tree_double_click)
+        self._exp_tree.bind("<Delete>",   self._on_exp_tree_delete_key)
+
+    def _on_exp_tree_double_click(self, event=None):
+        sel = self._exp_tree.selection()
+        if not sel:
+            return
+        expense = self._expenses_index.get(sel[0])
+        if expense:
+            self._show_edit_form(expense)
+
+    def _on_exp_tree_delete_key(self, event=None):
+        sel = self._exp_tree.selection()
+        if not sel:
+            return
+        expense = self._expenses_index.get(sel[0])
+        if expense:
+            self._delete_expense(expense)
         
-        # Mismo weight en todas las columnas para que header y filas compartan anchos (como en listado de pagos)
-        for idx in range(len(columns)):
-            content_frame.grid_columnconfigure(idx, weight=1)
-    
     def _show_edit_form(self, expense: Dict[str, Any]):
         """Muestra el formulario de edición para un gasto"""
         self.editing_expense = expense

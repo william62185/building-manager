@@ -32,64 +32,9 @@ class BackupView(tk.Frame):
             widget.destroy()
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        fg = theme.get("text_primary", "#1f2937")
 
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.SM), padx=Spacing.MD)
-        tk.Label(header, text="Backup de Datos", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg).pack(side="left")
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-
-        colors = get_module_colors("administración")
-        purple_primary = colors["primary"]
-        purple_hover = colors["hover"]
-        purple_light = colors["light"]
-        purple_text = colors["text"]
-        btn_bg = theme.get("btn_secondary_bg", "#e5e7eb")
-
-        def go_to_dashboard():
-            if self.on_navigate:
-                self.on_navigate("dashboard")
-            elif self.on_back:
-                self.on_back()
-
-        def go_back():
-            if self.on_back:
-                self.on_back()
-
-        btn_volver = create_rounded_button(
-            buttons_frame, text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color=btn_bg, fg_color=purple_primary,
-            hover_bg=purple_light, hover_fg=purple_text,
-            command=go_back, padx=12, pady=5, radius=4, border_color=purple_light
-        )
-        btn_volver.pack(side="right", padx=(Spacing.SM, 0))
-        btn_dashboard = create_rounded_button(
-            buttons_frame, text=f"{Icons.APARTMENTS} Dashboard",
-            bg_color=purple_primary, fg_color="white",
-            hover_bg=purple_hover, hover_fg="white",
-            command=go_to_dashboard, padx=12, pady=5, radius=4, border_color=purple_hover
-        )
-        btn_dashboard.pack(side="right")
-
-        container = tk.Frame(self, bg=cb)
-        container.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.SM))
-        canvas = tk.Canvas(container, bg=cb, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        main_container = tk.Frame(canvas, bg=cb)
-        main_container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas_window = canvas.create_window((0, 0), window=main_container, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def update_canvas_width(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-        canvas.bind("<Configure>", update_canvas_width)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        main_container = tk.Frame(self, bg=cb)
+        main_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
 
         self._create_backup_section(main_container)
         tk.Frame(main_container, height=1, bg=theme.get("border_light", "#d1d5db")).pack(fill="x", pady=(2, 2))
@@ -197,7 +142,8 @@ class BackupView(tk.Frame):
         
         def create_backup_thread():
             try:
-                backup_path = backup_service.create_full_backup()
+                # Usar contraseña de configuración para cifrar (is_auto=True)
+                backup_path = backup_service.create_full_backup(is_auto=True)
                 if backup_path:
                     backup_file = Path(backup_path)
                     size_mb = backup_file.stat().st_size / (1024 * 1024)
@@ -246,7 +192,8 @@ class BackupView(tk.Frame):
         
         def create_backup_thread():
             try:
-                backup_path = backup_service.create_full_backup(output_path=backup_dir)
+                # Usar contraseña de configuración para cifrar (is_auto=True)
+                backup_path = backup_service.create_full_backup(output_path=backup_dir, is_auto=True)
                 if backup_path:
                     backup_file = Path(backup_path)
                     size_mb = backup_file.stat().st_size / (1024 * 1024)
@@ -407,8 +354,8 @@ class BackupView(tk.Frame):
         
         backups = backup_service.get_backup_list()
         
-        # Limitar a los 10 últimos backups
-        backups = backups[:10]
+        # Limitar a los 5 últimos backups
+        backups = backups[:5]
         
         card_bg = "#f3e8ff"
         if not backups:

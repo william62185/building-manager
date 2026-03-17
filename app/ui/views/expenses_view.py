@@ -9,6 +9,8 @@ from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
 from manager.app.ui.components.modern_widgets import ModernButton
 from manager.app.services.expense_service import ExpenseService
+from manager.app.presenters.expense_presenter import ExpensePresenter
+from manager.app.logger import logger
 
 class ExpensesView(tk.Frame):
     """Vista profesional para gestión de gastos del edificio"""
@@ -19,7 +21,9 @@ class ExpensesView(tk.Frame):
         self.configure(bg=parent.cget("bg"))
         self.expense_service = ExpenseService()
         self.on_back = on_back
-        self._create_layout()
+        self.presenter = ExpensePresenter(on_back=on_back)
+        # Abrir directamente la vista de listado (como en módulo Pagos)
+        self._show_edit_delete_expenses()
     
     def _create_layout(self):
         """Crea el layout principal con cards de acción"""
@@ -227,17 +231,16 @@ class ExpensesView(tk.Frame):
                             widget._navigate_to("dashboard")
                             return
                         except Exception as e:
-                            print(f"Error al navegar: {e}")
+                            logger.warning("Error al navegar: %s", e)
                             break
                     widget = getattr(widget, 'master', None)
                     depth += 1
-                # Fallback: usar on_back si está disponible
                 if self.on_back:
                     self.on_back()
             
             form = RegisterExpenseView(
-                self, 
-                on_back=self._create_layout,
+                self,
+                on_back=self._show_edit_delete_expenses,
                 on_navigate_to_dashboard=go_to_dashboard
             )
             form.pack(fill="both", expand=True)
@@ -266,18 +269,19 @@ class ExpensesView(tk.Frame):
                             widget._navigate_to("dashboard")
                             return
                         except Exception as e:
-                            print(f"Error al navegar: {e}")
+                            logger.warning("Error al navegar: %s", e)
                             break
                     widget = getattr(widget, 'master', None)
                     depth += 1
-                # Fallback: usar on_back si está disponible
                 if self.on_back:
                     self.on_back()
             
             edit_delete_view = EditDeleteExpensesView(
-                self, 
-                on_back=self._create_layout,
-                on_navigate_to_dashboard=go_to_dashboard
+                self,
+                on_back=self._show_edit_delete_expenses,
+                on_navigate_to_dashboard=go_to_dashboard,
+                on_register_new_expense=self._show_register_expense,
+                on_show_reports=self._show_reports,
             )
             edit_delete_view.pack(fill="both", expand=True)
         except ImportError as e:
@@ -304,17 +308,16 @@ class ExpensesView(tk.Frame):
                             widget._navigate_to("dashboard")
                             return
                         except Exception as e:
-                            print(f"Error al navegar: {e}")
+                            logger.warning("Error al navegar: %s", e)
                             break
                     widget = getattr(widget, 'master', None)
                     depth += 1
-                # Fallback: usar on_back si está disponible
                 if self.on_back:
                     self.on_back()
             
             reports_view = ExpenseReportsView(
-                self, 
-                on_back=self._create_layout,
+                self,
+                on_back=self._show_edit_delete_expenses,
                 on_navigate_to_dashboard=go_to_dashboard
             )
             reports_view.pack(fill="both", expand=True)
@@ -322,7 +325,6 @@ class ExpensesView(tk.Frame):
             messagebox.showerror("Error", f"Error al cargar la vista de reportes: {str(e)}")
     
     def _on_back(self):
-        """Maneja el botón de volver"""
-        if self.on_back:
-            self.on_back()
+        """Maneja el botón de volver (delega en el presenter)."""
+        self.presenter.go_back()
 

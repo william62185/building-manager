@@ -1,6 +1,9 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 from datetime import datetime
+if sys.platform == "win32":
+    import winsound
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors, bind_combobox_dropdown_on_click
@@ -27,7 +30,7 @@ class EditDeletePaymentsView(tk.Frame):
         self.on_show_reports = on_show_reports  # Callback para abrir reportes de pagos
         self.selected_tenant = None
         self.editing_payment = None
-        self._create_layout()
+        self.after(0, self._create_layout)
 
     def _create_layout(self):
         for widget in self.winfo_children():
@@ -153,134 +156,104 @@ class EditDeletePaymentsView(tk.Frame):
     def _create_payments_list(self):
         if hasattr(self, 'list_container'):
             self.list_container.destroy()
+
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        bg_alt = theme.get("bg_tertiary", "#f0f4fa")
-        header_bg = "#dcfce7"
-        header_fg = "#166534"
-        columns = [
-            ("Inquilino", 20),
-            ("Fecha de pago", 14),
-            ("Monto", 14),
-            ("Método", 10),
-            ("Observaciones", 36),
-            ("Acciones", 10)
-        ]
-        # --- Un solo grid (como en gastos): encabezado y cuerpo comparten columnas para alineación exacta ---
+
         self.list_container = tk.Frame(self, bg=cb)
         self.list_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(4, Spacing.LG))
-        sep_color = theme.get("border_light", "#d1d5db")
-        table_grid = tk.Frame(self.list_container, bg=cb)
-        table_grid.pack(fill="both", expand=True)
-        for i in range(6):
-            table_grid.grid_columnconfigure(i, weight=1)
-        table_grid.grid_columnconfigure(6, weight=0, minsize=17)
-        # Fila 0: encabezado (columnas 0-5)
-        header_frame = tk.Frame(table_grid, bg=header_bg)
-        header_frame.grid(row=0, column=0, columnspan=6, sticky="nsew")
-        for idx in range(6):
-            header_frame.grid_columnconfigure(idx, weight=1)
-        col_anchors = ["w", "w", "w", "w", "w", "w"]
-        for idx, (col, width) in enumerate(columns):
-            anc = col_anchors[idx] if idx < len(col_anchors) else "w"
-            tk.Label(header_frame, text=col, font=("Segoe UI", 10, "bold"), width=width, anchor=anc, bg=header_bg, fg=header_fg).grid(row=0, column=idx, padx=(0, 1), sticky="nsew")
-        scrollbar_header_placeholder = tk.Frame(table_grid, width=17, bg=header_bg)
-        scrollbar_header_placeholder.grid(row=0, column=6, sticky="ns")
-        scrollbar_header_placeholder.pack_propagate(False)
-        # Fila 1: línea separadora
-        header_sep = tk.Frame(table_grid, height=2, bg=sep_color)
-        header_sep.grid(row=1, column=0, columnspan=6, sticky="ew")
-        header_sep.grid_propagate(False)
-        tk.Frame(table_grid, width=17, bg=cb).grid(row=1, column=6)
-        # Fila 2: canvas (columnas 0-5) + scrollbar (columna 6)
-        table_grid.grid_rowconfigure(2, weight=1)
-        canvas_holder = tk.Frame(table_grid, bg=cb)
-        canvas_holder.grid(row=2, column=0, columnspan=6, sticky="nsew")
-        canvas = tk.Canvas(canvas_holder, bg=cb, borderwidth=0, highlightthickness=0)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar = tk.Scrollbar(table_grid, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=2, column=6, sticky="ns")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        content_frame = tk.Frame(canvas, bg=cb)
-        list_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        def _on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        content_frame.bind("<Configure>", _on_frame_configure)
-        def _on_canvas_configure(event):
-            if event.width > 0:
-                canvas.itemconfig(list_window, width=event.width)
-        canvas.bind("<Configure>", _on_canvas_configure)
-        def _on_mousewheel(event):
-            if not canvas.winfo_exists():
-                return
-            try:
-                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            except tk.TclError:
-                pass
-        def _bind_mousewheel(event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        def _unbind_mousewheel(event):
-            canvas.unbind_all("<MouseWheel>")
-        canvas.bind('<Enter>', _bind_mousewheel)
-        canvas.bind('<Leave>', _unbind_mousewheel)
-        content_frame.bind('<Enter>', _bind_mousewheel)
-        content_frame.bind('<Leave>', _unbind_mousewheel)
-        # --- FILAS DEL LISTADO ---
+
+        # Pre-cargar datos una sola vez
         pagos = self.payment_service.get_all_payments()
         if self.selected_tenant:
             pagos = [p for p in pagos if p['id_inquilino'] == self.selected_tenant['id']]
         pagos = list(reversed(pagos))
-        zebra_colors = (cb, bg_alt)
+
+        try:
+            all_apts = apartment_service.get_all_apartments()
+            apt_map = {a["id"]: a for a in all_apts if "id" in a}
+        except Exception:
+            apt_map = {}
+        tenant_apt_map = {t["id"]: apt_map.get(t.get("apartamento")) for t in self.tenants}
+
+        # Hint prominente encima de la tabla
+        hint_frame = tk.Frame(self.list_container, bg=theme.get("bg_tertiary", "#f0f4fa"))
+        hint_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            hint_frame,
+            text="  ✎ Doble clic para editar   ✕ Supr para eliminar",
+            font=("Segoe UI", 9),
+            bg=theme.get("bg_tertiary", "#f0f4fa"),
+            fg=theme.get("text_secondary", "#6b7280"),
+            anchor="w",
+            pady=4,
+        ).pack(fill="x", padx=6)
+
+        # Treeview
+        columns = ("inquilino", "fecha", "monto", "metodo", "observaciones")
+        self._tree = ttk.Treeview(
+            self.list_container, columns=columns,
+            show="headings", selectmode="browse",
+        )
+        col_cfg = [
+            ("inquilino",     "Inquilino",      220),
+            ("fecha",         "Fecha de pago",  110),
+            ("monto",         "Monto",          100),
+            ("metodo",        "Método",          90),
+            ("observaciones", "Observaciones",  260),
+        ]
+        for col_id, heading, width in col_cfg:
+            self._tree.heading(col_id, text=heading)
+            self._tree.column(col_id, width=width, minwidth=60, anchor="w")
+
+        # Colores zebra
+        self._tree.tag_configure("odd",  background=cb)
+        self._tree.tag_configure("even", background=theme.get("bg_tertiary", "#f0f4fa"))
+
+        scrollbar = ttk.Scrollbar(self.list_container, orient="vertical", command=self._tree.yview)
+        self._tree.configure(yscrollcommand=scrollbar.set)
+        self._tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Poblar
+        self._payments_index = {}
         if not pagos:
-            no_data_frame = tk.Frame(content_frame, bg=cb)
-            no_data_frame.grid(row=0, column=0, columnspan=6, sticky="ew", pady=20)
-            tk.Label(
-                no_data_frame,
-                text="No se encontraron pagos." if self.selected_tenant else "No hay pagos registrados.",
-                font=("Segoe UI", 11),
-                fg=theme.get("text_secondary", "#666"),
-                bg=cb
-            ).pack()
-            content_frame.grid_columnconfigure(0, weight=1)
+            self._tree.insert("", "end", values=(
+                "No hay pagos registrados.", "", "", "", "",
+            ))
         else:
-            for row_idx, payment in enumerate(pagos):
-                bg_color = zebra_colors[row_idx % 2]
-                row = tk.Frame(content_frame, bg=bg_color)
-                row.grid(row=row_idx, column=0, columnspan=6, sticky="ew")
-                nombre = payment.get('nombre_inquilino', '')
-                apto = ''
-                for t in self.tenants:
-                    if t['id'] == payment['id_inquilino']:
-                        apt_id = t.get('apartamento', '')
-                        if apt_id:
-                            try:
-                                apt = apartment_service.get_apartment_by_id(int(apt_id))
-                                apto = apt['number'] if (apt and 'number' in apt) else str(apt_id)
-                            except Exception:
-                                apto = str(apt_id)
-                        break
-                values = [
-                    f"{nombre} (Apt. {apto})",
-                    f"{payment['fecha_pago']}",
-                    f"${payment['monto']:,.2f}",
-                    f"{payment['metodo']}",
-                    f"{payment.get('observaciones','')}"
-                ]
-                for idx in range(len(columns)):
-                    row.grid_columnconfigure(idx, weight=1)
-                data_anchors = ["w", "w", "w", "w", "w"]
-                for col_idx, (val, (_, width)) in enumerate(zip(values, columns)):
-                    anc = data_anchors[col_idx] if col_idx < len(data_anchors) else "w"
-                    tk.Label(row, text=val, font=("Segoe UI", 10), width=width, anchor=anc, bg=bg_color, fg=theme["text_primary"]).grid(row=0, column=col_idx, padx=(0, 1), sticky="nsew")
-                actions_frame = tk.Frame(row, bg=bg_color)
-                actions_frame.grid(row=0, column=len(values), padx=(0, 1), sticky="nsew")
-                btn_edit = tk.Button(actions_frame, text=Icons.EDIT, font=("Segoe UI", 12), fg="#1976d2", bg=bg_color, bd=0, relief="flat", cursor="hand2", command=lambda p=payment: self._show_edit_form(p))
-                btn_edit.pack(side="left", padx=(0, 6))
-                btn_delete = tk.Button(actions_frame, text=Icons.DELETE, font=("Segoe UI", 12), fg="#d32f2f", bg=bg_color, bd=0, relief="flat", cursor="hand2", command=lambda p=payment: self._delete_payment(p))
-                btn_delete.pack(side="left")
-                row.grid_columnconfigure(len(values), weight=1)
-        for idx in range(len(columns)):
-            content_frame.grid_columnconfigure(idx, weight=1)
+            for idx, payment in enumerate(pagos):
+                apt = tenant_apt_map.get(payment['id_inquilino'])
+                apto = apt['number'] if (apt and 'number' in apt) else ''
+                tag = "odd" if idx % 2 == 0 else "even"
+                iid = self._tree.insert("", "end", tags=(tag,), values=(
+                    f"{payment.get('nombre_inquilino', '')} (Apt. {apto})",
+                    payment.get('fecha_pago', ''),
+                    f"${payment.get('monto', 0):,.2f}",
+                    payment.get('metodo', ''),
+                    payment.get('observaciones', ''),
+                ))
+                self._payments_index[iid] = payment
+
+        # Doble clic → editar | Supr → eliminar
+        self._tree.bind("<Double-1>", self._on_tree_double_click)
+        self._tree.bind("<Delete>",   self._on_tree_delete_key)
+
+    def _on_tree_double_click(self, event=None):
+        sel = self._tree.selection()
+        if not sel:
+            return
+        payment = self._payments_index.get(sel[0])
+        if payment:
+            self._show_edit_form(payment)
+
+    def _on_tree_delete_key(self, event=None):
+        sel = self._tree.selection()
+        if not sel:
+            return
+        payment = self._payments_index.get(sel[0])
+        if payment:
+            self._delete_payment(payment)
 
     def _show_edit_form(self, payment):
         self.editing_payment = payment
@@ -370,8 +343,9 @@ class EditDeletePaymentsView(tk.Frame):
         data['metodo'] = metodo
         data['observaciones'] = obs
         self.payment_service.update_payment(self.editing_payment['id'], data)
-        messagebox.showinfo("Éxito", "Pago actualizado correctamente.")
-        
+        if sys.platform == "win32":
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+
         # Llamar callback para actualizar otras vistas (como la lista de inquilinos)
         if self.on_payment_saved:
             self.on_payment_saved()

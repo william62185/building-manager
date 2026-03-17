@@ -415,22 +415,32 @@ class BuildingSetupView(tk.Frame):
             contact = " | ".join(x for x in [phone, email] if x)
             tk.Label(summary_frame, text=f"Contacto: {contact}", font=("Segoe UI", 11)).pack(anchor="w")
 
-        # Special Units Frame
+        # Special Units Frame (grid para alineación Nombre | Tipo | Piso)
         special_units_frame = tk.LabelFrame(self.step_container, text="Añadir Unidades Especiales (Opcional)", padx=10, pady=10)
         special_units_frame.pack(fill="x", padx=Spacing.MD, pady=Spacing.SM)
-        
-        self.special_units_container = tk.Frame(special_units_frame)
-        self.special_units_container.pack(fill="x")
+        self._special_units_grid_container = tk.Frame(special_units_frame)
+        self._special_units_grid_container.pack(fill="x")
+        # Anchos fijos para que Combobox no desborde y columnas alineadas
+        self._special_col_names = 28   # caracteres Nombre
+        self._special_col_type = 18    # caracteres Tipo (combobox)
+        self._special_col_floor = 6    # caracteres Piso
+        self._special_units_grid_container.columnconfigure(0, weight=1, minsize=120)
+        self._special_units_grid_container.columnconfigure(1, weight=0, minsize=100)
+        self._special_units_grid_container.columnconfigure(2, weight=0, minsize=50)
         self.special_units_entries = []
 
         # Header
-        header_frame = tk.Frame(self.special_units_container)
-        header_frame.pack(fill="x", pady=(0, Spacing.SM))
-        tk.Label(header_frame, text="Nombre (ej. Penthouse A)", font=("Segoe UI", 10, "bold")).pack(side="left", expand=True)
-        tk.Label(header_frame, text="Tipo (ej. Local)", font=("Segoe UI", 10, "bold")).pack(side="left", expand=True)
-        tk.Label(header_frame, text="Piso", font=("Segoe UI", 10, "bold")).pack(side="left", expand=True, padx=(0, Spacing.MD))
+        header_frame = tk.Frame(self._special_units_grid_container)
+        header_frame.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, Spacing.SM))
+        header_frame.columnconfigure(0, weight=1)
+        header_frame.columnconfigure(1, weight=0)
+        header_frame.columnconfigure(2, weight=0)
+        tk.Label(header_frame, text="Nombre (ej. Penthouse A)", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
+        tk.Label(header_frame, text="Tipo (ej. Local)", font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w", padx=(Spacing.MD, Spacing.SM))
+        tk.Label(header_frame, text="Piso", font=("Segoe UI", 10, "bold")).grid(row=0, column=2, sticky="w")
 
-        self._add_special_unit_row() # Add the first row
+        self._special_unit_row_index = 1
+        self._add_special_unit_row()
 
         ModernButton(special_units_frame, text="+ Añadir otra unidad", style="info", small=True, command=self._add_special_unit_row).pack(pady=Spacing.SM)
 
@@ -444,25 +454,30 @@ class BuildingSetupView(tk.Frame):
     )
 
     def _add_special_unit_row(self):
-        row_frame = tk.Frame(self.special_units_container)
-        row_frame.pack(fill="x", pady=Spacing.XS)
-        
+        row_frame = tk.Frame(self._special_units_grid_container)
+        row_frame.grid(row=self._special_unit_row_index, column=0, columnspan=3, sticky="ew", pady=Spacing.XS)
+        row_frame.columnconfigure(0, weight=1)
+        row_frame.columnconfigure(1, weight=0)
+        row_frame.columnconfigure(2, weight=0)
+
         name_var = tk.StringVar()
         type_var = tk.StringVar()
         floor_var = tk.StringVar()
-        
-        ttk.Entry(row_frame, textvariable=name_var).pack(side="left", expand=True, fill="x", padx=(0, Spacing.SM))
+
+        name_entry = ttk.Entry(row_frame, textvariable=name_var, width=self._special_col_names)
+        name_entry.grid(row=0, column=0, sticky="ew", padx=(0, Spacing.SM))
         type_combo = ttk.Combobox(
             row_frame,
             textvariable=type_var,
             values=list(self.SPECIAL_UNIT_TYPES),
             state="readonly",
-            width=22,
+            width=self._special_col_type,
         )
-        type_combo.pack(side="left", expand=True, fill="x", padx=(0, Spacing.SM))
-        ttk.Entry(row_frame, textvariable=floor_var, width=10).pack(side="left")
-        
-        self.special_units_entries.append({'name_var': name_var, 'type_var': type_var, 'floor_var': floor_var})
-        # Actualizar scroll para que se vea la nueva fila
+        type_combo.grid(row=0, column=1, sticky="w", padx=(0, Spacing.SM))
+        floor_entry = ttk.Entry(row_frame, textvariable=floor_var, width=self._special_col_floor)
+        floor_entry.grid(row=0, column=2, sticky="w")
+
+        self.special_units_entries.append({"name_var": name_var, "type_var": type_var, "floor_var": floor_var})
+        self._special_unit_row_index += 1
         if hasattr(self, "_wizard_canvas") and self._wizard_canvas.winfo_exists():
             self.after(100, lambda: self._wizard_canvas.configure(scrollregion=self._wizard_canvas.bbox("all"))) 

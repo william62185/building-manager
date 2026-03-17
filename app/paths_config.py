@@ -57,6 +57,24 @@ def get_icon_path() -> Optional[Path]:
     return icon_path if icon_path.exists() else None
 
 
+def get_logo_path() -> Optional[Path]:
+    """
+    Ruta del logo para recibos (logo.png o logo.jpg).
+    assets/logo.png en desarrollo; carpeta del ejecutable en frozen.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+        if base.name == "_internal":
+            base = base.parent
+    else:
+        base = Path(__file__).resolve().parent.parent.parent
+    for name in ("logo.png", "logo.jpg"):
+        p = base / "assets" / name
+        if p.exists():
+            return p
+    return None
+
+
 def get_splash_path() -> Optional[Path]:
     """
     Ruta de la imagen de splash (splash.png).

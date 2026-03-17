@@ -1,6 +1,7 @@
 """
 Servicio para gestión de backups completos del sistema
-Incluye todos los datos, documentos y metadatos para restauración completa
+Incluye todos los datos, documentos y metadatos para restauración completa.
+Soporta cifrado AES con contraseña (manual o guardada para automáticos) y copia a carpeta en la nube.
 """
 
 import os
@@ -12,6 +13,12 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Callable
 from threading import Timer
 import zipfile
+
+try:
+    import pyzipper
+    _HAS_PYZIPPER = True
+except ImportError:
+    _HAS_PYZIPPER = False
 
 from manager.app.paths_config import (
     BASE_PATH as _BASE_PATH,
@@ -45,7 +52,7 @@ class BackupService:
         self._ensure_backup_directory()
         self._auto_backup_enabled = False
         self._backup_timer: Optional[Timer] = None
-        self._max_backups = 10
+        self._max_backups = 5
         self._backup_interval_hours = 6
         # Activar backups automáticos cada 6 horas (crear el primero inmediatamente)
         self.start_auto_backup(create_immediately=True)
@@ -55,59 +62,111 @@ class BackupService:
         ensure_dirs()
         self.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     
-    def create_full_backup(self, output_path: Optional[str] = None) -> Optional[str]:
+    def create_full_backup(
+        self,
+        output_path: Optional[str] = None,
+        password: Optional[str] = None,
+        is_auto: bool = False,
+    ) -> Optional[str]:
         """
         Crea un backup completo del sistema incluyendo:
         - Todos los archivos JSON de datos
         - Todos los documentos (PDFs, etc.)
         - Metadatos del sistema
         - Información de trazabilidad
-        
+
+        Si se indica contraseña (o is_auto y hay contraseña en configuración), el ZIP se cifra con AES.
+
         Args:
             output_path: Ruta donde guardar el backup. Si es None, se guarda en el directorio de backups.
-        
+            password: Contraseña para cifrar el backup. Si None y is_auto, se usa la de configuración.
+            is_auto: Si True, se usa la contraseña de backups automáticos de app_config si no se pasa password.
+
         Returns:
             Ruta del archivo de backup creado o None si hay error
         """
         try:
+            if is_auto and password is None:
+                try:
+                    from manager.app.services.app_config_service import app_config_service
+                    backup_config = app_config_service.get_backup_config()
+                    password = (backup_config.get("auto_backup_password") or "").strip() or None
+                except Exception as e:
+                    logger.debug("No se pudo obtener contraseña de auto-backup: %s", e)
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_filename = f"backup_completo_{timestamp}.zip"
-            
+
             if output_path:
                 backup_path = Path(output_path)
                 if backup_path.is_dir():
                     backup_path = backup_path / backup_filename
+                else:
+                    # Ruta escrita a mano: asumir que es directorio y crear si no existe
+                    backup_path.mkdir(parents=True, exist_ok=True)
+                    backup_path = backup_path / backup_filename
             else:
                 backup_path = self.BACKUP_DIR / backup_filename
-            
-            # Crear archivo ZIP
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # 1. Agregar todos los archivos JSON de datos
-                if self.DATA_DIR.exists():
-                    for file_path in self.DATA_DIR.glob("*.json"):
-                        zipf.write(file_path, f"data/{file_path.name}")
-                
-                # 2. Agregar directorios de documentos
-                for dir_name, dir_path in self.DOCUMENT_DIRS:
-                    if dir_path.exists() and dir_path.is_dir():
-                        for file_path in dir_path.rglob("*"):
-                            if file_path.is_file():
-                                arcname = f"{dir_name}/{file_path.relative_to(dir_path)}"
-                                zipf.write(file_path, arcname)
-                
-                # 3. Crear y agregar archivo de metadatos
-                metadata = self._create_metadata()
-                metadata_json = json.dumps(metadata, indent=2, ensure_ascii=False)
-                zipf.writestr("backup_metadata.json", metadata_json)
-            
+
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            use_encryption = bool(password and _HAS_PYZIPPER)
+
+            if use_encryption:
+                with pyzipper.AESZipFile(
+                    backup_path,
+                    "w",
+                    compression=pyzipper.ZIP_DEFLATED,
+                    encryption=pyzipper.WZ_AES,
+                ) as zipf:
+                    zipf.setpassword(password.encode("utf-8"))
+                    self._write_backup_contents(zipf)
+            else:
+                with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                    self._write_backup_contents(zipf)
+
+            # Copiar a carpeta en la nube si está configurada
+            self._copy_to_cloud_folder(backup_path)
+
             # Limpiar backups antiguos (solo si se guardó en el directorio de backups)
             if not output_path or Path(output_path).is_dir():
                 self._cleanup_old_backups()
-            
+
             return str(backup_path)
         except Exception as e:
             logger.exception("Error al crear backup completo: %s", e)
             return None
+
+    def _write_backup_contents(self, zipf) -> None:
+        """Escribe el contenido del backup en el ZipFile ya abierto (estándar o pyzipper)."""
+        if self.DATA_DIR.exists():
+            for file_path in self.DATA_DIR.glob("*.json"):
+                zipf.write(file_path, f"data/{file_path.name}")
+        for dir_name, dir_path in self.DOCUMENT_DIRS:
+            if dir_path.exists() and dir_path.is_dir():
+                for file_path in dir_path.rglob("*"):
+                    if file_path.is_file():
+                        arcname = f"{dir_name}/{file_path.relative_to(dir_path)}"
+                        zipf.write(file_path, arcname)
+        metadata = self._create_metadata()
+        metadata_json = json.dumps(metadata, indent=2, ensure_ascii=False)
+        zipf.writestr("backup_metadata.json", metadata_json)
+
+    def _copy_to_cloud_folder(self, backup_path: Path) -> None:
+        """Si hay carpeta en la nube configurada, copia el backup allí."""
+        try:
+            from manager.app.services.app_config_service import app_config_service
+            backup_config = app_config_service.get_backup_config()
+            cloud_folder = (backup_config.get("cloud_folder") or "").strip()
+            if not cloud_folder:
+                return
+            dest_dir = Path(cloud_folder)
+            if not dest_dir.is_dir():
+                dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_file = dest_dir / backup_path.name
+            shutil.copy2(backup_path, dest_file)
+            logger.info("Backup copiado a carpeta en la nube: %s", dest_file)
+        except Exception as e:
+            logger.warning("No se pudo copiar el backup a la carpeta en la nube: %s", e)
     
     def _create_metadata(self) -> Dict[str, Any]:
         """Crea metadatos del backup para trazabilidad"""
@@ -200,14 +259,35 @@ class BackupService:
         
         return stats
     
-    def restore_from_backup(self, backup_path: str, confirm_callback: Optional[Callable] = None) -> Dict[str, Any]:
+    def _open_backup_zip(self, backup_file: Path, password: Optional[str] = None):
+        """Abre un archivo de backup (ZIP normal o cifrado). Retorna un context manager."""
+        if password and _HAS_PYZIPPER:
+            zf = pyzipper.AESZipFile(backup_file, "r")
+            zf.setpassword(password.encode("utf-8"))
+            return zf
+        try:
+            return zipfile.ZipFile(backup_file, "r")
+        except Exception:
+            if password and _HAS_PYZIPPER:
+                zf = pyzipper.AESZipFile(backup_file, "r")
+                zf.setpassword(password.encode("utf-8"))
+                return zf
+            raise
+
+    def restore_from_backup(
+        self,
+        backup_path: str,
+        confirm_callback: Optional[Callable] = None,
+        password: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Restaura el sistema desde un archivo de backup
-        
+        Restaura el sistema desde un archivo de backup.
+
         Args:
             backup_path: Ruta al archivo de backup
             confirm_callback: Función callback para confirmar antes de restaurar
-        
+            password: Contraseña si el backup está cifrado
+
         Returns:
             Dict con resultado de la restauración
         """
@@ -215,74 +295,61 @@ class BackupService:
             "success": False,
             "message": "",
             "errors": [],
-            "restored_files": []
+            "restored_files": [],
         }
-        
+
         try:
             backup_file = Path(backup_path)
             if not backup_file.exists():
                 result["message"] = f"El archivo de backup no existe: {backup_path}"
                 return result
-            
-            if not backup_file.suffix == ".zip":
+
+            if backup_file.suffix != ".zip":
                 result["message"] = "El archivo no es un backup válido (debe ser .zip)"
                 return result
-            
-            # Verificar que es un backup válido
-            metadata = self._extract_metadata(backup_file)
+
+            metadata = self._extract_metadata(backup_file, password=password)
             if not metadata:
-                result["message"] = "El archivo no contiene metadatos válidos de backup"
+                result["message"] = "El archivo no contiene metadatos válidos de backup. Si está cifrado, use la contraseña correcta."
                 return result
-            
-            # Confirmar restauración si hay callback
-            if confirm_callback:
-                if not confirm_callback(metadata):
-                    result["message"] = "Restauración cancelada por el usuario"
-                    return result
-            
-            # Crear backup de seguridad antes de restaurar
+
+            if confirm_callback and not confirm_callback(metadata):
+                result["message"] = "Restauración cancelada por el usuario"
+                return result
+
             safety_backup = self.create_full_backup()
             if safety_backup:
                 result["safety_backup"] = safety_backup
-            
-            # Extraer y restaurar archivos
-            with zipfile.ZipFile(backup_file, 'r') as zipf:
-                # Restaurar archivos de datos
+
+            with self._open_backup_zip(backup_file, password=password) as zipf:
                 for member in zipf.namelist():
+                    if member == "backup_metadata.json":
+                        continue
                     if member.startswith("data/"):
-                        # Extraer archivo de datos
                         file_name = member.replace("data/", "")
                         target_path = self.DATA_DIR / file_name
                         target_path.parent.mkdir(parents=True, exist_ok=True)
-                        
                         with zipf.open(member) as source:
-                            with open(target_path, 'wb') as target:
+                            with open(target_path, "wb") as target:
                                 target.write(source.read())
-                        
                         result["restored_files"].append(str(target_path))
-                    
                     elif any(member.startswith(f"{d[0]}/") for d in self.DOCUMENT_DIRS):
-                        # Extraer documentos manteniendo estructura
                         target_path = self.BASE_DIR / member
                         target_path.parent.mkdir(parents=True, exist_ok=True)
-                        
                         with zipf.open(member) as source:
-                            with open(target_path, 'wb') as target:
+                            with open(target_path, "wb") as target:
                                 target.write(source.read())
-                        
                         result["restored_files"].append(str(target_path))
-            
+
             result["success"] = True
             result["message"] = f"Restauración completada exitosamente. {len(result['restored_files'])} archivos restaurados."
             result["metadata"] = metadata
-            
-            # Recargar servicios después de restaurar
             self._reload_services()
-            
+
         except Exception as e:
             result["message"] = f"Error durante la restauración: {str(e)}"
             result["errors"].append(str(e))
-        
+
         return result
     
     def _reload_services(self):
@@ -310,56 +377,44 @@ class BackupService:
         except Exception as e:
             logger.warning("No se pudieron recargar todos los servicios: %s. Se recomienda reiniciar la aplicación.", e)
     
-    def _extract_metadata(self, backup_file: Path) -> Optional[Dict[str, Any]]:
-        """Extrae metadatos de un archivo de backup"""
+    def _extract_metadata(self, backup_file: Path, password: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Extrae metadatos de un archivo de backup. Si está cifrado, se debe pasar password."""
         try:
-            with zipfile.ZipFile(backup_file, 'r') as zipf:
+            with self._open_backup_zip(backup_file, password=password) as zipf:
                 if "backup_metadata.json" in zipf.namelist():
-                    metadata_json = zipf.read("backup_metadata.json").decode('utf-8')
+                    metadata_json = zipf.read("backup_metadata.json").decode("utf-8")
                     return json.loads(metadata_json)
         except Exception as e:
-            logger.warning("Error al extraer metadatos: %s", e)
+            logger.debug("Error al extraer metadatos (puede ser backup cifrado): %s", e)
         return None
     
-    def validate_backup(self, backup_path: str) -> Dict[str, Any]:
+    def validate_backup(self, backup_path: str, password: Optional[str] = None) -> Dict[str, Any]:
         """
-        Valida que un archivo de backup sea válido
-        
+        Valida que un archivo de backup sea válido. Si está cifrado, indicar password.
+
         Returns:
             Dict con información de validación
         """
-        result = {
-            "valid": False,
-            "message": "",
-            "metadata": None,
-            "files_count": 0
-        }
-        
+        result = {"valid": False, "message": "", "metadata": None, "files_count": 0}
         try:
             backup_file = Path(backup_path)
             if not backup_file.exists():
                 result["message"] = "El archivo no existe"
                 return result
-            
-            if not backup_file.suffix == ".zip":
+            if backup_file.suffix != ".zip":
                 result["message"] = "El archivo no es un ZIP válido"
                 return result
-            
-            with zipfile.ZipFile(backup_file, 'r') as zipf:
+            with self._open_backup_zip(backup_file, password=password) as zipf:
                 result["files_count"] = len(zipf.namelist())
-                
-                # Verificar metadatos
-                metadata = self._extract_metadata(backup_file)
-                if metadata:
-                    result["valid"] = True
-                    result["metadata"] = metadata
-                    result["message"] = f"Backup válido creado el {metadata.get('created_at', 'desconocido')}"
-                else:
-                    result["message"] = "El backup no contiene metadatos válidos"
-        
+            metadata = self._extract_metadata(backup_file, password=password)
+            if metadata:
+                result["valid"] = True
+                result["metadata"] = metadata
+                result["message"] = f"Backup válido creado el {metadata.get('created_at', 'desconocido')}"
+            else:
+                result["message"] = "El backup no contiene metadatos válidos o requiere contraseña."
         except Exception as e:
             result["message"] = f"Error al validar backup: {str(e)}"
-        
         return result
     
     def _cleanup_old_backups(self):
@@ -432,10 +487,10 @@ class BackupService:
         if not self._auto_backup_enabled:
             return
         
-        # Crear backup ahora si se indica
+        # Crear backup ahora si se indica (is_auto=True para usar contraseña de configuración)
         if create_now:
             try:
-                self.create_full_backup()
+                self.create_full_backup(is_auto=True)
             except Exception as e:
                 logger.warning("Error al crear backup automático: %s", e)
         

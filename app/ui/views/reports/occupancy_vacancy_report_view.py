@@ -31,73 +31,44 @@ class OccupancyVacancyReportView(tk.Frame):
     def _create_layout(self):
         """Crea el layout principal del reporte"""
         cb = self._content_bg
-        fg = theme_manager.themes[theme_manager.current_theme].get("text_primary", "#1f2937")
+        colors = get_module_colors(self._module_context)
 
-        # Header
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
-        
-        title = tk.Label(header, text="Ocupación y Vacancia", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg)
-        title.pack(side="left")
-        
-        # Botones de navegación
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame)
-        
-        # Solo métricas generales (sin gráfica aquí)
+        # Métricas
         metrics_frame = tk.Frame(self, bg=cb)
-        metrics_frame.pack(fill="x", padx=Spacing.MD, pady=(0, Spacing.MD))
+        metrics_frame.pack(fill="x", padx=Spacing.MD, pady=(Spacing.MD, Spacing.MD))
         self.metrics_container = tk.Frame(metrics_frame, bg=cb)
         self.metrics_container.pack(fill="x", expand=True)
-        
-        # Fila: tabla a la izquierda, gráfica a la derecha
-        table_chart_row = tk.Frame(self, bg=cb)
-        table_chart_row.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.MD))
-        
-        # Contenedor de la tabla: encabezado fijo + cuerpo con scroll (grid para alinear ancho)
-        table_wrapper = tk.Frame(table_chart_row, bg=cb)
-        table_wrapper.pack(side="left", fill="both", expand=True)
-        table_wrapper.grid_columnconfigure(0, weight=1)
-        table_wrapper.grid_columnconfigure(1, weight=0)
-        table_wrapper.grid_rowconfigure(1, weight=1)
 
-        # Encabezado de la tabla (fijo, mismo ancho que el canvas)
-        self.table_header_frame = tk.Frame(table_wrapper, bg=cb)
-        self.table_header_frame.grid(row=0, column=0, sticky="ew")
+        # Área de tabla con toolbar integrado
+        table_area = tk.Frame(self, bg=cb)
+        table_area.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.MD))
 
-        # Área scrolleable solo con las filas de datos
-        scrollable_area = tk.Frame(table_wrapper, bg=cb)
-        scrollable_area.grid(row=1, column=0, sticky="nsew")
-        canvas = tk.Canvas(scrollable_area, bg=cb, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(table_wrapper, orient="vertical", command=canvas.yview)
-        self.content_frame = tk.Frame(canvas, bg=cb)
+        # Contenedor de la tabla (primero, para que ocupe el espacio principal)
+        self.content_frame = tk.Frame(table_area, bg=cb)
+        self.content_frame.pack(fill="both", expand=True)
 
-        canvas_window = canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
-        self.content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        def _on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-        canvas.bind("<Configure>", _on_canvas_configure)
-        canvas.configure(yscrollcommand=scrollbar.set)
+        # Toolbar pegado debajo de la tabla
+        toolbar = tk.Frame(table_area, bg=cb)
+        toolbar.pack(fill="x", pady=(4, 0))
+        from manager.app.ui.components.modern_widgets import create_rounded_button
+        btn_export = create_rounded_button(
+            toolbar,
+            text="📄 Exportar",
+            bg_color=colors["primary"],
+            fg_color="white",
+            hover_bg=colors["hover"],
+            hover_fg="white",
+            command=self._show_export_dialog,
+            padx=14,
+            pady=6,
+            radius=4,
+            border_color=colors["primary"],
+        )
+        btn_export.pack(side="right")
 
-        scrollable_area.grid_columnconfigure(0, weight=1)
-        scrollable_area.grid_rowconfigure(0, weight=1)
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=1, column=1, sticky="ns")
-        
-        # Gráfica de torta a la derecha de la tabla
-        self.chart_frame = tk.Frame(table_chart_row, bg=cb)
-        self.chart_frame.pack(side="right", padx=(Spacing.LG, 0), fill="y")
-        
-        # Bind mousewheel solo cuando el evento es de esta ventana (no del modal de exportar)
-        def _on_mousewheel(event):
-            try:
-                if event.widget.winfo_toplevel() != self.winfo_toplevel():
-                    return
-            except tk.TclError:
-                return
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Reservados
+        self.chart_frame = tk.Frame(self, bg=cb)
+        self.table_header_frame = tk.Frame(self, bg=cb)
     
     def _load_data(self):
         """Carga y procesa los datos de ocupación"""
@@ -270,12 +241,15 @@ class OccupancyVacancyReportView(tk.Frame):
             ).pack(pady=(0, Spacing.MD))
     
     def _show_details(self):
-        """Muestra los detalles por apartamento"""
+        """Muestra los detalles por apartamento en un Treeview."""
         for widget in self.content_frame.winfo_children():
             widget.destroy()
-        
+        for widget in self.table_header_frame.winfo_children():
+            widget.destroy()
+
+        cb = getattr(self, "_content_bg", "#f5f5f5")
+
         if not self.apartment_data:
-            cb = getattr(self, "_content_bg", "#f5f5f5")
             tk.Label(
                 self.content_frame,
                 text="No hay apartamentos registrados.",
@@ -285,135 +259,109 @@ class OccupancyVacancyReportView(tk.Frame):
             ).pack(pady=Spacing.XL)
             return
 
-        cb = getattr(self, "_content_bg", "#f5f5f5")
-        headers = ["Unidad", "Estado", "Inquilino", "Arriendo", "Piso", "Tipo"]
-        # Encabezado y filas: naranja si desde Reportes, morado si desde Administración
+        # Colores según contexto
         if self._module_context == "reportes":
-            header_bg = get_module_colors("reportes")["hover"]  # #ea580c
-            row_bg_even = get_module_colors("reportes")["light"]  # #fed7aa
-            row_bg_odd = "#ffedd5"  # orange-100
+            header_bg = get_module_colors("reportes")["hover"]
         else:
-            header_bg = "#e9d5ff"
-            row_bg_even = "#f3e8ff"
-            row_bg_odd = "#ede9fe"
+            header_bg = "#7c3aed"
 
-        # Encabezado fijo (no hace scroll)
-        for widget in self.table_header_frame.winfo_children():
-            widget.destroy()
-        for col, header in enumerate(headers):
-            tk.Label(
-                self.table_header_frame,
-                text=header,
-                font=("Segoe UI", 10, "bold"),
-                bg=header_bg,
-                fg="white" if self._module_context == "reportes" else "#333",
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-            ).grid(row=0, column=col, sticky="ew", padx=1, pady=1)
-        for c in range(6):
-            self.table_header_frame.grid_columnconfigure(c, weight=[2, 1, 2, 1, 1, 1][c])
+        # Estilo del Treeview con cuadrículas
+        style = ttk.Style()
+        style.theme_use("clam")
+        tv_style = "OccReport.Treeview"
+        style.configure(tv_style,
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground="#1f2937",
+            rowheight=30,
+            font=("Segoe UI", 9),
+            relief="flat",
+            borderwidth=0,
+            # líneas entre filas simuladas con rowheight + separador
+        )
+        style.configure(f"{tv_style}.Heading",
+            background=header_bg,
+            foreground="white",
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+            padding=(4, 7),
+            borderwidth=0,
+        )
+        style.map(tv_style, background=[("selected", "#c4b5fd")])
+        style.map(f"{tv_style}.Heading", background=[("active", header_bg)])
+        # Separador entre filas: usar layout con línea inferior
+        style.layout(tv_style, [
+            ("Treeview.treearea", {"sticky": "nswe"}),
+        ])
 
-        # Solo filas de datos dentro del área con scroll
-        table_frame = tk.Frame(self.content_frame, bg=cb)
-        table_frame.pack(fill="x", pady=(0, Spacing.MD))
-        table_frame.grid_columnconfigure(0, weight=2)
-        table_frame.grid_columnconfigure(1, weight=1)
-        table_frame.grid_columnconfigure(2, weight=2)
-        table_frame.grid_columnconfigure(3, weight=1)
-        table_frame.grid_columnconfigure(4, weight=1)
-        table_frame.grid_columnconfigure(5, weight=1)
+        # Frame exterior con borde y fondo de cuadrícula (simula líneas entre columnas)
+        tree_border = tk.Frame(self.content_frame, bg="#d1d5db", bd=1, relief="solid")
+        tree_border.pack(fill="both", expand=True)
 
-        for row_idx, apt_data in enumerate(sorted(self.apartment_data, key=lambda x: (
+        columns = ("unidad", "estado", "inquilino", "arriendo", "piso", "tipo")
+        tree = ttk.Treeview(
+            tree_border,
+            columns=columns,
+            show="headings",
+            style=tv_style,
+            selectmode="browse",
+        )
+
+        col_config = [
+            ("unidad",    "Unidad",    150, "center"),
+            ("estado",    "Estado",    110, "center"),
+            ("inquilino", "Inquilino", 170, "center"),
+            ("arriendo",  "Arriendo",  110, "center"),
+            ("piso",      "Piso",       60, "center"),
+            ("tipo",      "Tipo",      160, "center"),
+        ]
+        for col_id, heading, width, anchor in col_config:
+            tree.heading(col_id, text=heading, anchor="center")
+            tree.column(col_id, width=width, minwidth=width, anchor=anchor, stretch=True)
+
+        # Tags por estado con fondo de color + separador de fila (borde inferior simulado)
+        tree.tag_configure("ocupado",       background="#d1fae5", foreground="#065f46")
+        tree.tag_configure("disponible",    background="#fef3c7", foreground="#92400e")
+        tree.tag_configure("mantenimiento", background="#ede9fe", foreground="#4c1d95")
+        tree.tag_configure("default",       background="#f9fafb", foreground="#1f2937")
+        # Filas alternas para reforzar separación visual
+        tree.tag_configure("ocupado_alt",       background="#a7f3d0", foreground="#065f46")
+        tree.tag_configure("disponible_alt",    background="#fde68a", foreground="#92400e")
+        tree.tag_configure("mantenimiento_alt", background="#ddd6fe", foreground="#4c1d95")
+        tree.tag_configure("default_alt",       background="#f3f4f6", foreground="#1f2937")
+
+        sorted_data = sorted(self.apartment_data, key=lambda x: (
             x.get("unit_type") != "Apartamento Estándar",
             int(x.get("floor", 0)) if str(x.get("floor", "0")).isdigit() else 999,
-            x.get("title")
-        ))):
-            bg_color = row_bg_even if row_idx % 2 == 0 else row_bg_odd
-            status = apt_data.get("status", "Disponible")
-            status_colors = {
-                "Ocupado": "#10b981",
-                "Disponible": "#f59e0b",
-                "En Mantenimiento": "#6366f1"
-            }
-            status_color = status_colors.get(status, "#666")
+            x.get("title", ""),
+        ))
 
-            tk.Label(
-                table_frame,
-                text=apt_data.get("title", ""),
-                font=("Segoe UI", 9, "bold"),
-                bg=bg_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="w"
-            ).grid(row=row_idx, column=0, sticky="ew", padx=1, pady=1)
-
-            tk.Label(
-                table_frame,
-                text=status,
-                font=("Segoe UI", 9, "bold"),
-                bg=bg_color,
-                fg=status_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="w"
-            ).grid(row=row_idx, column=1, sticky="ew", padx=1, pady=1)
-            
-            tenant_name = apt_data.get("tenant") or "---"
-            tk.Label(
-                table_frame,
-                text=tenant_name,
-                font=("Segoe UI", 9),
-                bg=bg_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="w"
-            ).grid(row=row_idx, column=2, sticky="ew", padx=1, pady=1)
-            
-            rent = apt_data.get("rent", 0)
+        for idx, apt in enumerate(sorted_data):
+            rent = apt.get("rent", 0)
             rent_display = f"${float(rent):,.0f}" if rent else "---"
-            tk.Label(
-                table_frame,
-                text=rent_display,
-                font=("Segoe UI", 9),
-                bg=bg_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="e"
-            ).grid(row=row_idx, column=3, sticky="ew", padx=1, pady=1)
-            
-            tk.Label(
-                table_frame,
-                text=str(apt_data.get("floor", "")),
-                font=("Segoe UI", 9),
-                bg=bg_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="w"
-            ).grid(row=row_idx, column=4, sticky="ew", padx=1, pady=1)
-            
-            tk.Label(
-                table_frame,
-                text=apt_data.get("unit_type", ""),
-                font=("Segoe UI", 9),
-                bg=bg_color,
-                relief="solid",
-                bd=1,
-                padx=Spacing.SM,
-                pady=Spacing.XS,
-                anchor="w"
-            ).grid(row=row_idx, column=5, sticky="ew", padx=1, pady=1)
+            status = apt.get("status", "Disponible")
+            alt = "_alt" if idx % 2 == 1 else ""
+            if status == "Ocupado":
+                tag = f"ocupado{alt}"
+            elif status == "Disponible":
+                tag = f"disponible{alt}"
+            elif status == "En Mantenimiento":
+                tag = f"mantenimiento{alt}"
+            else:
+                tag = f"default{alt}"
+            tree.insert("", "end", tags=(tag,), values=(
+                apt.get("title", ""),
+                status,
+                apt.get("tenant") or "---",
+                rent_display,
+                str(apt.get("floor", "")),
+                apt.get("unit_type", ""),
+            ))
+
+        scrollbar = ttk.Scrollbar(tree_border, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
     
     def _get_report_preview_text(self) -> str:
         """Genera el texto de vista previa del informe (mismo contenido que el TXT exportado)."""

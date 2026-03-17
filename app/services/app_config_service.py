@@ -36,7 +36,9 @@ class AppConfigService:
             "backup": {
                 "auto_backup_enabled": True,
                 "interval_hours": 6,
-                "max_backups": 10
+                "max_backups": 10,
+                "auto_backup_password": "",
+                "cloud_folder": ""
             },
             "license": {
                 "first_run_date": None,
@@ -137,7 +139,9 @@ class AppConfigService:
         return self.config.get("backup", {
             "auto_backup_enabled": True,
             "interval_hours": 6,
-            "max_backups": 10
+            "max_backups": 10,
+            "auto_backup_password": "",
+            "cloud_folder": ""
         })
     
     def set_backup_config(self, backup_config: Dict[str, Any]) -> bool:

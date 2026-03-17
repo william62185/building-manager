@@ -64,8 +64,8 @@ class ThemeManager:
                 "sidebar_hover": "#2d4a6f",
                 "sidebar_fg": "#ffffff",
                 "sidebar_fg_secondary": "#94a3b8",
-                "content_bg": "#d0ca98",   # oliva más vivo (misma fuerza que el título, sin palidez)
-                "header_bg": "#b86a5c",    # terracotta con misma viveza/saturación que el navy del menú
+                "content_bg": "#8395a7",   # oliva más vivo (misma fuerza que el título, sin palidez)
+                "header_bg": "#733E24",    # fondo de la barra del título (antes terracotta #b86a5c)
                 
                 # Textos
                 "text_primary": Colors.TEXT_PRIMARY,

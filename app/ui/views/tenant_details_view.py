@@ -135,14 +135,16 @@ class TenantDetailsView(tk.Frame):
             "al_dia": "success",
             "moroso": "danger",
             "inactivo": "neutral",
-            "pendiente_registro": "warning"
+            "pendiente_registro": "warning",
+            "pendiente_pago": "warning"
         }
         
         status_texts = {
             "al_dia": "Al día",
             "moroso": "Moroso",
             "inactivo": "Inactivo",
-            "pendiente_registro": "Pendiente Registro"
+            "pendiente_registro": "Pendiente Registro",
+            "pendiente_pago": "Pendiente de pago"
         }
         
         status = self.tenant_data.get("estado_pago", "al_dia")
@@ -280,18 +282,26 @@ class TenantDetailsView(tk.Frame):
             except Exception:
                 deposito_display = str(deposito)
         
+        # Estado de pago desde lógica integral (get_arrears_info) para consistencia con lista
+        tenant_id = self.tenant_data.get("id")
+        estado_pago_display = self.tenant_data.get("estado_pago", "N/A").replace("_", " ").title()
+        if tenant_id:
+            arrears_info = tenant_service.get_arrears_info(tenant_id)
+            if arrears_info:
+                raw = arrears_info.get("estado_pago") or "N/A"
+                estado_pago_display = {"pendiente_pago": "Pendiente de pago"}.get(raw, raw.replace("_", " ").title())
         housing_data = [
             ("Apartamento", apt_display),
             ("Valor arriendo", valor_arriendo_display),
             ("Depósito", deposito_display),
             ("Fecha de ingreso", self.tenant_data.get("fecha_ingreso", "No registrada")),
-            ("Estado de pago", self.tenant_data.get("estado_pago", "N/A").replace("_", " ").title())
+            ("Estado de pago", estado_pago_display)
         ]
         for label, value in housing_data:
             self._create_info_row(section.content_frame, label, value)
     
     def _create_payment_info_section(self, parent):
-        """Crea la sección de información de pagos"""
+        """Crea la sección de información de pagos (días de mora con lógica integral del servicio)."""
         section = ModernCard(parent, title="Información de Pagos", bg=self._content_bg)
         section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
         section.content_frame.configure(bg=self._content_bg)
@@ -299,54 +309,44 @@ class TenantDetailsView(tk.Frame):
             w.configure(bg=self._content_bg)
         section.content_frame.pack_configure(pady=(0, 0))
 
-        # Calcular información de pagos basándose en datos reales
         tenant_id = self.tenant_data.get("id")
         ultimo_pago_display = "No registrado"
-        proximo_vencimiento_display = "No calculable"
         dias_mora_display = "0"
-        
+
         if tenant_id:
-            # Recargar datos de pagos para asegurar que estén actualizados
             payment_service._load_data()
-            
-            # Obtener todos los pagos del inquilino
             payments = payment_service.get_payments_by_tenant(tenant_id)
-            
+
+            # Días de mora y estado desde lógica integral (get_arrears_info)
+            arrears_info = tenant_service.get_arrears_info(tenant_id)
+            if arrears_info and arrears_info.get("estado_pago") == "moroso":
+                meses_mora = arrears_info.get("meses_mora", 0)
+                dias_del_periodo = arrears_info.get("dias_del_periodo_actual", 0)
+                if meses_mora == 1:
+                    dias_mora_display = f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}"
+                else:
+                    # Meses completos en mora + días del período actual
+                    meses_completos = meses_mora - 1
+                    partes = []
+                    if meses_completos > 0:
+                        partes.append(f"{meses_completos} mes{'es' if meses_completos != 1 else ''}")
+                    if dias_del_periodo > 0:
+                        partes.append(f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}")
+                    dias_mora_display = " y ".join(partes) if partes else "0"
+            elif arrears_info:
+                dias_mora_display = "0"
+
             if payments:
-                # Ordenar pagos por fecha (más reciente primero)
                 try:
                     payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
                     ultimo_pago = payments[0]
                     fecha_ultimo_pago_str = ultimo_pago.get("fecha_pago", "")
                     ultimo_pago_display = fecha_ultimo_pago_str if fecha_ultimo_pago_str else "No registrado"
-                    
-                    # Calcular días de mora basándose en el último pago
-                    try:
-                        fecha_ultimo_pago = datetime.strptime(fecha_ultimo_pago_str, "%d/%m/%Y")
-                        fecha_actual = datetime.now()
-                        dias_desde_ultimo_pago = (fecha_actual - fecha_ultimo_pago).days
-                        
-                        # Si el último pago fue hace más de 30 días, hay mora
-                        if dias_desde_ultimo_pago > 30:
-                            dias_mora_display = str(dias_desde_ultimo_pago - 30)
-                        else:
-                            dias_mora_display = "0"
-                            
-                        # Calcular próximo vencimiento (30 días después del último pago)
-                        try:
-                            proximo_vencimiento = fecha_ultimo_pago + timedelta(days=30)
-                            proximo_vencimiento_display = proximo_vencimiento.strftime("%d/%m/%Y")
-                        except:
-                            proximo_vencimiento_display = "No calculable"
-                    except Exception as e:
-                        print(f"Error al calcular días de mora: {str(e)}")
-                        dias_mora_display = "0"
-                except Exception as e:
-                    print(f"Error al procesar pagos: {str(e)}")
-        
+                except Exception:
+                    pass
+
         payment_data = [
             ("Último pago", ultimo_pago_display),
-            ("Próximo vencimiento", proximo_vencimiento_display),
             ("Días de mora", dias_mora_display)
         ]
         for label, value in payment_data:
@@ -1415,128 +1415,44 @@ class TenantDetailsView(tk.Frame):
             messagebox.showerror("❌ Error al enviar", msg)
     
     def _generate_payment_receipt(self, payment: Dict[str, Any], parent_window=None):
-        """Genera el recibo PDF de un pago específico"""
+        """Genera el recibo PDF de un pago específico (diseño profesional unificado)."""
         import os
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-        from datetime import datetime
-        
+        from manager.app.receipt_pdf import generate_payment_receipt_pdf
+
         try:
-            # Obtener datos del inquilino
             tenant = self.tenant_data
-            
             ensure_dirs()
             folder_name = get_tenant_document_folder_name(tenant)
             tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
             tenant_dir.mkdir(parents=True, exist_ok=True)
             fecha = payment.get("fecha_pago", "").replace("/", "-")
             filepath = str(tenant_dir / f"recibo_{fecha}.pdf")
-            
-            # Verificar si el archivo existe y está bloqueado
+
             if os.path.exists(filepath):
                 try:
-                    # Intentar abrir el archivo para verificar si está bloqueado
                     test_file = open(filepath, 'r+b')
                     test_file.close()
-                    # Si no está bloqueado, sobrescribiremos el archivo (comportamiento normal)
-                    # No hacemos nada, simplemente usamos el mismo filepath
                 except (IOError, PermissionError):
-                    # El archivo está bloqueado (probablemente abierto en un visor PDF)
-                    # Mostrar mensaje amigable al usuario
                     messagebox.showwarning(
                         "Archivo en uso",
                         f"El recibo ya existe y está abierto en otro programa.\n\n"
                         f"Por favor, cierre el archivo:\n{filepath}\n\n"
                         f"Luego intente generar el recibo nuevamente."
                     )
-                    return  # No generar nuevo PDF, simplemente retornar
-            
-            # Obtener el número real del apartamento
-            apt_display = "N/A"
-            apt_id = tenant.get('apartamento', '')
-            if apt_id:
-                try:
-                    apt = apartment_service.get_apartment_by_id(int(apt_id))
-                    if apt and 'number' in apt:
-                        apt_display = apt['number']
-                    else:
-                        apt_display = str(apt_id)
-                except Exception:
-                    apt_display = str(apt_id)
-            
-            # Generar PDF
-            c = canvas.Canvas(filepath, pagesize=letter)
-            width, height = letter
-            
-            # Logo placeholder
-            c.setFillColorRGB(0.2, 0.4, 0.7)
-            c.rect(40, height-80, 80, 40, fill=1)
-            c.setFillColorRGB(1,1,1)
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(50, height-60, "LOGO")
-            
-            # Encabezado
-            c.setFillColorRGB(0,0,0)
-            c.setFont("Helvetica-Bold", 18)
-            c.drawString(140, height-60, "RECIBO DE PAGO DE ARRENDAMIENTO")
-            c.setFont("Helvetica", 10)
-            c.drawString(140, height-80, f"Emitido: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-            
-            # Datos del inquilino y pago
-            y = height-120
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(40, y, "Datos del Inquilino:")
-            c.setFont("Helvetica", 11)
-            y -= 18
-            c.drawString(50, y, f"Nombre: {payment.get('nombre_inquilino', tenant.get('nombre', ''))}")
-            y -= 15
-            c.drawString(50, y, f"Apartamento: {apt_display}")
-            y -= 15
-            c.drawString(50, y, f"Documento: {tenant.get('numero_documento', 'N/A')}")
-            y -= 25
-            
-            # Detalles del pago
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(40, y, "Detalles del Pago:")
-            c.setFont("Helvetica", 11)
-            y -= 18
-            c.drawString(50, y, f"Fecha de pago: {payment.get('fecha_pago', '')}")
-            y -= 15
-            c.drawString(50, y, f"Monto: ${payment.get('monto', 0):,.2f}")
-            y -= 15
-            c.drawString(50, y, f"Método: {payment.get('metodo', '')}")
-            y -= 15
-            obs = payment.get('observaciones', '')
-            if obs:
-                c.drawString(50, y, f"Observaciones: {obs}")
-            else:
-                c.drawString(50, y, "Observaciones: -")
-            y -= 30
-            
-            # Certificación
-            c.setFont("Helvetica-Oblique", 10)
-            c.drawString(40, y, "Este recibo certifica que el inquilino ha realizado el pago correspondiente al arriendo en la fecha indicada.")
-            y -= 40
-            
-            # Firmas
-            c.setFont("Helvetica", 10)
-            c.drawString(40, y, "Firma administrador: _____________________________")
-            c.drawString(320, y, "Firma inquilino: _____________________________")
-            
-            c.save()
-            
-            # Cerrar ventana de selección si está abierta
+                    return
+
+            generate_payment_receipt_pdf(payment, tenant, filepath)
+
             if parent_window:
                 parent_window.destroy()
-            
-            # Mostrar diálogo de éxito con ruta copiable y opción de enviar por email
+
             self._show_pdf_success_dialog(
-                filepath, 
-                title="Recibo generado", 
+                filepath,
+                title="Recibo generado",
                 message="Recibo PDF generado exitosamente:",
-                payment_data=payment  # Pasar datos del pago para enviar por email
+                payment_data=payment
             )
-            
+
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo generar el recibo: {str(e)}")
             import traceback
@@ -1953,7 +1869,45 @@ class TenantDetailsView(tk.Frame):
         from datetime import datetime
 
         ensure_dirs()
-        tenant = self.tenant_data
+        tenant = dict(self.tenant_data)
+        tenant_id = tenant.get("id")
+        # Rellenar datos de pagos/mora desde el servicio para coherencia con la pantalla
+        if tenant_id:
+            payment_service._load_data()
+            payments = payment_service.get_payments_by_tenant(tenant_id)
+            if payments:
+                try:
+                    payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
+                    tenant["ultimo_pago"] = payments[0].get("fecha_pago", "N/A")
+                except Exception:
+                    tenant["ultimo_pago"] = "N/A"
+            else:
+                tenant["ultimo_pago"] = "N/A"
+            arrears_info = tenant_service.get_arrears_info(tenant_id)
+            if arrears_info:
+                raw_estado = arrears_info.get("estado_pago") or ""
+                tenant["estado_pago"] = {"pendiente_pago": "Pendiente de pago"}.get(raw_estado, raw_estado.replace("_", " ").title())
+                if arrears_info.get("estado_pago") == "moroso":
+                    meses_mora = arrears_info.get("meses_mora", 0)
+                    dias_del_periodo = arrears_info.get("dias_del_periodo_actual", 0)
+                    if meses_mora == 1:
+                        tenant["dias_mora"] = f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}"
+                    else:
+                        meses_completos = meses_mora - 1
+                        partes = []
+                        if meses_completos > 0:
+                            partes.append(f"{meses_completos} mes{'es' if meses_completos != 1 else ''}")
+                        if dias_del_periodo > 0:
+                            partes.append(f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}")
+                        tenant["dias_mora"] = " y ".join(partes) if partes else "0"
+                else:
+                    tenant["dias_mora"] = "0"
+            else:
+                tenant["dias_mora"] = "0"
+        else:
+            tenant.setdefault("ultimo_pago", "N/A")
+            tenant.setdefault("dias_mora", "0")
+
         folder_name = get_tenant_document_folder_name(tenant)
         tenant_dir = DOCUMENTOS_INQUILINOS_DIR / folder_name
         tenant_dir.mkdir(parents=True, exist_ok=True)
@@ -1994,7 +1948,7 @@ class TenantDetailsView(tk.Frame):
             try:
                 deposito_num = float(deposito)
                 deposito_display = f"${deposito_num:,.0f}"
-            except:
+            except Exception:
                 deposito_display = str(deposito)
         c.drawString(50, y, f"Depósito: {deposito_display}")
         y -= 15
@@ -2015,8 +1969,6 @@ class TenantDetailsView(tk.Frame):
         c.setFont("Helvetica", 11)
         y -= 18
         c.drawString(50, y, f"Último pago: {tenant.get('ultimo_pago', 'N/A')}")
-        y -= 15
-        c.drawString(50, y, f"Próximo vencimiento: {tenant.get('proximo_vencimiento', 'N/A')}")
         y -= 15
         c.drawString(50, y, f"Días de mora: {tenant.get('dias_mora', '0')}")
         y -= 25

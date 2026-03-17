@@ -4,9 +4,10 @@ Permite configurar las credenciales SMTP para envío de emails
 """
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, filedialog
 from typing import Callable
 import os
+import webbrowser
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
@@ -35,6 +36,8 @@ class SettingsView(tk.Frame):
         self.auto_backup_var = tk.BooleanVar(value=self.backup_config.get("auto_backup_enabled", True))
         self.backup_interval_var = tk.IntVar(value=self.backup_config.get("interval_hours", 6))
         self.max_backups_var = tk.IntVar(value=self.backup_config.get("max_backups", 10))
+        self.auto_backup_password_var = tk.StringVar(value=self.backup_config.get("auto_backup_password", "") or "")
+        self.cloud_folder_var = tk.StringVar(value=self.backup_config.get("cloud_folder", "") or "")
 
         # Modo desarrollador (para herramientas de prueba)
         self._dev_mode = os.environ.get("BM_DEV_MODE", "").strip() == "1"
@@ -135,9 +138,17 @@ class SettingsView(tk.Frame):
         interval_spinbox.pack(anchor="w")
         max_backups_frame = tk.Frame(card_content, bg=cb)
         max_backups_frame.pack(fill="x", pady=(0, 4))
-        tk.Label(max_backups_frame, text="Máximo de backups:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 2))
-        max_backups_spinbox = tk.Spinbox(max_backups_frame, from_=1, to=50, textvariable=self.max_backups_var, font=("Segoe UI", 10), width=8)
-        max_backups_spinbox.pack(anchor="w")
+        tk.Label(card_content, text="Contraseña para backups automáticos (opcional):", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(4, 2))
+        auto_pwd_entry = tk.Entry(card_content, textvariable=self.auto_backup_password_var, font=("Segoe UI", 10), width=35, show="*")
+        auto_pwd_entry.pack(fill="x", pady=(0, 2))
+        tk.Label(card_content, text="Si la define, los backups automáticos se cifrarán con AES.", font=("Segoe UI", 8), fg=fg_sec, bg=cb).pack(anchor="w")
+        tk.Label(card_content, text="Carpeta en la nube (Google Drive / OneDrive):", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(4, 2))
+        cloud_row = tk.Frame(card_content, bg=cb)
+        cloud_row.pack(fill="x", pady=(0, 2))
+        cloud_entry = tk.Entry(cloud_row, textvariable=self.cloud_folder_var, font=("Segoe UI", 10), width=32)
+        cloud_entry.pack(side="left", fill="x", expand=True)
+        tk.Button(cloud_row, text="Examinar…", font=("Segoe UI", 9), command=self._browse_cloud_folder).pack(side="right", padx=(8, 0))
+        tk.Label(card_content, text="Ruta de la carpeta local que se sincroniza con la nube.", font=("Segoe UI", 8), fg=fg_sec, bg=cb).pack(anchor="w")
         status_frame = tk.Frame(card_content, bg=cb)
         status_frame.pack(fill="x", pady=(4, 0))
         backup_status = backup_service.get_backup_status()
@@ -145,35 +156,58 @@ class SettingsView(tk.Frame):
         if backup_status['enabled']:
             status_text += f" | Próximo: {backup_status.get('next_backup', 'N/A')}"
         tk.Label(status_frame, text=status_text, font=("Segoe UI", 9), fg=fg_sec, bg=cb).pack(anchor="w")
-        save_btn = ModernButton(card_content, text="Guardar Backup", icon=Icons.SAVE, style="purple", small=True, command=self._save_backup_config)
-        save_btn.pack(anchor="w", pady=(4, 0))
+        btn_row = tk.Frame(card_content, bg=cb)
+        btn_row.pack(fill="x", pady=(4, 0))
+        save_btn = ModernButton(btn_row, text="Guardar configuración", icon=Icons.SAVE, style="purple", small=True, command=self._save_backup_config)
+        save_btn.pack(side="left", padx=(0, Spacing.SM))
+        create_now_btn = ModernButton(btn_row, text="Crear backup ahora", icon="💾", style="secondary", small=True, command=self._create_backup_now)
+        create_now_btn.pack(side="left")
     
     def _on_auto_backup_toggle(self):
         """Maneja el toggle de backups automáticos"""
-        # La acción se realizará al guardar
         pass
-    
+
+    def _browse_cloud_folder(self):
+        """Abre el diálogo para elegir la carpeta en la nube (Google Drive / OneDrive)."""
+        path = filedialog.askdirectory(title="Seleccionar carpeta en la nube (Google Drive / OneDrive)")
+        if path:
+            self.cloud_folder_var.set(path)
+
+    def _create_backup_now(self):
+        """Crea un backup y lo guarda en la carpeta en la nube configurada. Exige que la ruta esté establecida."""
+        cloud_path = (self.cloud_folder_var.get() or "").strip()
+        if not cloud_path:
+            messagebox.showerror(
+                "Ruta de respaldo requerida",
+                "Debe establecer primero una ruta de respaldo en la nube.\n\n"
+                "Use el campo \"Carpeta en la nube (Google Drive / OneDrive)\" y el botón \"Examinar...\" "
+                "para seleccionar la carpeta, luego guarde la configuración si desea conservarla."
+            )
+            return
+        path = backup_service.create_full_backup(output_path=cloud_path, is_auto=True)
+        if path:
+            messagebox.showinfo("Backup creado", f"Backup guardado correctamente en:\n{path}")
+        else:
+            messagebox.showerror("Error", "No se pudo crear el backup.")
+
     def _save_backup_config(self):
         """Guarda la configuración de backups con trazabilidad"""
         from manager.app.services.user_service import user_service
-        
+
         backup_config = {
             "auto_backup_enabled": self.auto_backup_var.get(),
             "interval_hours": self.backup_interval_var.get(),
-            "max_backups": self.max_backups_var.get()
+            "max_backups": 5,
+            "auto_backup_password": (self.auto_backup_password_var.get() or "").strip(),
+            "cloud_folder": (self.cloud_folder_var.get() or "").strip(),
         }
-        
-        # Guardar en app_config
+
         if app_config_service.set_backup_config(backup_config):
-            # Aplicar configuración al servicio de backup
             backup_service.set_max_backups(backup_config["max_backups"])
-            
             if backup_config["auto_backup_enabled"]:
                 backup_service.start_auto_backup(backup_config["interval_hours"])
             else:
                 backup_service.stop_auto_backup()
-            
-            # Registrar actividad
             try:
                 username = "admin"
                 status = "activado" if backup_config["auto_backup_enabled"] else "desactivado"
@@ -181,11 +215,10 @@ class SettingsView(tk.Frame):
                     username,
                     "config_changed",
                     f"Backups automáticos {status} | Intervalo: {backup_config['interval_hours']}h | Máximo: {backup_config['max_backups']}",
-                    None
+                    None,
                 )
             except Exception as e:
-                print(f"Error al registrar actividad: {e}")
-            
+                pass
             messagebox.showinfo("✅ Configuración guardada", "La configuración de backups se ha guardado correctamente.")
         else:
             messagebox.showerror("Error", "No se pudo guardar la configuración de backups.")
@@ -216,7 +249,25 @@ class SettingsView(tk.Frame):
         email_entry.pack(fill="x")
         password_frame = tk.Frame(card_content, bg=cb)
         password_frame.pack(fill="x", pady=(0, 2))
-        tk.Label(password_frame, text="Contraseña de aplicación:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(anchor="w", pady=(0, 1))
+        password_label_row = tk.Frame(password_frame, bg=cb)
+        password_label_row.pack(fill="x", pady=(0, 1))
+        tk.Label(password_label_row, text="Contraseña de aplicación:", font=("Segoe UI", 10, "bold"), bg=cb, fg=fg).pack(side="left")
+        help_btn = tk.Button(
+            password_label_row,
+            text=" ¿Ayuda? ",
+            font=("Segoe UI", 9),
+            fg="#2563eb",
+            bg=cb,
+            activeforeground="#1d4ed8",
+            activebackground=cb,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            command=self._show_app_password_help,
+        )
+        help_btn.pack(side="left", padx=(8, 0))
+        help_btn.bind("<Enter>", lambda e: help_btn.configure(fg="#1d4ed8"))
+        help_btn.bind("<Leave>", lambda e: help_btn.configure(fg="#2563eb"))
         password_entry = tk.Entry(password_frame, textvariable=self.password_var, font=("Segoe UI", 10), width=40, show="*")
         password_entry.pack(fill="x")
         help_label = tk.Label(password_frame, text="💡 Use contraseña de aplicación (Gmail/Outlook).", font=("Segoe UI", 8), fg=fg_sec, bg=cb, wraplength=500)
@@ -240,6 +291,101 @@ class SettingsView(tk.Frame):
         save_btn.pack(side="left", padx=(0, Spacing.SM))
         test_btn = ModernButton(buttons_frame, text="Probar", icon="🔍", style="secondary", small=True, command=self._test_email_connection)
         test_btn.pack(side="left")
+
+    def _show_app_password_help(self):
+        """Muestra ventana de ayuda con instrucciones oficiales para contraseñas de aplicación (Gmail y Outlook)."""
+        theme = theme_manager.themes[theme_manager.current_theme]
+        cb = theme.get("bg_primary", "#ffffff")
+        fg = theme.get("text_primary", "#1f2937")
+        win = tk.Toplevel(self.winfo_toplevel())
+        win.title("Ayuda: Contraseña de aplicación")
+        win.configure(bg=cb)
+        win.geometry("520x480")
+        win.minsize(400, 360)
+        win.transient(self.winfo_toplevel())
+        win.grab_set()
+        # Contenido con scroll
+        text_frame = tk.Frame(win, bg=cb)
+        text_frame.pack(fill="both", expand=True, padx=12, pady=(8, 4))
+        scroll = tk.Scrollbar(text_frame)
+        text = tk.Text(
+            text_frame,
+            font=("Segoe UI", 10),
+            wrap=tk.WORD,
+            bg=cb,
+            fg=fg,
+            relief="flat",
+            padx=8,
+            pady=8,
+            yscrollcommand=scroll.set,
+        )
+        scroll.config(command=text.yview)
+        scroll.pack(side="right", fill="y")
+        text.pack(side="left", fill="both", expand=True)
+        content = """Contraseñas de aplicación permiten que programas como Building Manager Pro envíen correos usando tu cuenta sin usar tu contraseña normal. Son necesarias cuando tienes verificación en dos pasos activada.
+
+━━━ GMAIL (Google) ━━━
+
+1. Entra en tu Cuenta de Google: https://myaccount.google.com/
+2. Ve a Seguridad → Verificación en dos pasos (debe estar activada).
+3. Al final de la página, en "Contraseñas de aplicaciones", elige "Contraseñas de aplicaciones".
+4. Selecciona "Correo" y "Otro (nombre personalizado)", escribe por ejemplo "Building Manager Pro".
+5. Haz clic en "Generar". Google mostrará una contraseña de 16 caracteres; cópiala y pégala aquí (sin espacios).
+
+Enlace oficial: https://support.google.com/accounts/answer/185833
+
+━━━ OUTLOOK / MICROSOFT 365 ━━━
+
+1. Entra en tu cuenta Microsoft: https://account.microsoft.com/security
+2. Ve a "Opciones de seguridad avanzadas" o "Contraseñas de aplicaciones".
+3. En "Contraseñas de aplicaciones", crea una nueva. Puede pedirte que confirmes con tu contraseña o verificación en dos pasos.
+4. Asigna un nombre (ej. "Building Manager Pro") y genera la contraseña.
+5. Copia la contraseña de 16 caracteres y pégala aquí.
+
+Enlace oficial: https://support.microsoft.com/es-es/account-billing/crear-contraseñas-de-aplicacion-para-la-verificacion-en-dos-pasos-5896ed9b-4263-e681-128a-a6f2979a7944
+
+━━━ NOTA ━━━
+
+• No uses tu contraseña normal de correo; no funcionará si tienes 2FA activada.
+• La contraseña de aplicación solo se muestra una vez al crearla; guárdala en un lugar seguro.
+"""
+        text.insert("1.0", content.strip())
+        text.config(state="disabled")
+        # Botones: enlaces y cerrar
+        btn_frame = tk.Frame(win, bg=cb)
+        btn_frame.pack(fill="x", padx=12, pady=(4, 10))
+        tk.Button(
+            btn_frame,
+            text=" Abrir ayuda Gmail (oficial) ",
+            font=("Segoe UI", 9),
+            fg="#1a73e8",
+            bg=cb,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: webbrowser.open("https://support.google.com/accounts/answer/185833"),
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            btn_frame,
+            text=" Abrir ayuda Outlook (oficial) ",
+            font=("Segoe UI", 9),
+            fg="#0078d4",
+            bg=cb,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: webbrowser.open("https://support.microsoft.com/es-es/account-billing/crear-contraseñas-de-aplicacion-para-la-verificacion-en-dos-pasos-5896ed9b-4263-e681-128a-a6f2979a7944"),
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            btn_frame,
+            text=" Cerrar ",
+            font=("Segoe UI", 10),
+            bg=theme.get("bg_tertiary", "#e5e7eb"),
+            fg=fg,
+            relief="flat",
+            cursor="hand2",
+            command=win.destroy,
+        ).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.focus_set()
 
     def _create_license_test_section(self, parent):
         """Sección de modo prueba de licencias (solo desarrollo: BM_DEV_MODE=1)."""

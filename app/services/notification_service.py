@@ -313,82 +313,9 @@ Saludos cordiales,
             return False, f"Error al enviar notificación: {str(e)}"
     
     def _generate_receipt_pdf(self, payment: Dict[str, Any], tenant: Dict[str, Any], filepath: str) -> str:
-        """Genera el PDF del recibo de pago"""
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-        from datetime import datetime
-        
-        # Obtener el número real del apartamento
-        apt_display = "N/A"
-        apt_id = tenant.get('apartamento', '')
-        if apt_id:
-            try:
-                apt = apartment_service.get_apartment_by_id(int(apt_id))
-                if apt and 'number' in apt:
-                    apt_display = apt['number']
-                else:
-                    apt_display = str(apt_id)
-            except Exception:
-                apt_display = str(apt_id)
-        
-        # Generar PDF
-        c = canvas.Canvas(filepath, pagesize=letter)
-        width, height = letter
-        
-        # Logo placeholder
-        c.setFillColorRGB(0.2, 0.4, 0.7)
-        c.rect(40, height-80, 80, 40, fill=1)
-        c.setFillColorRGB(1,1,1)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, height-60, "LOGO")
-        
-        # Encabezado
-        c.setFillColorRGB(0,0,0)
-        c.setFont("Helvetica-Bold", 18)
-        c.drawString(140, height-60, "RECIBO DE PAGO DE ARRENDAMIENTO")
-        c.setFont("Helvetica", 10)
-        c.drawString(140, height-80, f"Emitido: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        
-        # Datos del inquilino y pago
-        y = height-120
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "Datos del Inquilino:")
-        c.setFont("Helvetica", 11)
-        y -= 18
-        c.drawString(50, y, f"Nombre: {payment.get('nombre_inquilino', tenant.get('nombre', ''))}")
-        y -= 15
-        c.drawString(50, y, f"Apartamento: {apt_display}")
-        y -= 15
-        c.drawString(50, y, f"Documento: {tenant.get('numero_documento', 'N/A')}")
-        y -= 25
-        
-        # Detalles del pago
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(40, y, "Detalles del Pago:")
-        c.setFont("Helvetica", 11)
-        y -= 18
-        c.drawString(50, y, f"Fecha de pago: {payment.get('fecha_pago', '')}")
-        y -= 15
-        c.drawString(50, y, f"Monto: ${float(payment.get('monto', 0)):,.2f}")
-        y -= 15
-        c.drawString(50, y, f"Método: {payment.get('metodo', '')}")
-        y -= 15
-        obs = payment.get('observaciones', '')
-        if obs:
-            c.drawString(50, y, f"Observaciones: {obs}")
-        else:
-            c.drawString(50, y, "Observaciones: -")
-        
-        y -= 40
-        
-        # Pie de página
-        c.setFont("Helvetica", 9)
-        c.drawString(40, y, "Este documento es válido como comprobante de pago.")
-        
-        # Finalizar PDF
-        c.save()
-        
-        return filepath
+        """Genera el PDF del recibo de pago (diseño profesional unificado)."""
+        from manager.app.receipt_pdf import generate_payment_receipt_pdf
+        return generate_payment_receipt_pdf(payment, tenant, filepath)
 
 # Instancia global del servicio
 notification_service = NotificationService()

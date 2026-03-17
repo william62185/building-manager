@@ -34,59 +34,7 @@ class UserManagementView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
         fg = theme.get("text_primary", "#1f2937")
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, 0), padx=Spacing.MD)
-        title = tk.Label(header, text="Gestión de Usuarios", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg)
-        title.pack(side="left")
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        colors = get_module_colors("administración")
-        purple_primary = colors["primary"]
-        purple_hover = colors["hover"]
-        purple_light = colors["light"]
-        purple_text = colors["text"]
-        btn_bg = theme.get("btn_secondary_bg", "#e5e7eb")
 
-        def go_to_dashboard():
-            if self.on_navigate:
-                self.on_navigate("dashboard")
-            elif self.on_back:
-                self.on_back()
-
-        def go_back():
-            if self.current_view != "list":
-                self._show_users_list()
-            elif self.on_back:
-                self.on_back()
-
-        btn_volver = create_rounded_button(
-            buttons_frame,
-            text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color=btn_bg,
-            fg_color=purple_primary,
-            hover_bg=purple_light,
-            hover_fg=purple_text,
-            command=go_back,
-            padx=16,
-            pady=8,
-            radius=4,
-            border_color=purple_light
-        )
-        btn_volver.pack(side="right", padx=(Spacing.MD, 0))
-        btn_dashboard = create_rounded_button(
-            buttons_frame,
-            text=f"{Icons.APARTMENTS} Dashboard",
-            bg_color=purple_primary,
-            fg_color="white",
-            hover_bg=purple_hover,
-            hover_fg="white",
-            command=go_to_dashboard,
-            padx=18,
-            pady=8,
-            radius=4,
-            border_color=purple_hover
-        )
-        btn_dashboard.pack(side="right")
         self.main_container = tk.Frame(self, bg=cb)
         self.main_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.MD))
     
@@ -138,39 +86,21 @@ class UserManagementView(tk.Frame):
         )
         btn_create.pack(side="right", padx=(Spacing.MD, 0))
         
-        canvas = tk.Canvas(container, bg=cb, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=cb)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        def update_canvas_width(event):
-            canvas_width = event.width
-            canvas.itemconfig(canvas_window, width=canvas_width)
-        
-        canvas.bind("<Configure>", update_canvas_width)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
+        # Frame simple que crece con el contenido (sin canvas/scrollbar fijo)
+        scrollable_frame = tk.Frame(container, bg=cb)
+        scrollable_frame.pack(fill="x")
+
         # Cargar usuarios
         users = user_service.get_all_users()
-        
+
         if not users:
-            no_users_label = tk.Label(
+            tk.Label(
                 scrollable_frame,
                 text="No hay usuarios registrados",
                 font=("Segoe UI", 12),
                 fg="#6b7280",
-                bg=cb
-            )
-            no_users_label.pack(pady=Spacing.XL)
+                bg=cb,
+            ).pack(pady=Spacing.XL)
         else:
             for user in users:
                 self._create_user_card(scrollable_frame, user)

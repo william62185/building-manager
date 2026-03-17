@@ -29,15 +29,12 @@ class ApartmentFormView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
         title_text = "Editar Apartamento" if self.is_edit_mode else "Registrar Nuevo Apartamento"
-        
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.SM), padx=Spacing.MD)
-        tk.Label(header, text=title_text, font=("Segoe UI", 16, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left")
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self.on_back)
-        
-        # Botones Guardar/Cancelar (compactos, arriba a la derecha o abajo)
+
+        title_frame = tk.Frame(self, bg=cb)
+        title_frame.pack(fill="x", pady=(Spacing.SM, Spacing.XS), padx=Spacing.MD)
+        tk.Label(title_frame, text=title_text, font=("Segoe UI", 14, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left")
+
+        # Botones Guardar/Cancelar
         bottom_btns = tk.Frame(self, bg=cb)
         bottom_btns.pack(side="bottom", fill="x", pady=(Spacing.SM, Spacing.MD), padx=Spacing.MD)
         ModernButton(bottom_btns, text="Guardar Cambios", icon="💾", style="purple", small=True, command=self._save_apartment).pack(side="right")

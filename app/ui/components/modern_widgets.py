@@ -336,7 +336,13 @@ def get_module_colors(module_name):
             "hover": "#ea580c",     # orange-600
             "light": "#fed7aa",     # orange-200
             "text": "#c2410c"      # orange-800
-        }
+        },
+        "contabilidad": {
+            "primary": "#14b8a6",  # teal-500
+            "hover":   "#0d9488",  # teal-600
+            "light":   "#ccfbf1",  # teal-100
+            "text":    "#0f766e",  # teal-700
+        },
     }
     return colors.get(module_name.lower(), colors["inquilinos"])
 
@@ -437,20 +443,40 @@ def bind_combobox_dropdown_on_click(combobox):
     """Hace que el listado del combobox se abra al hacer clic en el campo de texto (no solo en la flecha).
     En clic en la flecha no se interfiere para que el menú abra de forma nativa.
     Aplicar a todos los ttk.Combobox de la aplicación (ver ARCHITECTURE.md y reglas Cursor)."""
-    def _on_click(event):
-        widget = event.widget
-        if not widget.winfo_exists():
+    def _open_dropdown(cb):
+        if not cb.winfo_exists():
             return
         try:
-            w = widget.winfo_width()
-            if w > 0 and event.x >= max(0, w - 28):
-                return  # clic en la flecha: dejar comportamiento nativo
+            cb.focus_set()
+            cb.event_generate('<Down>')
         except Exception:
             pass
-        def _post():
-            if widget.winfo_exists():
-                widget.focus_set()
-                widget.event_generate('<Down>')
-        widget.after(30, _post)
-    combobox.bind('<Button-1>', _on_click)
+
+    def _on_click(event):
+        cb = combobox
+        if not cb.winfo_exists():
+            return
+        try:
+            x_in_cb = cb.winfo_pointerx() - cb.winfo_rootx()
+            w = cb.winfo_width()
+            if w > 0 and x_in_cb >= max(0, w - 28):
+                return  # clic en la flecha: comportamiento nativo
+        except Exception:
+            pass
+        _open_dropdown(cb)
+        return "break"
+
+    combobox.bind('<Button-1>', _on_click, add=False)
+
+    def _bind_children():
+        try:
+            for child in combobox.winfo_children():
+                try:
+                    child.bind('<Button-1>', lambda e: _on_click(e), add=False)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    combobox.after_idle(_bind_children)
 

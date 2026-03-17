@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, Optional
 from datetime import datetime
+import sys
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.tenant_autocomplete import TenantAutocompleteEntry
@@ -954,7 +955,12 @@ class DeactivateTenantView(tk.Frame):
                 except (ValueError, TypeError) as e:
                     print(f"⚠️ Error al procesar ID de apartamento {apt_id}: {str(e)}")
             
-            messagebox.showinfo("Éxito", f"Inquilino {tenant_name} desactivado correctamente.")
+            if sys.platform == "win32":
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
             
             # Limpiar selección
             self._clear_search()

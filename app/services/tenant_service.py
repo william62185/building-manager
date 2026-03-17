@@ -1,17 +1,24 @@
 """
 Servicio para gestión de inquilinos
-Maneja operaciones CRUD con persistencia en JSON
+Maneja operaciones CRUD con persistencia en JSON.
+Incluye lógica de mora integral: períodos mensuales desde fecha_ingreso (día de pago),
+aplicación de pagos a períodos y cálculo de días/meses en mora por montos.
 """
 
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+
+from dateutil.relativedelta import relativedelta
 
 from manager.app.paths_config import DATA_DIR, ensure_dirs
 from manager.app.logger import logger
 from manager.app.persistence import save_json_atomic
+
+# Formato de fecha usado en la app (ingreso, pagos)
+DATE_FMT = "%d/%m/%Y"
 
 
 class TenantService:
@@ -174,67 +181,156 @@ class TenantService:
             "moroso": moroso,
             "inactivo": inactivo
         }
-    
-    def calculate_payment_status(self, tenant_id: int) -> str:
-        """Calcula automáticamente el estado de pago basado en el historial real"""
+
+    @staticmethod
+    def _parse_fecha(fecha_str: str) -> Optional[datetime]:
+        """Parsea fecha en formato DD/MM/YYYY. Retorna datetime a las 00:00:00 o None."""
+        if not fecha_str or not isinstance(fecha_str, str):
+            return None
+        s = fecha_str.strip()
+        try:
+            return datetime.strptime(s, DATE_FMT)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except Exception:
+                return None
+
+    def _get_arrears_info(self, tenant: Dict[str, Any], payments: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Calcula mora integral: períodos mensuales desde fecha_ingreso (día de pago),
+        aplicación de pagos por monto y estado/días en mora.
+        - Día de pago = día del mes de fecha_ingreso.
+        - Pago por anticipado: el período 0 (primer mes de ocupación) vence en fecha_ingreso.
+        - Período n vence en fecha_ingreso + n meses (n=0,1,2,...).
+        - Pagos se aplican a períodos más antiguos primero (por monto total).
+        - Al día solo cuando total_pagado >= total esperado de períodos vencidos.
+        """
+        hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        fecha_ingreso = self._parse_fecha(tenant.get("fecha_ingreso", "") or "")
+        valor_arriendo = float(tenant.get("valor_arriendo") or 0)
+
+        result = {
+            "estado_pago": "al_dia",
+            "dias_mora": 0,
+            "dias_del_periodo_actual": 0,
+            "meses_mora": 0,
+            "periods_due": 0,
+            "periods_covered": 0,
+            "total_expected": 0.0,
+            "total_paid": 0.0,
+            "amount_pending": 0.0,  # total_expected + mes actual si ya estamos en ese período (pago por mes completo)
+            "first_unpaid_due_date": None,
+        }
+
+        if not fecha_ingreso:
+            result["estado_pago"] = "moroso"
+            return result
+
+        # Períodos vencidos: período 0 vence en fecha_ingreso (pago por anticipado), luego +1 mes cada uno
+        # Contamos todo período con due_n <= hoy
+        n = 0
+        periods_due = 0
+        while True:
+            due_n = fecha_ingreso + relativedelta(months=n)
+            if due_n > hoy:
+                break
+            periods_due += 1
+            n += 1
+        result["periods_due"] = periods_due
+        result["total_expected"] = round(periods_due * valor_arriendo, 2)
+
+        total_paid = sum(float(p.get("monto") or 0) for p in payments)
+        result["total_paid"] = round(total_paid, 2)
+
+        if valor_arriendo <= 0:
+            result["periods_covered"] = periods_due if total_paid >= result["total_expected"] else 0
+        else:
+            result["periods_covered"] = min(periods_due, int(total_paid / valor_arriendo))
+        periods_in_arrears = max(0, periods_due - result["periods_covered"])
+        result["meses_mora"] = periods_in_arrears
+
+        # Fecha de vencimiento del primer período impago (índice 0-based = periods_covered)
+        first_unpaid_period = result["periods_covered"]
+        first_unpaid_due = fecha_ingreso + relativedelta(months=first_unpaid_period)
+        result["first_unpaid_due_date"] = first_unpaid_due
+
+        if first_unpaid_due < hoy:
+            result["dias_mora"] = (hoy - first_unpaid_due).days
+
+        # Días del período actual (para formato "X meses y Y días"): días desde el inicio del
+        # último período vencido (el "mes actual" en mora), no desde el primer período impago.
+        if periods_in_arrears > 0:
+            # Inicio del período actual = vencimiento del último período que ya venció (periods_due - 1)
+            inicio_periodo_actual = fecha_ingreso + relativedelta(months=periods_due - 1)
+            if hoy >= inicio_periodo_actual:
+                result["dias_del_periodo_actual"] = (hoy - inicio_periodo_actual).days
+
+        # Monto pendiente: total esperado de los períodos ya vencidos (total_expected ya incluye
+        # el período actual si hoy >= su fecha de vencimiento; no sumar mes extra).
+        result["amount_pending"] = result["total_expected"]
+
+        # Estado: al día solo si lo pagado cubre todos los períodos vencidos.
+        # Gracia de 5 días: si solo hay 1 período impago y estamos dentro de 5 días
+        # desde su vencimiento, mostrar "pendiente_pago" (no "moroso") como apoyo visual.
+        if periods_due == 0:
+            dias_desde_ingreso = (hoy - fecha_ingreso).days
+            result["estado_pago"] = "pendiente_registro" if dias_desde_ingreso <= 5 else "al_dia"
+        elif total_paid >= result["total_expected"]:
+            result["estado_pago"] = "al_dia"
+        elif periods_in_arrears > 0:
+            dias_desde_vencimiento = (hoy - first_unpaid_due).days
+            if (
+                periods_in_arrears == 1
+                and hoy >= first_unpaid_due
+                and 0 <= dias_desde_vencimiento <= 5
+            ):
+                result["estado_pago"] = "pendiente_pago"
+                result["dias_mora"] = 0
+                result["dias_del_periodo_actual"] = 0
+            else:
+                result["estado_pago"] = "moroso"
+        else:
+            result["estado_pago"] = "al_dia"
+
+        return result
+
+    def get_arrears_info(self, tenant_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retorna información de mora integral para el inquilino (para UI y reportes).
+        Incluye estado_pago, dias_mora, meses_mora, total_expected, total_paid.
+        """
         try:
             from manager.app.services.payment_service import payment_service
-            from datetime import datetime, timedelta
-            
-            # Recargar datos de pagos para asegurar que estén actualizados
             payment_service._load_data()
-            
-            # Obtener el inquilino
+            tenant = self.get_tenant_by_id(tenant_id)
+            if not tenant:
+                return None
+            payments = payment_service.get_payments_by_tenant(tenant_id)
+            return self._get_arrears_info(tenant, payments)
+        except Exception as e:
+            logger.warning("Error al obtener información de mora: %s", e)
+            return None
+
+    def get_dias_mora(self, tenant_id: int) -> int:
+        """Retorna los días en mora (integral) para el inquilino. 0 si no aplica o error."""
+        info = self.get_arrears_info(tenant_id)
+        return (info or {}).get("dias_mora", 0)
+
+    def calculate_payment_status(self, tenant_id: int) -> str:
+        """Calcula el estado de pago con lógica de mora integral (períodos y montos)."""
+        try:
+            from manager.app.services.payment_service import payment_service
+            payment_service._load_data()
             tenant = self.get_tenant_by_id(tenant_id)
             if not tenant:
                 return "inactivo"
-            
-            # Obtener todos los pagos del inquilino (después de recargar datos)
             payments = payment_service.get_payments_by_tenant(tenant_id)
-            
-            if not payments:
-                # Si no hay pagos, verificar si es un inquilino nuevo
-                fecha_ingreso = tenant.get("fecha_ingreso", "")
-                if fecha_ingreso:
-                    try:
-                        # Convertir fecha de ingreso a datetime
-                        fecha_ingreso_dt = datetime.strptime(fecha_ingreso, "%d/%m/%Y")
-                        dias_desde_ingreso = (datetime.now() - fecha_ingreso_dt).days
-                        
-                        if dias_desde_ingreso <= 5:
-                            return "pendiente_registro"  # Alerta: pendiente registro pago inicial
-                        else:
-                            return "moroso"  # Sin pagos y más de 5 días
-                    except:
-                        return "moroso"  # Error en fecha, considerar moroso
-                else:
-                    return "moroso"  # Sin fecha de ingreso, considerar moroso
-            
-            # Ordenar pagos por fecha (más reciente primero)
-            payments.sort(key=lambda x: datetime.strptime(x.get("fecha_pago", "01/01/1900"), "%d/%m/%Y"), reverse=True)
-            
-            # Obtener el pago más reciente
-            ultimo_pago = payments[0]
-            fecha_ultimo_pago = datetime.strptime(ultimo_pago.get("fecha_pago", "01/01/1900"), "%d/%m/%Y")
-            
-            # Calcular días desde el último pago
-            dias_desde_ultimo_pago = (datetime.now() - fecha_ultimo_pago).days
-            
-            # Lógica para determinar estado:
-            # - Si el último pago fue hace menos de 30 días: al_dia
-            # - Si fue hace más de 30 días pero menos de 90: moroso
-            # - Si fue hace más de 90 días: inactivo (muy moroso)
-            
-            if dias_desde_ultimo_pago <= 30:
-                return "al_dia"
-            elif dias_desde_ultimo_pago <= 90:
-                return "moroso"
-            else:
-                return "inactivo"
-                
+            info = self._get_arrears_info(tenant, payments)
+            return info["estado_pago"]
         except Exception as e:
             logger.warning("Error al calcular estado de pago: %s", e)
-            return "moroso"  # En caso de error, considerar moroso
+            return "moroso"
     
     def update_payment_status(self, tenant_id: int) -> bool:
         """Actualiza el estado de pago de un inquilino basado en el cálculo automático"""
@@ -268,6 +364,7 @@ class TenantService:
             status_changes = {
                 'al_dia': 0,
                 'pendiente_registro': 0,
+                'pendiente_pago': 0,
                 'moroso': 0,
                 'inactivo': 0
             }

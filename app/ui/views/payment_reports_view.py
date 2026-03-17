@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, Dict, List, Any, Optional
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import os
 import csv
 from pathlib import Path
@@ -646,7 +647,10 @@ class PaymentReportsView(tk.Frame):
             tenant_service._load_data()
             tenants = tenant_service.get_all_tenants()
             
-            pending_tenants = [t for t in tenants if t.get('estado_pago') in ['pendiente_registro', 'moroso']]
+            pending_tenants = [
+                t for t in tenants
+                if t.get('estado_pago') in ('pendiente_registro', 'pendiente_pago', 'moroso')
+            ]
             
             if not pending_tenants:
                 messagebox.showinfo("Sin datos", "No hay inquilinos con pagos pendientes.")
@@ -1169,32 +1173,132 @@ class PaymentReportsView(tk.Frame):
         
         return "\n".join(report)
     
+    def _parse_fecha_for_report(self, fecha_str):
+        """Parsea fecha como en tenant_service: DD/MM/YYYY o ISO."""
+        if not fecha_str or not isinstance(fecha_str, str):
+            return None
+        s = (fecha_str or "").strip()
+        try:
+            return datetime.strptime(s, "%d/%m/%Y").replace(hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(hour=0, minute=0, second=0, microsecond=0)
+            except Exception:
+                return None
+
+    def _compute_arrears_for_report(self, tenant, payments):
+        """Calcula mora para el reporte con la misma lógica que tenant_service (períodos desde fecha_ingreso)."""
+        try:
+            fecha_ingreso = self._parse_fecha_for_report(tenant.get("fecha_ingreso"))
+            if not fecha_ingreso:
+                return None
+            valor_arriendo = float(tenant.get("valor_arriendo") or 0)
+            hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+            n = 0
+            periods_due = 0
+            while True:
+                due_n = fecha_ingreso + relativedelta(months=n)
+                if due_n > hoy:
+                    break
+                periods_due += 1
+                n += 1
+            total_expected = round(periods_due * valor_arriendo, 2)
+            total_paid = round(sum(float(p.get("monto") or 0) for p in payments), 2)
+            if valor_arriendo <= 0:
+                periods_covered = periods_due if total_paid >= total_expected else 0
+            else:
+                periods_covered = min(periods_due, int(total_paid / valor_arriendo))
+            periods_in_arrears = max(0, periods_due - periods_covered)
+
+            if periods_in_arrears <= 0:
+                return None
+            inicio_periodo_actual = fecha_ingreso + relativedelta(months=periods_due - 1)
+            dias_del_periodo = (hoy - inicio_periodo_actual).days if hoy >= inicio_periodo_actual else 0
+            current_period_due = fecha_ingreso + relativedelta(months=periods_due - 1)
+            return {
+                "meses_mora": periods_in_arrears,
+                "dias_del_periodo_actual": max(0, dias_del_periodo),
+                "current_period_due": current_period_due,
+                "total_expected": total_expected,
+                "total_paid": total_paid,
+            }
+        except Exception:
+            return None
+
     def _format_pending_payments_report(self, pending_tenants):
-        """Formatea el reporte de pagos pendientes"""
+        """Formatea el reporte de pagos pendientes con lógica de mora integral (calculada aquí para garantizar consistencia)."""
+        self._reload_all_data()
+        payment_service._load_data()
+
         report = []
         report.append("=" * 60)
         report.append("REPORTE DE PAGOS PENDIENTES")
         report.append("=" * 60)
         report.append(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         report.append("")
-        report.append(f"RESUMEN:")
+        report.append("RESUMEN:")
         report.append(f"  • Inquilinos con pagos pendientes: {len(pending_tenants)}")
         report.append("")
         report.append("DETALLE DE INQUILINOS:")
         report.append("-" * 60)
-        
+
         for tenant in pending_tenants:
             estado = tenant.get('estado_pago', 'N/A')
-            estado_text = 'En Mora' if estado == 'moroso' else 'Pendiente Registro'
-            
+            if estado == 'moroso':
+                estado_text = 'En Mora'
+            elif estado == 'pendiente_pago':
+                estado_text = 'Pendiente de pago'
+            else:
+                estado_text = 'Pendiente Registro'
+
             report.append(f"Inquilino: {tenant.get('nombre', 'N/A')}")
             report.append(f"  • Apartamento: {self._get_apartment_number(tenant)}")
             report.append(f"  • Documento: {tenant.get('numero_documento', 'N/A')}")
             report.append(f"  • Teléfono: {tenant.get('telefono', 'N/A')}")
             report.append(f"  • Estado: {estado_text}")
             report.append(f"  • Valor de arriendo: ${float(tenant.get('valor_arriendo', 0)):,.2f}")
+
+            raw_id = tenant.get('id')
+            tenant_id = int(raw_id) if raw_id is not None else None
+            # Usar get_arrears_info del servicio (misma lógica que lista/detalles); si falla, calcular aquí
+            arrears = tenant_service.get_arrears_info(tenant_id) if tenant_id is not None else None
+            if not arrears or arrears.get("estado_pago") not in ("moroso", "pendiente_pago", "pendiente_registro"):
+                payments = payment_service.get_payments_by_tenant(tenant_id) if tenant_id is not None else []
+                arrears = self._compute_arrears_for_report(tenant, payments) if tenant_id is not None else None
+                if arrears:
+                    arrears["current_period_due"] = arrears.get("current_period_due")
+            else:
+                first_unpaid = arrears.get("first_unpaid_due_date")
+                meses_mora = int(arrears.get("meses_mora", 0) or 0)
+                if first_unpaid and meses_mora >= 1:
+                    arrears["current_period_due"] = first_unpaid + relativedelta(months=meses_mora - 1)
+                else:
+                    arrears["current_period_due"] = first_unpaid
+
+            if arrears and (arrears.get("meses_mora", 0) or arrears.get("dias_del_periodo_actual", 0) or arrears.get("total_expected", 0)):
+                current_due = arrears.get("current_period_due")
+                if current_due and hasattr(current_due, "strftime"):
+                    report.append(f"  • Fecha de pago (vencimiento): {current_due.strftime('%d/%m/%Y')}")
+                meses_mora = int(arrears.get("meses_mora", 0) or 0)
+                dias_del_periodo = int(arrears.get("dias_del_periodo_actual", 0) or 0)
+                if meses_mora == 1:
+                    mora_texto = f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}"
+                else:
+                    meses_completos = meses_mora - 1
+                    partes = []
+                    if meses_completos > 0:
+                        partes.append(f"{meses_completos} mes{'es' if meses_completos != 1 else ''}")
+                    if dias_del_periodo > 0:
+                        partes.append(f"{dias_del_periodo} día{'s' if dias_del_periodo != 1 else ''}")
+                    mora_texto = " y ".join(partes) if partes else "0"
+                report.append(f"  • Días en mora: {mora_texto}")
+                pending = float(arrears.get("amount_pending", arrears.get("total_expected", 0)) or 0)
+                paid = float(arrears.get("total_paid", 0) or 0)
+                report.append(f"  • Monto total en mora: ${max(0.0, pending - paid):,.2f}")
+
             report.append("")
-        
+
         return "\n".join(report)
     
     def _format_consolidated_income_report(self, total, monthly, yearly, count, avg_payment, avg_monthly, projected, this_month, this_year, period_name=None):

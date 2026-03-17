@@ -17,6 +17,7 @@ from manager.app.ui.components.modern_widgets import ModernButton, create_rounde
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
 from manager.app.paths_config import EXPORTS_DIR, ensure_dirs
+from manager.app.ui.views.register_expense_view import DatePickerWidget
 
 # Rojo más oscuro del módulo para iconos, títulos y botones (contraste)
 DARK_RED = "#991b1b"
@@ -209,75 +210,46 @@ class ExpenseReportsView(tk.Frame):
     # ==================== GENERADORES DE REPORTES ====================
     
     def _create_period_selection_window(self, title="Seleccionar Período", on_generate=None, button_color="#dc2626"):
-        """Crea una ventana reutilizable para seleccionar período de reporte"""
+        """Ventana compacta para seleccionar período de reporte (sin opciones rápidas)."""
         period_window = tk.Toplevel(self)
         period_window.title(title)
-        period_window.geometry("550x640")
+        period_window.geometry("420x455")
         period_window.transient(self)
         period_window.grab_set()
-        
-        # Título
+        period_window.bind("<Escape>", lambda e: period_window.destroy())
+
         title_label = tk.Label(
             period_window,
             text="Seleccione el período para el reporte:",
-            font=("Segoe UI", 13, "bold"),
-            pady=15
+            font=("Segoe UI", 12, "bold")
         )
-        title_label.pack()
-        
-        # Contenedor principal con padding - sin expand para evitar espacio extra
+        title_label.pack(pady=(10, 6))
+
         main_container = tk.Frame(period_window)
-        main_container.pack(fill="x", padx=25, pady=(10, 8))
-        
+        main_container.pack(fill="x", padx=20, pady=(4, 6))
+
         period_type = tk.StringVar(value="specific_month")
-        
-        # Opción 1: Selección rápida (Mes/Año actual)
-        quick_frame = tk.LabelFrame(
-            main_container,
-            text="Opciones Rápidas",
-            font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
-        )
-        quick_frame.pack(fill="x", pady=(0, 12))
-        
-        tk.Radiobutton(
-            quick_frame,
-            text="Mes actual",
-            variable=period_type,
-            value="current_month",
-            font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=4)
-        
-        tk.Radiobutton(
-            quick_frame,
-            text="Año actual",
-            variable=period_type,
-            value="current_year",
-            font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=4)
-        
-        # Opción 2: Selección por año y mes específicos
+
+        # Selección por año y mes específicos
         specific_frame = tk.LabelFrame(
             main_container,
-            text="Seleccionar Mes y Año Específicos",
+            text="Mes y Año Específicos",
             font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
+            padx=12,
+            pady=6
         )
-        specific_frame.pack(fill="x", pady=(0, 12))
-        
+        specific_frame.pack(fill="x", pady=(0, 8))
+
         tk.Radiobutton(
             specific_frame,
             text="Mes y año específicos",
             variable=period_type,
             value="specific_month",
             font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 8))
-        
-        # Contenedor para los comboboxes de año y mes
+        ).pack(anchor="w", pady=(0, 4))
+
         month_year_frame = tk.Frame(specific_frame)
-        month_year_frame.pack(fill="x", padx=20)
+        month_year_frame.pack(fill="x", padx=16)
         
         # Años disponibles (últimos 10 años + año actual)
         current_year = datetime.now().year
@@ -288,96 +260,99 @@ class ExpenseReportsView(tk.Frame):
         year_combo = ttk.Combobox(month_year_frame, values=years, width=12, state="readonly")
         year_combo.set(str(current_year))
         year_combo.pack(side="left", padx=(0, 20))
-        
-        # Meses
+        year_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
+
         months = [
             "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ]
-        
         tk.Label(month_year_frame, text="Mes:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
         month_combo = ttk.Combobox(month_year_frame, values=months, width=15, state="readonly")
         month_combo.set(months[datetime.now().month - 1])
         month_combo.pack(side="left")
-        
-        # Opción 3: Año específico completo (sin mes)
+        month_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
+
+        # Año completo
         year_only_frame = tk.LabelFrame(
             main_container,
-            text="Seleccionar Año Completo",
+            text="Año Completo",
             font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
+            padx=12,
+            pady=6
         )
-        year_only_frame.pack(fill="x", pady=(0, 12))
-        
+        year_only_frame.pack(fill="x", pady=(0, 8))
+
         tk.Radiobutton(
             year_only_frame,
             text="Año específico completo (todos los meses)",
             variable=period_type,
             value="specific_year",
             font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 8))
-        
-        # Contenedor para el combobox de año
+        ).pack(anchor="w", pady=(0, 4))
+
         year_only_select_frame = tk.Frame(year_only_frame)
-        year_only_select_frame.pack(fill="x", padx=20)
+        year_only_select_frame.pack(fill="x", padx=16)
         
         tk.Label(year_only_select_frame, text="Año:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
         year_only_combo = ttk.Combobox(year_only_select_frame, values=years, width=12, state="readonly")
         year_only_combo.set(str(current_year))
         year_only_combo.pack(side="left")
-        
-        # Opción 4: Rango personalizado
+        year_only_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_year"))
+
+        # Rango personalizado
         custom_frame = tk.LabelFrame(
             main_container,
             text="Rango Personalizado",
             font=("Segoe UI", 10, "bold"),
-            padx=15,
-            pady=10
+            padx=12,
+            pady=6
         )
-        custom_frame.pack(fill="x", pady=(0, 0))
-        
+        custom_frame.pack(fill="x", pady=(0, 4))
+
         tk.Radiobutton(
             custom_frame,
             text="Rango de fechas personalizado",
             variable=period_type,
             value="custom",
             font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 8))
-        
-        # Campos para rango personalizado
+        ).pack(anchor="w", pady=(0, 4))
+
         date_range_frame = tk.Frame(custom_frame)
-        date_range_frame.pack(fill="x", padx=20)
-        
-        tk.Label(date_range_frame, text="Desde (DD/MM/YYYY):", font=("Segoe UI", 9)).pack(side="left", padx=(0, 5))
-        date_from_entry = tk.Entry(date_range_frame, width=15, font=("Segoe UI", 9))
-        date_from_entry.pack(side="left", padx=(0, 15))
-        
-        tk.Label(date_range_frame, text="Hasta (DD/MM/YYYY):", font=("Segoe UI", 9)).pack(side="left", padx=(0, 5))
-        date_to_entry = tk.Entry(date_range_frame, width=15, font=("Segoe UI", 9))
-        date_to_entry.pack(side="left")
-        
-        # Botón generar - SIEMPRE VISIBLE al final, directamente después del main_container
+        date_range_frame.pack(fill="x", padx=16, pady=(0, 4))
+
+        row_from = tk.Frame(date_range_frame)
+        row_from.pack(fill="x", pady=(0, 6))
+        tk.Label(row_from, text="Desde:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+        date_from_entry = DatePickerWidget(row_from, on_change=lambda: period_type.set("custom"))
+        date_from_entry.pack(side="left", fill="x", expand=True)
+
+        row_to = tk.Frame(date_range_frame)
+        row_to.pack(fill="x")
+        tk.Label(row_to, text="Hasta:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+        date_to_entry = DatePickerWidget(row_to, on_change=lambda: period_type.set("custom"))
+        date_to_entry.pack(side="left", fill="x", expand=True)
+
         button_frame = tk.Frame(period_window)
-        button_frame.pack(fill="x", pady=(0, 15))
-        
+        button_frame.pack(fill="x", pady=(6, 10))
+
         def generate_wrapper():
             if on_generate:
                 on_generate(period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry, period_window)
-        
+
         tk.Button(
             button_frame,
             text="Generar Reporte",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=button_color,
             fg="white",
             relief="flat",
-            padx=30,
-            pady=10,
+            padx=22,
+            pady=6,
             cursor="hand2",
             command=generate_wrapper
         ).pack()
-        
+
+        period_window.after(50, period_window.focus_force)
         return period_window, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry
     
     def _filter_expenses_by_period(self, expenses, period_type, year_combo, month_combo, year_only_combo, date_from_entry, date_to_entry):
@@ -474,61 +449,54 @@ class ExpenseReportsView(tk.Frame):
                 messagebox.showinfo("Sin datos", "No hay gastos registrados para generar el reporte.")
                 return
             
-            # Crear ventana de selección con apartamento y período
             period_window = tk.Toplevel(self)
             period_window.title("Seleccionar Apartamento y Período")
-            period_window.geometry("550x700")
+            period_window.geometry("420x540")
             period_window.transient(self)
             period_window.grab_set()
-            
-            # Título
+            period_window.bind("<Escape>", lambda e: period_window.destroy())
+
             title_label = tk.Label(
                 period_window,
                 text="Seleccione el apartamento y período:",
-                font=("Segoe UI", 13, "bold"),
-                pady=15
+                font=("Segoe UI", 12, "bold")
             )
-            title_label.pack()
-            
-            # Contenedor principal
+            title_label.pack(pady=(6, 4))
+
             main_container = tk.Frame(period_window)
-            main_container.pack(fill="x", padx=25, pady=(10, 8))
-            
-            # Selección de apartamento
+            main_container.pack(fill="x", padx=16, pady=(2, 4))
+
             apartment_frame = tk.LabelFrame(
                 main_container,
-                text="Seleccionar Apartamento",
+                text="Apartamento",
                 font=("Segoe UI", 10, "bold"),
-                padx=15,
-                pady=10
+                padx=10,
+                pady=4
             )
-            apartment_frame.pack(fill="x", pady=(0, 12))
-            
+            apartment_frame.pack(fill="x", pady=(0, 4))
+
             apartment_type = tk.StringVar(value="all")
-            
+
             tk.Radiobutton(
                 apartment_frame,
                 text="Todos los apartamentos",
                 variable=apartment_type,
                 value="all",
                 font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=(3, 6))
-            
+            ).pack(anchor="w", pady=(0, 2))
+
             tk.Radiobutton(
                 apartment_frame,
                 text="Apartamento específico",
                 variable=apartment_type,
                 value="specific",
                 font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=(3, 6))
-            
-            # Lista de apartamentos
+            ).pack(anchor="w", pady=(0, 2))
+
             apartment_list_frame = tk.Frame(apartment_frame)
-            apartment_list_frame.pack(fill="x", padx=20)
-            
-            tk.Label(apartment_list_frame, text="Apartamento:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
+            apartment_list_frame.pack(fill="x", padx=12)
+            tk.Label(apartment_list_frame, text="Apartamento:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
             apartment_combo = ttk.Combobox(apartment_list_frame, width=20, state="readonly")
-            
             if apartments:
                 apartment_values = ["Todos"] + [f"{apt.get('number', 'N/A')}" for apt in apartments]
                 apartment_combo['values'] = apartment_values
@@ -536,58 +504,35 @@ class ExpenseReportsView(tk.Frame):
             else:
                 apartment_combo['values'] = ["No hay apartamentos"]
                 apartment_combo.set("No hay apartamentos")
-            
             apartment_combo.pack(side="left")
-            
-            # Ahora agregar el selector de período (reutilizando la lógica)
+
+            def _on_apartment_combo_change():
+                val = apartment_combo.get()
+                if val and val != "Todos" and val != "No hay apartamentos":
+                    apartment_type.set("specific")
+                else:
+                    apartment_type.set("all")
+            apartment_combo.bind("<<ComboboxSelected>>", lambda e: _on_apartment_combo_change())
+
             period_type = tk.StringVar(value="specific_month")
-            
-            # Opción 1: Selección rápida (Mes/Año actual)
-            quick_frame = tk.LabelFrame(
-                main_container,
-                text="Opciones Rápidas",
-                font=("Segoe UI", 10, "bold"),
-                padx=15,
-                pady=8
-            )
-            quick_frame.pack(fill="x", pady=(0, 10))
-            
-            tk.Radiobutton(
-                quick_frame,
-                text="Mes actual",
-                variable=period_type,
-                value="current_month",
-                font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=3)
-            
-            tk.Radiobutton(
-                quick_frame,
-                text="Año actual",
-                variable=period_type,
-                value="current_year",
-                font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=3)
-            
-            # Opción 2: Selección por año y mes específicos
+
             specific_frame = tk.LabelFrame(
                 main_container,
-                text="Seleccionar Mes y Año Específicos",
+                text="Mes y Año Específicos",
                 font=("Segoe UI", 10, "bold"),
-                padx=15,
-                pady=8
+                padx=10,
+                pady=4
             )
-            specific_frame.pack(fill="x", pady=(0, 10))
-            
+            specific_frame.pack(fill="x", pady=(0, 4))
             tk.Radiobutton(
                 specific_frame,
                 text="Mes y año específicos",
                 variable=period_type,
                 value="specific_month",
                 font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=(0, 6))
-            
+            ).pack(anchor="w", pady=(0, 2))
             month_year_frame = tk.Frame(specific_frame)
-            month_year_frame.pack(fill="x", padx=20)
+            month_year_frame.pack(fill="x", padx=12)
             
             current_year = datetime.now().year
             years = [str(y) for y in range(current_year - 9, current_year + 1)]
@@ -597,76 +542,74 @@ class ExpenseReportsView(tk.Frame):
             year_combo = ttk.Combobox(month_year_frame, values=years, width=12, state="readonly")
             year_combo.set(str(current_year))
             year_combo.pack(side="left", padx=(0, 20))
-            
+            year_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
+
             months = [
                 "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
                 "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
             ]
-            
             tk.Label(month_year_frame, text="Mes:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
             month_combo = ttk.Combobox(month_year_frame, values=months, width=15, state="readonly")
             month_combo.set(months[datetime.now().month - 1])
             month_combo.pack(side="left")
-            
-            # Opción 3: Año específico completo
+            month_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_month"))
+
             year_only_frame = tk.LabelFrame(
                 main_container,
-                text="Seleccionar Año Completo",
+                text="Año Completo",
                 font=("Segoe UI", 10, "bold"),
-                padx=15,
-                pady=8
+                padx=10,
+                pady=4
             )
-            year_only_frame.pack(fill="x", pady=(0, 10))
-            
+            year_only_frame.pack(fill="x", pady=(0, 4))
             tk.Radiobutton(
                 year_only_frame,
                 text="Año específico completo (todos los meses)",
                 variable=period_type,
                 value="specific_year",
                 font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=(0, 6))
-            
+            ).pack(anchor="w", pady=(0, 2))
             year_only_select_frame = tk.Frame(year_only_frame)
-            year_only_select_frame.pack(fill="x", padx=20)
-            
+            year_only_select_frame.pack(fill="x", padx=12)
+
             tk.Label(year_only_select_frame, text="Año:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
             year_only_combo = ttk.Combobox(year_only_select_frame, values=years, width=12, state="readonly")
             year_only_combo.set(str(current_year))
             year_only_combo.pack(side="left")
-            
-            # Opción 4: Rango personalizado
+            year_only_combo.bind("<<ComboboxSelected>>", lambda e: period_type.set("specific_year"))
+
             custom_frame = tk.LabelFrame(
                 main_container,
                 text="Rango Personalizado",
                 font=("Segoe UI", 10, "bold"),
-                padx=15,
-                pady=8
+                padx=10,
+                pady=4
             )
-            custom_frame.pack(fill="x", pady=(0, 0))
-            
+            custom_frame.pack(fill="x", pady=(0, 4))
             tk.Radiobutton(
                 custom_frame,
                 text="Rango de fechas personalizado",
                 variable=period_type,
                 value="custom",
                 font=("Segoe UI", 10)
-            ).pack(anchor="w", pady=(0, 6))
-            
+            ).pack(anchor="w", pady=(0, 2))
             date_range_frame = tk.Frame(custom_frame)
-            date_range_frame.pack(fill="x", padx=20)
-            
-            tk.Label(date_range_frame, text="Desde (DD/MM/YYYY):", font=("Segoe UI", 9)).pack(side="left", padx=(0, 5))
-            date_from_entry = tk.Entry(date_range_frame, width=15, font=("Segoe UI", 9))
-            date_from_entry.pack(side="left", padx=(0, 15))
-            
-            tk.Label(date_range_frame, text="Hasta (DD/MM/YYYY):", font=("Segoe UI", 9)).pack(side="left", padx=(0, 5))
-            date_to_entry = tk.Entry(date_range_frame, width=15, font=("Segoe UI", 9))
-            date_to_entry.pack(side="left")
-            
-            # Botón generar
+            date_range_frame.pack(fill="x", padx=12, pady=(0, 2))
+            row_from = tk.Frame(date_range_frame)
+            row_from.pack(fill="x", pady=(0, 4))
+            tk.Label(row_from, text="Desde:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+            date_from_entry = DatePickerWidget(row_from, on_change=lambda: period_type.set("custom"))
+            date_from_entry.pack(side="left", fill="x", expand=True)
+
+            row_to = tk.Frame(date_range_frame)
+            row_to.pack(fill="x")
+            tk.Label(row_to, text="Hasta:", font=("Segoe UI", 9), width=8, anchor="w").pack(side="left", padx=(0, 8))
+            date_to_entry = DatePickerWidget(row_to, on_change=lambda: period_type.set("custom"))
+            date_to_entry.pack(side="left", fill="x", expand=True)
+
             button_frame = tk.Frame(period_window)
-            button_frame.pack(fill="x", pady=(0, 15))
-            
+            button_frame.pack(fill="x", pady=(6, 8))
+
             def generate_wrapper():
                 # Filtrar por período
                 filtered, period_name = self._filter_expenses_by_period(
@@ -718,16 +661,18 @@ class ExpenseReportsView(tk.Frame):
             tk.Button(
                 button_frame,
                 text="Generar Reporte",
-                font=("Segoe UI", 11, "bold"),
-                bg="#dc2626",  # red-600 - rojo para mantener tonalidad roja del módulo
+                font=("Segoe UI", 10, "bold"),
+                bg="#dc2626",
                 fg="white",
                 relief="flat",
-                padx=30,
-                pady=10,
+                padx=22,
+                pady=6,
                 cursor="hand2",
                 command=generate_wrapper
             ).pack()
-            
+
+            period_window.after(50, period_window.focus_force)
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte por apartamento: {str(e)}")
     
@@ -800,7 +745,8 @@ class ExpenseReportsView(tk.Frame):
             year_window.geometry("500x400")
             year_window.transient(self)
             year_window.grab_set()
-            
+            year_window.bind("<Escape>", lambda e: year_window.destroy())
+
             tk.Label(
                 year_window,
                 text="Seleccione los años a comparar:",
@@ -856,21 +802,22 @@ class ExpenseReportsView(tk.Frame):
                 )
             
             button_frame = tk.Frame(year_window)
-            button_frame.pack(fill="x", pady=(10, 20))
-            
+            button_frame.pack(fill="x", pady=(8, 12))
             tk.Button(
                 button_frame,
                 text="Generar Reporte",
-                font=("Segoe UI", 11, "bold"),
-                bg="#b91c1c",  # red-700 - rojo para mantener tonalidad roja del módulo
+                font=("Segoe UI", 10, "bold"),
+                bg="#b91c1c",
                 fg="white",
                 relief="flat",
-                padx=30,
-                pady=10,
+                padx=22,
+                pady=6,
                 cursor="hand2",
                 command=generate
             ).pack()
-            
+
+            year_window.after(50, year_window.focus_force)
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte comparativo: {str(e)}")
     

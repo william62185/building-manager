@@ -28,32 +28,64 @@ class BuildingManagementView(tk.Frame):
     def _create_layout(self):
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        # Header
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
-        
-        building_count = building_service.get_building_count()
-        title_text = "Gestión del Edificio" if building_count > 0 else "Gestión de Edificios"
-        tk.Label(header, text=title_text, font=("Segoe UI", 16, "bold"), bg=cb, fg=theme["text_primary"]).pack(side="left")
-        
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self.on_back)
 
         self.list_container = tk.Frame(self, bg=cb)
         self.list_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
 
     def _load_and_display_buildings(self):
-        """Carga y muestra la lista de edificios."""
+        """Carga y muestra la lista de edificios, con card para crear uno nuevo."""
         for widget in self.list_container.winfo_children():
             widget.destroy()
 
-        buildings = building_service.get_all_buildings()
-
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
+        buildings = building_service.get_all_buildings()
+        has_building = bool(buildings)
+
+        # ── Card "Crear Nuevo Edificio" ────────────────────────────────
+        card_bg = "#f3e8ff" if not has_building else "#ede9fe"
+        new_card = tk.Frame(self.list_container, bg=card_bg, relief="flat", bd=1)
+        new_card.pack(fill="x", pady=(0, Spacing.MD), padx=Spacing.SM)
+
+        inner = tk.Frame(new_card, bg=card_bg)
+        inner.pack(fill="x", padx=Spacing.MD, pady=Spacing.MD)
+
+        icon_color = "#7c3aed" if not has_building else "#a78bfa"
+        text_color = theme["text_primary"] if not has_building else theme.get("text_secondary", "#6b7280")
+
+        tk.Label(inner, text="🏗️  Crear Nuevo Edificio", font=("Segoe UI", 13, "bold"),
+                 bg=card_bg, fg=icon_color, anchor="w").pack(side="left")
+
+        if has_building:
+            tk.Label(inner, text="(Ya existe un edificio registrado)", font=("Segoe UI", 9),
+                     bg=card_bg, fg=text_color).pack(side="left", padx=(Spacing.SM, 0))
+        else:
+            def _go_create():
+                from manager.app.ui.views.building_setup_view import BuildingSetupView
+                for w in self.list_container.winfo_children():
+                    w.destroy()
+                setup = BuildingSetupView(self.list_container, on_back=self._load_and_display_buildings)
+                setup.pack(fill="both", expand=True)
+
+            hover_bg = "#e9d5ff"
+            def _on_enter(e):
+                new_card.configure(bg=hover_bg)
+                inner.configure(bg=hover_bg)
+                for w in inner.winfo_children():
+                    w.configure(bg=hover_bg)
+            def _on_leave(e):
+                new_card.configure(bg=card_bg)
+                inner.configure(bg=card_bg)
+                for w in inner.winfo_children():
+                    w.configure(bg=card_bg)
+
+            for w in [new_card, inner] + list(inner.winfo_children()):
+                w.bind("<Button-1>", lambda e: _go_create())
+                w.bind("<Enter>", _on_enter)
+                w.bind("<Leave>", _on_leave)
+                w.configure(cursor="hand2")
+
         if not buildings:
-            tk.Label(self.list_container, text="No hay edificios registrados.", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(pady=Spacing.XL)
             return
 
         for building in buildings:
