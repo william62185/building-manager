@@ -413,12 +413,12 @@ class TenantFormView(tk.Frame):
                 row_frame,
                 values=values or [],
                 state="readonly",
-                width=50,
+                width=42,
             )
             if values:
                 field.set(values[0])
         else:
-            field = tk.Entry(row_frame, width=35, **self._get_entry_style())
+            field = tk.Entry(row_frame, width=42, **self._get_entry_style())
         field.pack(side="left")
         self.form_fields[field_name] = field
         return row_frame
@@ -446,7 +446,7 @@ class TenantFormView(tk.Frame):
                 row_frame,
                 values=left_values or [],
                 state="readonly",
-                width=50,
+                width=42,
             )
             if left_values and left_field != "contacto_emergencia_parentesco":
                 left_widget.set(left_values[0])
@@ -458,7 +458,7 @@ class TenantFormView(tk.Frame):
             left_widget.date_entry.configure(bg="white")
             left_widget.calendar_btn.configure(width=2)
         else:
-            left_widget = tk.Entry(row_frame, width=35, **self._get_entry_style())
+            left_widget = tk.Entry(row_frame, width=42, **self._get_entry_style())
 
         left_widget.pack(side="left")
         self.form_fields[left_field] = left_widget
@@ -473,7 +473,7 @@ class TenantFormView(tk.Frame):
                     row_frame,
                     values=right_values or [],
                     state="readonly",
-                    width=50,
+                    width=42,
                 )
                 if right_values and right_field != "contacto_emergencia_parentesco":
                     right_widget.set(right_values[0])
@@ -484,7 +484,7 @@ class TenantFormView(tk.Frame):
                 right_widget.date_entry.configure(bg="white")
                 right_widget.calendar_btn.configure(width=2)
             else:
-                right_widget = tk.Entry(row_frame, width=35, **self._get_entry_style())
+                right_widget = tk.Entry(row_frame, width=42, **self._get_entry_style())
 
             right_widget.pack(side="right")
             self.form_fields[right_field] = right_widget
@@ -528,98 +528,6 @@ class TenantFormView(tk.Frame):
         )
         title_label.configure(font=("Segoe UI", 14, "bold"), bg=self._form_bg)
         title_label.pack(side="left", pady=0)
-        
-        buttons_frame = tk.Frame(header_frame, bg=self._form_bg)
-        buttons_frame.pack(side="right")
-        
-        theme = theme_manager.themes[theme_manager.current_theme]
-        hover_bg = theme.get("bg_tertiary", theme["btn_secondary_hover"])
-        
-        # Colores azules para módulo de inquilinos
-        colors = get_module_colors("inquilinos")
-        blue_primary = colors["primary"]
-        blue_hover = colors["hover"]
-        blue_light = colors["light"]
-        blue_text = colors["text"]
-        
-        # Botón "Dashboard" con icono de casita (siempre navega al dashboard)
-        def go_to_dashboard():
-            # Prioridad 1: Usar callback directo si está disponible
-            if self.on_navigate_to_dashboard:
-                try:
-                    self.on_navigate_to_dashboard()
-                    return
-                except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
-            
-            # Prioridad 2: Buscar MainWindow a través de la jerarquía de widgets
-            widget = self.master
-            max_depth = 10
-            depth = 0
-            
-            while widget and depth < max_depth:
-                # Verificar si es MainWindow (tiene _navigate_to y _load_view)
-                if (hasattr(widget, '_navigate_to') and 
-                    hasattr(widget, '_load_view') and 
-                    hasattr(widget, 'views_container')):
-                    try:
-                        widget._navigate_to("dashboard")
-                        return
-                    except Exception as e:
-                        print(f"Error al navegar: {e}")
-                        break
-                
-                # Subir en la jerarquía
-                widget = getattr(widget, 'master', None)
-                depth += 1
-            
-            # Prioridad 3: Buscar desde el root window
-            try:
-                root = self.winfo_toplevel()
-                # Buscar MainWindow entre los hijos del root
-                for child in root.winfo_children():
-                    if (hasattr(child, '_navigate_to') and 
-                        hasattr(child, '_load_view') and 
-                        hasattr(child, 'views_container')):
-                        child._navigate_to("dashboard")
-                        return
-            except Exception as e:
-                print(f"Error en búsqueda desde root: {e}")
-            
-            # Si todo falla, mostrar mensaje
-            print("No se pudo encontrar MainWindow para navegar al dashboard")
-        
-        # Botón "Volver"
-        btn_back = create_rounded_button(
-            buttons_frame,
-            text=f"{Icons.ARROW_LEFT} Volver",
-            bg_color="white",
-            fg_color=blue_primary,
-            hover_bg=blue_light,
-            hover_fg=blue_text,
-            command=self._on_back_clicked,
-            padx=16,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_back.pack(side="right", padx=(Spacing.MD, 0))
-        
-        # Botón "Dashboard"
-        btn_dashboard = create_rounded_button(
-            buttons_frame,
-            text=f"{Icons.APARTMENTS} Dashboard",
-            bg_color=blue_primary,
-            fg_color="white",
-            hover_bg=blue_hover,
-            hover_fg="white",
-            command=go_to_dashboard,
-            padx=18,
-            pady=8,
-            radius=4,
-            border_color="#000000"
-        )
-        btn_dashboard.pack(side="right")
     
     def _create_form_content_direct(self):
         """Crea el contenido del formulario directamente sin scroll"""
@@ -882,7 +790,7 @@ class TenantFormView(tk.Frame):
         ModernSeparator(actions_frame)
 
         buttons_frame = tk.Frame(actions_frame, bg=self._form_bg)
-        buttons_frame.pack(pady=(2, 0))
+        buttons_frame.pack(pady=(2, 10))
 
         btn_cancel = create_rounded_button(
             buttons_frame,

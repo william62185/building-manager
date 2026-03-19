@@ -16,6 +16,7 @@ from manager.app.ui.components.modern_widgets import create_rounded_button, get_
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.payment_service import payment_service
 from manager.app.services.apartment_service import apartment_service
+from manager.app.logger import logger
 
 
 class TenantManagementReportsView(tk.Frame):
@@ -38,7 +39,7 @@ class TenantManagementReportsView(tk.Frame):
             payment_service._load_data()
             apartment_service._load_data()
         except Exception as e:
-            print(f"Error al recargar datos: {e}")
+            logger.warning("Error al recargar datos: %s", e)
     
     def _create_layout(self):
         """Crea el layout principal de la vista de reportes"""
@@ -46,25 +47,7 @@ class TenantManagementReportsView(tk.Frame):
         content_bg = theme.get("content_bg", theme["bg_primary"])
         self.configure(bg=content_bg)
 
-        # Header
-        header = tk.Frame(self, bg=content_bg)
-        header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
-
-        title = tk.Label(
-            header,
-            text="Reportes y Análisis",
-            font=("Segoe UI", 16, "bold"),
-            bg=content_bg,
-            fg=theme["text_primary"]
-        )
-        title.pack(side="left")
-
-        # Botones de navegación
-        buttons_frame = tk.Frame(header, bg=content_bg)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame)
-
-        # Contenedor principal: sin margen inferior para que el panel llegue al fondo y el centrado vertical sea correcto
+        # Contenedor principal
         main_container = tk.Frame(self, bg=content_bg)
         main_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, 0))
 
@@ -317,46 +300,12 @@ class TenantManagementReportsView(tk.Frame):
                 self.on_back()
         
         def go_to_dashboard():
-            # Prioridad 1: Usar callback directo si está disponible
             if self.on_navigate:
                 try:
-                    self.on_navigate()  # El callback ya tiene "dashboard" hardcodeado
+                    self.on_navigate()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
-            
-            # Prioridad 2: Buscar MainWindow a través de la jerarquía de widgets
-            widget = self.master
-            max_depth = 10
-            depth = 0
-            while widget and depth < max_depth:
-                if (hasattr(widget, '_navigate_to') and 
-                    hasattr(widget, '_load_view') and 
-                    hasattr(widget, 'views_container')):
-                    try:
-                        widget._navigate_to("dashboard")
-                        return
-                    except Exception as e:
-                        print(f"Error al navegar: {e}")
-                        break
-                widget = getattr(widget, 'master', None)
-                depth += 1
-            
-            # Prioridad 3: Buscar desde el root window
-            try:
-                root = self.winfo_toplevel()
-                # Buscar MainWindow entre los hijos del root
-                for child in root.winfo_children():
-                    if (hasattr(child, '_navigate_to') and 
-                        hasattr(child, '_load_view') and 
-                        hasattr(child, 'views_container')):
-                        child._navigate_to("dashboard")
-                        return
-            except Exception as e:
-                print(f"Error en búsqueda desde root: {e}")
-            
-            # Si todo falla, mostrar mensaje
-            print("No se pudo encontrar MainWindow para navegar al dashboard")
+                    logger.warning("Error en callback de navegación: %s", e)
         
         # Botón "Volver"
         btn_back = create_rounded_button(
@@ -911,53 +860,8 @@ class TenantManagementReportsView(tk.Frame):
             messagebox.showerror("Error", f"Error al exportar CSV: {str(e)}")
     
     def _show_export_success_dialog(self, filepath):
-        """Ventana de confirmación igual que en administración: ruta, Copiar, Abrir carpeta, Abrir archivo, Aceptar."""
-        path = Path(filepath) if not isinstance(filepath, Path) else filepath
-        win = tk.Toplevel(self.winfo_toplevel())
-        win.title("Exportar")
-        win.geometry("520x220")
-        win.transient(self.winfo_toplevel())
-        win.resizable(True, False)
-        win.grab_set()
-        content = tk.Frame(win, padx=24, pady=20)
-        content.pack(fill="both", expand=True)
-        top = tk.Frame(content)
-        top.pack(fill="x")
-        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg="#2563eb").pack(side="left", padx=(0, 12))
-        msg = tk.Frame(top)
-        msg.pack(side="left", fill="x", expand=True)
-        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
-        path_var = tk.StringVar(value=str(path))
-        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
-        path_entry.pack(fill="x", pady=(8, 0))
-        path_entry.bind("<Key>", lambda e: "break")
-        btns = tk.Frame(content)
-        btns.pack(fill="x", pady=(20, 0))
-
-        def copy_path():
-            win.clipboard_clear()
-            win.clipboard_append(str(path))
-
-        def open_folder():
-            folder = str(path.resolve().parent)
-            if os.name == "nt":
-                os.startfile(folder)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", folder], check=False)
-
-        def open_file():
-            p = str(path.resolve())
-            if os.name == "nt":
-                os.startfile(p)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", p], check=False)
-
-        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, 8))
-        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, 8))
-        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, 8))
-        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
+        show_export_success_dialog(self, filepath, module_color="#2563eb")
 
     def _export_to_txt(self, content, title, report_type):
         """Exporta el reporte a TXT"""

@@ -47,81 +47,188 @@ class DashboardView(tk.Frame):
 
     def _build_ui(self):
         self._build_metrics_row()
-        ModernSeparator(self)
+        sep = tk.Frame(self, height=1, bg=theme_manager.themes[theme_manager.current_theme]["border_light"])
+        sep.pack(fill="x")
         self._build_actions_grid()
 
     def _build_metrics_row(self):
+        now = __import__("datetime").datetime.now()
+        theme = theme_manager.themes[theme_manager.current_theme]
+        card_bg = theme["bg_secondary"] if theme_manager.current_theme == "dark" else "white"
+        border = theme["border_light"]
+
         metrics_frame = tk.Frame(self, bg=self._bg_content)
-        metrics_frame.pack(fill="x", pady=(0, Spacing.XL))
-        metrics_row = tk.Frame(metrics_frame, bg=self._bg_content)
-        metrics_row.pack(fill="x")
+        metrics_frame.pack(fill="x", pady=(4, Spacing.SM))
+
+        # ── Fila 1: métricas del mes ──────────────────────────────────────────
+        row1_label = tk.Label(
+            metrics_frame,
+            text=f"Mes actual — {now.strftime('%B %Y').capitalize()}",
+            font=("Segoe UI", 9, "bold"),
+            bg=self._bg_content,
+            fg="#374151",
+            anchor="w",
+        )
+        row1_label.pack(fill="x", padx=2, pady=(0, 3))
+
+        metrics_row1 = tk.Frame(metrics_frame, bg=self._bg_content)
+        metrics_row1.pack(fill="x")
 
         tenant_stats = self._presenter.get_tenant_statistics()
         inactivos = tenant_stats.get("inactivo", 0)
         total_activos = tenant_stats["total"] - inactivos
+        pendiente_pago = tenant_stats.get("pendiente_pago", 0)
 
-        metric1 = DetailedMetricCard(
-            metrics_row,
-            title="Total Inquilinos",
-            total_value=str(total_activos),
-            details=[
-                {"label": "Al día", "value": tenant_stats["al_dia"], "color": "#10b981"},
-                {"label": "En mora", "value": tenant_stats["moroso"], "color": "#ef4444"},
-            ],
-            icon=Icons.TENANTS,
-            color_theme="primary",
+        def _compact_card(parent, title, icon="", inline_value=""):
+            """Card compacta para fila 1.
+            Si inline_value se pasa, el valor se muestra en el header (misma línea que el título).
+            Retorna (frame, value_label_o_None, details_frame).
+            """
+            f = tk.Frame(parent, bg=card_bg, relief="flat", bd=1,
+                         highlightbackground=border, highlightthickness=1)
+            inner = tk.Frame(f, bg=card_bg)
+            inner.pack(fill="both", expand=True, padx=5, pady=4)
+            hdr = tk.Frame(inner, bg=card_bg)
+            hdr.pack(fill="x")
+            if icon:
+                tk.Label(hdr, text=icon, bg=card_bg, fg="#000",
+                         font=("Segoe UI Symbol", 9)).pack(side="left", padx=(0, 3))
+            tk.Label(hdr, text=title, bg=card_bg, fg="#000",
+                     font=("Segoe UI", 8)).pack(side="left")
+            val_lbl = None
+            if inline_value:
+                # Valor en el header, a la derecha del título
+                val_lbl = tk.Label(hdr, text=inline_value, bg=card_bg,
+                                   fg=theme["text_primary"], font=("Segoe UI", 11, "bold"))
+                val_lbl.pack(side="right")
+            else:
+                # Valor en línea propia debajo del header
+                val_lbl = tk.Label(inner, text="", bg=card_bg,
+                                   fg=theme["text_primary"], font=("Segoe UI", 11, "bold"))
+                val_lbl.pack(anchor="w", pady=(1, 0))
+            det_frame = tk.Frame(inner, bg=card_bg)
+            det_frame.pack(fill="x")
+            return f, val_lbl, det_frame
+
+        def _add_detail(parent, label, value, color):
+            row = tk.Frame(parent, bg=card_bg)
+            row.pack(fill="x")
+            tk.Label(row, text=label, bg=card_bg, fg="#6b7280",
+                     font=("Segoe UI", 8)).pack(side="left")
+            tk.Label(row, text=str(value), bg=card_bg, fg=color,
+                     font=("Segoe UI", 8, "bold")).pack(side="right")
+
+        # Card 1 — Inquilinos (número inline junto al título)
+        c1, v1, d1 = _compact_card(metrics_row1, "Total Inquilinos", Icons.TENANTS,
+                                   inline_value=str(total_activos))
+        _add_detail(d1, "Al día",      tenant_stats["al_dia"], "#10b981")
+        _add_detail(d1, "Pend. pago",  pendiente_pago,         "#f59e0b")
+        _add_detail(d1, "En mora",     tenant_stats["moroso"], "#ef4444")
+        c1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        # Card 2 — Ingresos del mes
+        ingresos_mes = self._presenter.get_payments_of_current_month()
+        c2, v2, _ = _compact_card(metrics_row1, "Ingresos del Mes", Icons.PAYMENT_RECEIVED)
+        v2.config(text=f"${int(ingresos_mes):,}")
+        c2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        # Card 3 — Gastos del mes
+        gastos_mes = self._presenter.get_expenses_of_current_month()
+        c3, v3, _ = _compact_card(metrics_row1, "Gastos del Mes", Icons.EXPENSES)
+        v3.config(text=f"${int(gastos_mes):,}")
+        c3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        # Card 4 — Saldo neto
+        saldo_mes = ingresos_mes - gastos_mes
+        c4, v4, _ = _compact_card(metrics_row1, "Saldo Neto del Mes", "💼")
+        v4.config(
+            text=f"${int(saldo_mes):,}" if saldo_mes >= 0 else f"-${int(abs(saldo_mes)):,}",
+            fg="#10b981" if saldo_mes >= 0 else "#ef4444",
         )
-        metric1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+        c4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        # Card 5 — Ocupación
+        ocup = self._presenter.get_occupation_rate()
+        c5, v5, d5 = _compact_card(metrics_row1, "Ocupación", "🏠")
+        v5.config(text=f"{ocup['rate']}%")
+        _add_detail(d5, "Ocupados",    ocup["occupied"],                    "#10b981")
+        _add_detail(d5, "Disponibles", ocup["total"] - ocup["occupied"],    "#6b7280")
+        c5.pack(side="left", fill="both", expand=True)
+
+        # ── Separador entre filas ─────────────────────────────────────────────
+        sep = tk.Frame(metrics_frame, height=1, bg="#e5e7eb")
+        sep.pack(fill="x", pady=(4, 3))
+
+        # ── Fila 2: métricas anuales ──────────────────────────────────────────
+        row2_label = tk.Label(
+            metrics_frame,
+            text=f"Año {now.year}",
+            font=("Segoe UI", 9, "bold"),
+            bg=self._bg_content,
+            fg="#374151",
+            anchor="w",
+        )
+        row2_label.pack(fill="x", padx=2, pady=(0, 4))
+
+        metrics_row2 = tk.Frame(metrics_frame, bg=self._bg_content)
+        metrics_row2.pack(fill="x")
+
+        ingresos_anio = self._presenter.get_payments_of_current_year()
+        a1 = ModernMetricCard(
+            metrics_row2,
+            title="Ingresos del Año",
+            value=f"${int(ingresos_anio):,}",
+            icon=Icons.PAYMENT_RECEIVED,
+            color_theme="success",
+        )
+        a1.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        gastos_anio = self._presenter.get_expenses_of_current_year()
+        a2 = ModernMetricCard(
+            metrics_row2,
+            title="Gastos del Año",
+            value=f"${int(gastos_anio):,}",
+            icon=Icons.EXPENSES,
+            color_theme="error",
+        )
+        a2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+
+        saldo_anio = ingresos_anio - gastos_anio
+        saldo_anio_color = "#10b981" if saldo_anio >= 0 else "#ef4444"
+        a3 = ModernMetricCard(
+            metrics_row2,
+            title="Saldo Neto del Año",
+            value=f"${int(saldo_anio):,}" if saldo_anio >= 0 else f"-${int(abs(saldo_anio)):,}",
+            icon="💼",
+            color_theme="success" if saldo_anio >= 0 else "error",
+            value_color=saldo_anio_color,
+        )
+        a3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
 
         pagos_pendientes = self._presenter.get_pending_payments_total()
-        metric2 = ModernMetricCard(
-            metrics_row,
+        a4 = ModernMetricCard(
+            metrics_row2,
             title="Pagos Pendientes",
             value=f"${int(pagos_pendientes):,}",
             icon=Icons.PAYMENT_PENDING,
             color_theme="warning",
+            warning_highlight=pagos_pendientes > 0,
         )
-        metric2.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
+        a4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
 
-        ingresos_mes = self._presenter.get_payments_of_current_month()
-        metric3 = ModernMetricCard(
-            metrics_row,
-            title="Ingresos del Mes",
-            value=f"${int(ingresos_mes):,}",
-            icon=Icons.PAYMENT_RECEIVED,
-            color_theme="success",
+        promedio = self._presenter.get_monthly_income_average()
+        a5 = ModernMetricCard(
+            metrics_row2,
+            title="Promedio Mensual",
+            value=f"${int(promedio):,}",
+            icon="📊",
+            color_theme="primary",
         )
-        metric3.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-
-        gastos_mes = self._presenter.get_expenses_of_current_month()
-        metric4 = ModernMetricCard(
-            metrics_row,
-            title="Gastos del Mes",
-            value=f"${int(gastos_mes):,}",
-            icon=Icons.EXPENSES,
-            color_theme="error",
-        )
-        metric4.pack(side="left", fill="both", expand=True, padx=(0, Spacing.XS))
-
-        saldo_neto = ingresos_mes - gastos_mes
-        if saldo_neto >= 0:
-            net_value = f"${int(saldo_neto):,}"
-            net_theme = "success"
-        else:
-            net_value = f"-${int(abs(saldo_neto)):,}"
-            net_theme = "error"
-        metric5 = ModernMetricCard(
-            metrics_row,
-            title="Saldo Neto del Mes",
-            value=net_value,
-            icon="💼",
-            color_theme=net_theme,
-        )
-        metric5.pack(side="left", fill="both", expand=True)
+        a5.pack(side="left", fill="both", expand=True)
 
     def _build_actions_grid(self):
         main_container = tk.Frame(self, bg=self._bg_content)
-        main_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, Spacing.LG))
+        main_container.pack(fill="both", expand=True, padx=Spacing.LG, pady=(0, 4))
         actions_block = tk.Frame(main_container, bg=self._bg_content)
         actions_block.pack(anchor="center", expand=True)
 

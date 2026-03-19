@@ -25,19 +25,10 @@ class OccupationStatusView(tk.Frame):
 
     def _create_layout(self):
         cb = self._content_bg
-        fg = theme_manager.themes[theme_manager.current_theme].get("text_primary", "#1f2937")
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.LG), padx=Spacing.MD)
-        tk.Label(header, text="Estado de Ocupación", font=("Segoe UI", 16, "bold"), bg=cb, fg=fg).pack(side="left")
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self.on_back)
-        self._create_legend()
-        # Resumen de totales (zona entre leyenda y pisos)
         self.summary_frame = tk.Frame(self, bg=cb)
-        self.summary_frame.pack(fill="x", padx=Spacing.MD, pady=(0, Spacing.SM))
+        self.summary_frame.pack(fill="x", padx=Spacing.MD, pady=(Spacing.SM, Spacing.SM))
         self.grid_container = tk.Frame(self, bg=cb)
-        self.grid_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=Spacing.MD)
+        self.grid_container.pack(fill="both", expand=True, padx=Spacing.MD, pady=(0, Spacing.MD))
 
     def _create_legend(self):
         cb = self._content_bg

@@ -239,8 +239,23 @@ Saludos cordiales,
             traceback.print_exc()
             return False, f"Error inesperado: {str(e)}"
     
-    def send_simple_email(self, recipient_email: str, recipient_name: str, 
-                         subject: str, body: str) -> Tuple[bool, str]:
+    def send_reset_code_email(self, recipient_email: str, recipient_name: str, code: str) -> tuple:
+        """Envía el código de recuperación de contraseña al correo del usuario."""
+        subject = "Recuperación de contraseña — Building Manager Pro"
+        body = (
+            f"Hola {recipient_name},\n\n"
+            f"Recibimos una solicitud para restablecer tu contraseña.\n\n"
+            f"Tu código de verificación es:\n\n"
+            f"    {code}\n\n"
+            f"Este código es válido por 15 minutos.\n"
+            f"Si no solicitaste este cambio, ignora este mensaje.\n\n"
+            f"— Building Manager Pro"
+        )
+        return self.send_simple_email(recipient_email, recipient_name, subject, body)
+
+
+    def send_simple_email(self, recipient_email: str, recipient_name: str,
+                           subject: str, body: str) -> Tuple[bool, str]:
         """
         Envía un email simple sin adjuntos
         

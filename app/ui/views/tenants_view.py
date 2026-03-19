@@ -82,25 +82,15 @@ class TenantsView(tk.Frame):
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
-        # =================== HEADER ===================
         bg_view = self.cget("bg")
-        header_frame = tk.Frame(self, bg=bg_view)
-        header_frame.pack(fill="x", pady=(0, 15))
-        # Frame para botones de navegación
-        buttons_frame = tk.Frame(header_frame, bg=bg_view)
-        buttons_frame.pack(side="right", padx=10)
-        
-        # Crear botones con el mismo estilo que otras vistas
-        self._create_navigation_buttons_list_view(buttons_frame, self._back_to_dashboard)
         # =================== CONTAINER PRINCIPAL ===================
         main_container = tk.Frame(self, bg=bg_view)
-        main_container.pack(fill="both", expand=True, padx=20, pady=(6, 2))
-        # =================== COLUMNA IZQUIERDA: cards arriba, búsqueda debajo ===================
+        main_container.pack(fill="both", expand=True, padx=20, pady=(6, 12))
+        # =================== COLUMNA IZQUIERDA: búsqueda ===================
         left_column = tk.Frame(main_container, bg=bg_view)
-        left_column.pack(side="left", fill="y", padx=(0, 15))
-        self._create_action_cards(left_column)
+        left_column.pack(side="left", fill="both", padx=(0, 15))
         search_panel = self._create_search_panel(left_column)
-        search_panel.pack(fill="both", expand=True, pady=(4, 0))
+        search_panel.pack(fill="both", expand=True, pady=0)
         # =================== PANEL LISTA (70%) ===================
         list_panel = self._create_list_panel(main_container)
         list_panel.pack(side="right", fill="both", expand=True)
@@ -111,8 +101,8 @@ class TenantsView(tk.Frame):
     
     def _create_search_panel(self, parent):
         """Crea el panel de búsqueda avanzada (compacto, altura según contenido)."""
-        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=380)
-        panel.pack_propagate(True)
+        panel = tk.Frame(parent, bg="#e3f2fd", relief="solid", bd=2, width=320)
+        panel.pack_propagate(False)
         panel.grid_propagate(False)
         # Header más bajo
         header = tk.Frame(panel, bg="#1976d2", height=36)
@@ -134,7 +124,7 @@ class TenantsView(tk.Frame):
         search_title_row = tk.Frame(content, bg="#e3f2fd")
         search_title_row.pack(anchor="w", pady=(0, 2))
         tk.Label(search_title_row, text="Búsqueda general:", font=("Segoe UI", 10, "bold"), bg="#e3f2fd").pack(side="left")
-        tk.Label(search_title_row, text=" (Nombre, Cédula, Apartamento, Email, Teléfono)", font=("Segoe UI", 8), bg="#e3f2fd", fg="#666666").pack(side="left")
+        tk.Label(search_title_row, text=" (Nombre, Cédula, Apto, Etc.)", font=("Segoe UI", 8), bg="#e3f2fd", fg="#666666").pack(side="left")
         self.search_entry = tk.Entry(content, font=("Segoe UI", 10), relief="solid", bd=1)
         self.search_entry.pack(fill="x", pady=(0, 4))
         self.search_entry.bind('<KeyRelease>', self._on_search_change)
@@ -216,7 +206,6 @@ class TenantsView(tk.Frame):
             cursor="hand2",
             command=self._apply_filters
         )
-        btn_search.pack(side="left", padx=(0, 6))
         btn_clear = tk.Button(
             btn_frame,
             text="🧹 Limpiar",
@@ -229,6 +218,7 @@ class TenantsView(tk.Frame):
             cursor="hand2",
             command=self._clear_filters
         )
+        btn_search.pack(side="left", padx=(0, 6))
         btn_clear.pack(side="left")
         
         return panel
@@ -332,7 +322,11 @@ class TenantsView(tk.Frame):
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=scrollbar.set)
         def _on_mousewheel(event):
-            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            try:
+                if self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except Exception:
+                pass
         def _bind_to_mousewheel(event):
             self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
         def _unbind_from_mousewheel(event):
@@ -598,18 +592,18 @@ class TenantsView(tk.Frame):
         tenant_id = tenant.get("id")
         has_payments = bool(tenant_id and len(payment_service.get_payments_by_tenant(tenant_id)) > 0)
         
-        # Botón Desactivar inquilino (abre la vista de desactivar con este inquilino preseleccionado)
+        # Botón Registrar Pago
         deactivate_btn = tk.Button(
             actions_frame,
-            text="🚫 Desactivar inquilino",
+            text="� Registrar Pago",
             font=("Segoe UI", 8),
-            bg="#f59e0b",
+            bg="#2563eb",
             fg="white",
             relief="flat",
             padx=8,
             pady=2,
             cursor="hand2",
-            command=lambda t=tenant: self._open_desactivar_for_tenant(t)
+            command=lambda t=tenant: self.on_register_payment(t)
         )
         deactivate_btn.pack(side="left", padx=(0, 6))
         
@@ -676,17 +670,23 @@ class TenantsView(tk.Frame):
         """Edita un inquilino"""
         self.current_view = "edit"
         self.selected_tenant = tenant
-        
+
         # Limpiar vista
         for widget in self.winfo_children():
             widget.destroy()
-            
+
+        def _back_to_details():
+            # Recargar datos frescos del inquilino antes de volver a detalles
+            tenant_service._load_data()
+            updated = tenant_service.get_tenant_by_id(tenant.get("id"))
+            self._show_tenant_details(updated if updated else tenant)
+
         # Crear formulario de edición
         form_view = TenantFormView(
             self,
-            on_back=self._back_to_list,
+            on_back=_back_to_details,
             tenant_data=tenant,
-            on_save_success=self.on_data_change,
+            on_save_success=_back_to_details,
             on_navigate_to_dashboard=lambda: self.on_navigate("dashboard") if self.on_navigate else None
         )
         form_view.pack(fill="both", expand=True)
@@ -742,6 +742,25 @@ class TenantsView(tk.Frame):
     def _back_to_list(self):
         """Vuelve a la lista de inquilinos"""
         self._show_tenants_list()
+
+    def go_back(self) -> bool:
+        """Protocolo de back para el hub. Retorna True si manejó el back internamente."""
+        if self.current_view == "details":
+            self._back_to_list()
+            return True
+        if self.current_view == "edit":
+            # Volver a detalles del inquilino seleccionado
+            if self.selected_tenant:
+                tenant_service._load_data()
+                updated = tenant_service.get_tenant_by_id(self.selected_tenant.get("id"))
+                self._show_tenant_details(updated if updated else self.selected_tenant)
+            else:
+                self._back_to_list()
+            return True
+        if self.current_view not in ("list",):
+            self._back_to_list()
+            return True
+        return False
     
     def _on_back_clicked(self):
         """Maneja el clic en volver al menú principal"""
@@ -881,155 +900,8 @@ class TenantsView(tk.Frame):
             messagebox.showerror("Exportar", f"Error al exportar: {str(e)}")
 
     def _show_export_success_dialog(self, file_path: str):
-        """Muestra un diálogo personalizado con la ruta del archivo exportado"""
-        dialog = tk.Toplevel(self)
-        dialog.title("Exportar")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        # Centrar el diálogo
-        dialog.update_idletasks()
-        width = 550
-        height = 200
-        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-        y = (dialog.winfo_screenheight() // 2) - (height // 2)
-        dialog.geometry(f"{width}x{height}+{x}+{y}")
-        
-        # Frame principal
-        main_frame = tk.Frame(dialog, bg="white", padx=20, pady=20)
-        main_frame.pack(fill="both", expand=True)
-        
-        # Icono y mensaje
-        info_frame = tk.Frame(main_frame, bg="white")
-        info_frame.pack(fill="x", pady=(0, 15))
-        
-        # Icono de información
-        icon_label = tk.Label(
-            info_frame,
-            text="ℹ️",
-            font=("Segoe UI", 24),
-            bg="white",
-            fg="#1976d2"
-        )
-        icon_label.pack(side="left", padx=(0, 10))
-        
-        # Texto del mensaje
-        text_frame = tk.Frame(info_frame, bg="white")
-        text_frame.pack(side="left", fill="x", expand=True)
-        
-        msg_label = tk.Label(
-            text_frame,
-            text="Exportación exitosa. Archivo guardado en:",
-            font=("Segoe UI", 10),
-            bg="white",
-            fg="#333",
-            anchor="w"
-        )
-        msg_label.pack(fill="x")
-        
-        # Campo de entrada con la ruta (seleccionable)
-        path_frame = tk.Frame(main_frame, bg="white")
-        path_frame.pack(fill="x", pady=(0, 15))
-        
-        path_entry = tk.Entry(
-            path_frame,
-            font=("Segoe UI", 9),
-            relief="solid",
-            bd=1,
-            bg="#ffffff",
-            fg="#000000",
-            selectbackground="#1976d2",
-            selectforeground="white",
-            readonlybackground="#ffffff",
-            insertbackground="#000000"
-        )
-        path_entry.pack(side="left", fill="x", expand=True, ipady=5)
-        # Insertar texto primero, luego configurar como readonly
-        path_entry.config(state="normal")
-        path_entry.insert(0, file_path)
-        path_entry.config(state="readonly")
-        # Seleccionar todo el texto para que sea visible y fácil de copiar
-        path_entry.select_range(0, tk.END)
-        
-        # Botones
-        buttons_frame = tk.Frame(main_frame, bg="white")
-        buttons_frame.pack(fill="x")
-        
-        def copy_to_clipboard():
-            dialog.clipboard_clear()
-            dialog.clipboard_append(file_path)
-            dialog.update()
-            copy_btn.config(text="✓ Copiado", bg="#2563eb")  # Azul para mantener tonalidad azul
-            dialog.after(1500, lambda: copy_btn.config(text="📋 Copiar", bg="#1976d2"))
-        
-        def open_folder():
-            folder_path = os.path.dirname(file_path)
-            try:
-                if platform.system() == "Windows":
-                    # Usar explorer.exe /select para abrir la carpeta y seleccionar el archivo
-                    subprocess.Popen(['explorer.exe', '/select,', os.path.normpath(file_path)])
-                elif platform.system() == "Darwin":  # macOS
-                    subprocess.Popen(["open", "-R", file_path])  # -R revela el archivo en Finder
-                else:  # Linux
-                    # Para Linux, intentar usar el gestor de archivos con selección de archivo
-                    try:
-                        subprocess.Popen(["xdg-open", os.path.dirname(file_path)])
-                    except:
-                        subprocess.Popen(["nautilus", "--select", file_path])
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo abrir la carpeta: {str(e)}")
-        
-        copy_btn = tk.Button(
-            buttons_frame,
-            text="📋 Copiar",
-            font=("Segoe UI", 9, "bold"),
-            bg="#1976d2",
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=copy_to_clipboard
-        )
-        copy_btn.pack(side="left", padx=(0, 10))
-        
-        open_btn = tk.Button(
-            buttons_frame,
-            text="📂 Abrir carpeta",
-            font=("Segoe UI", 9),
-            bg="#666",
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=open_folder
-        )
-        open_btn.pack(side="left", padx=(0, 10))
-        
-        ok_btn = tk.Button(
-            buttons_frame,
-            text="Aceptar",
-            font=("Segoe UI", 9, "bold"),
-            bg="#1976d2",
-            fg="white",
-            relief="flat",
-            padx=20,
-            pady=5,
-            cursor="hand2",
-            command=dialog.destroy
-        )
-        ok_btn.pack(side="right")
-        
-        # Permitir copiar con Ctrl+C en el campo de entrada
-        path_entry.bind("<Control-c>", lambda e: copy_to_clipboard())
-        
-        # Enfocar el campo de entrada para facilitar selección
-        path_entry.focus_set()
-        
-        # Hacer el diálogo modal
-        dialog.wait_window()
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
+        show_export_success_dialog(self, file_path, module_color="#1976d2")
     
     def on_register_payment(self, tenant):
         # Llama a la función de navegación real si está disponible

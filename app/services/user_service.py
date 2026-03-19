@@ -338,7 +338,57 @@ class UserService:
         except Exception as e:
             raise ValueError(f"Error al eliminar usuario: {str(e)}")
     
-    def get_activity_log(self, username: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def generate_reset_code(self, username: str) -> Optional[str]:
+        """Genera un código temporal de 6 dígitos para recuperación de contraseña.
+        Válido por 15 minutos. Retorna el código o None si el usuario no existe/no tiene email."""
+        import random
+        import time
+        user = None
+        for u in self.users:
+            if u.get("username") == username and u.get("is_active"):
+                user = u
+                break
+        if not user or not user.get("email"):
+            return None
+        code = f"{random.randint(0, 999999):06d}"
+        user["_reset_code"] = code
+        user["_reset_code_expires"] = time.time() + 900  # 15 minutos
+        self._save_data()
+        return code
+
+    def verify_reset_code(self, username: str, code: str) -> bool:
+        """Verifica si el código de recuperación es válido y no ha expirado."""
+        import time
+        user = None
+        for u in self.users:
+            if u.get("username") == username:
+                user = u
+                break
+        if not user:
+            return False
+        stored = user.get("_reset_code")
+        expires = user.get("_reset_code_expires", 0)
+        return stored == code and time.time() < expires
+
+    def reset_password_with_code(self, username: str, code: str, new_password: str) -> bool:
+        """Cambia la contraseña si el código es válido. Limpia el código tras usarlo."""
+        if not self.verify_reset_code(username, code):
+            return False
+        user = None
+        for u in self.users:
+            if u.get("username") == username:
+                user = u
+                break
+        if not user:
+            return False
+        user["password_hash"] = self._hash_password(new_password)
+        user.pop("_reset_code", None)
+        user.pop("_reset_code_expires", None)
+        self._save_data()
+        self._log_activity(username, "password_reset", f"Contraseña restablecida por código para: {username}", username)
+        return True
+
+
         """Obtiene el historial de actividad"""
         log = self.activity_log.copy()
         

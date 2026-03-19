@@ -447,7 +447,7 @@ class LedgerView(tk.Frame):
     def _export(self, fmt: str):
         """
         Exporta los movimientos actuales al formato indicado (csv o txt).
-        Muestra un messagebox con la ruta del archivo generado.
+        Muestra el diálogo estándar de exportación exitosa.
         """
         if not self._movements:
             messagebox.showinfo("Sin datos", "No hay movimientos para exportar.")
@@ -455,10 +455,8 @@ class LedgerView(tk.Frame):
         try:
             period_label = self._get_period_label()
             path = self.presenter.export_ledger(self._movements, fmt, period_label)
-            messagebox.showinfo(
-                "Exportación exitosa",
-                f"Archivo generado correctamente:\n{path}",
-            )
+            from manager.app.ui.components.export_success_dialog import show_export_success_dialog
+            show_export_success_dialog(self, path, module_color="#0d9488")
         except Exception as exc:
             logger.exception("Error al exportar libro de movimientos: %s", exc)
             messagebox.showerror("Error al exportar", f"No se pudo exportar el archivo:\n{exc}")

@@ -14,6 +14,7 @@ from manager.app.ui.components.modern_widgets import ModernButton, create_rounde
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
 from manager.app.services.tenant_service import TenantService
+from manager.app.logger import logger
 
 # Importar RegisterExpenseView para acceder a EXPENSE_CATEGORIES
 from manager.app.ui.views.register_expense_view import RegisterExpenseView
@@ -43,13 +44,13 @@ class EditDeleteExpensesView(tk.Frame):
         self.filter_year = None
         self.filter_month = None
         self.search_text = ""
-        self._updating_filters = False  # flag para evitar recreaciones múltiples
+        self._updating_filters = False
 
         apartment_service._load_data()
         self.apartments = apartment_service.get_all_apartments()
         self.tenants = self.tenant_service.get_all_tenants()
 
-        self.after(0, self._create_layout)
+        self._create_layout()
     
     def _create_layout(self):
         """Crea el layout principal"""
@@ -58,61 +59,54 @@ class EditDeleteExpensesView(tk.Frame):
         for widget in self.winfo_children():
             widget.destroy()
         
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.SM))
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self._on_back, show_back_button=False)
-
-        # Cards: Registrar nuevo gasto y Reportes (igual que en Pagos)
-        self._create_action_cards(self)
-
         fixed_container = tk.Frame(self, bg=cb)
-        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
+        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(Spacing.MD, 4))
         
         search_frame = tk.Frame(fixed_container, bg=cb)
         search_frame.pack(fill="x", pady=(0, 2))
         
         tk.Label(search_frame, text="Búsqueda:", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
-        
+
+        border_color = theme.get("border_light", "#e5e7eb")
         self.search_var = tk.StringVar()
         self.search_var.trace("w", lambda *args: self._on_search_change())
         self.search_entry = tk.Entry(
             search_frame,
             textvariable=self.search_var,
             width=55,
-            font=("Segoe UI", 10),
-            bg=cb
+            font=("Segoe UI", 12),
+            relief="solid",
+            bd=1,
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color,
+            bg=theme.get("bg_primary", "#ffffff"),
+            fg="#6b7280",
+            insertbackground=theme.get("text_primary", "#1f2937"),
         )
-        self.search_entry.pack(side="left", padx=(0, Spacing.SM))
+        self.search_entry.pack(side="left", pady=(4, 4), padx=(0, Spacing.SM))
         self.search_var.set(SEARCH_PLACEHOLDER)
-        self.search_entry.configure(fg="#999")
-        
-        def _clear_placeholder_and_show_input():
-            if self.search_var.get().strip() == SEARCH_PLACEHOLDER:
-                self.search_var.set("")
-            self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
-        
+
         def on_search_focus_in(event):
-            if self.search_var.get().strip() == SEARCH_PLACEHOLDER:
+            if self.search_var.get() == SEARCH_PLACEHOLDER:
                 self.search_var.set("")
             self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
-        
+
         def on_search_keypress(event):
-            # Si el contenido es solo el placeholder, limpiar antes de que se inserte la tecla (evita mezcla)
             if self.search_var.get() == SEARCH_PLACEHOLDER:
                 self.search_var.set("")
                 self.search_entry.configure(fg=theme_manager.themes[theme_manager.current_theme].get("text_primary", "#000"))
-        
+
         def on_search_focus_out(event):
             if not self.search_var.get().strip():
                 self.search_var.set(SEARCH_PLACEHOLDER)
-                self.search_entry.configure(fg="#999")
-        
+                self.search_entry.configure(fg="#6b7280")
+
         self.search_entry.bind("<FocusIn>", on_search_focus_in)
         self.search_entry.bind("<FocusOut>", on_search_focus_out)
         self.search_entry.bind("<KeyPress>", on_search_keypress)
-        # Posicionar cursor en el cuadro de búsqueda al abrir la vista
+
+        # Dar foco al search entry al abrir la vista (se registra después del after del Treeview, así gana)
         self.after(150, self._focus_search_entry)
         
         from manager.app.ui.components.modern_widgets import bind_combobox_dropdown_on_click
@@ -202,11 +196,8 @@ class EditDeleteExpensesView(tk.Frame):
         
         self.edit_placeholder = tk.Frame(fixed_container, bg=cb)
         self.edit_placeholder.pack_forget()
-        
-        separator = tk.Frame(self, height=2, bg=theme.get("border_light", "#e0e0e0"))
-        separator.pack(fill="x", padx=Spacing.LG, pady=(0, 4))
 
-        # Listado de gastos (altura limitada para dejar espacio a las cards)
+        # Listado de gastos
         self._create_expenses_list()
 
     def _create_action_cards(self, parent):
@@ -269,9 +260,14 @@ class EditDeleteExpensesView(tk.Frame):
             return
         search_value = self.search_var.get()
         if search_value == SEARCH_PLACEHOLDER or not search_value.strip():
-            self.search_text = ""
+            new_search_text = ""
         else:
-            self.search_text = search_value.strip().lower()
+            new_search_text = search_value.strip().lower()
+        # Evita reconstruir la tabla cuando el valor lógico de búsqueda no cambió
+        # (p. ej. al restaurar placeholder en FocusOut).
+        if new_search_text == self.search_text:
+            return
+        self.search_text = new_search_text
         self._create_expenses_list()
 
     def _apply_filters(self):
@@ -314,6 +310,14 @@ class EditDeleteExpensesView(tk.Frame):
 
         self._create_expenses_list()
     
+    def _clear_search(self):
+        """Limpia solo el campo de búsqueda y restaura el placeholder."""
+        self.search_var.set(SEARCH_PLACEHOLDER)
+        if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
+            self.search_entry.configure(fg="#6b7280")
+        self.search_text = ""
+        self._create_expenses_list()
+
     def _clear_filters(self):
         """Limpia todos los filtros y restaura el placeholder de búsqueda sin mezclarlo con texto."""
         self._updating_filters = True
@@ -325,7 +329,7 @@ class EditDeleteExpensesView(tk.Frame):
         self._updating_filters = False
 
         if hasattr(self, "search_entry") and self.search_entry.winfo_exists():
-            self.search_entry.configure(fg="#999")
+            self.search_entry.configure(fg="#6b7280")
         self.filter_category = None
         self.filter_apartment = None
         self.filter_year = None
@@ -391,7 +395,7 @@ class EditDeleteExpensesView(tk.Frame):
                     continue
             expenses = filtered
 
-        expenses.sort(key=lambda x: x.get("fecha", ""), reverse=True)
+        expenses.sort(key=lambda x: (x.get("fecha", ""), x.get("id", 0)), reverse=True)
 
         # Hint prominente encima de la tabla
         hint_frame = tk.Frame(self.list_container, bg=theme.get("bg_tertiary", "#f0f4fa"))
@@ -459,13 +463,16 @@ class EditDeleteExpensesView(tk.Frame):
                 self._expenses_index[iid] = expense
 
         self._exp_tree.bind("<Double-1>", self._on_exp_tree_double_click)
-        self._exp_tree.bind("<Delete>",   self._on_exp_tree_delete_key)
+        self._exp_tree.bind("<Delete>", self._on_exp_tree_delete_key)
 
     def _on_exp_tree_double_click(self, event=None):
-        sel = self._exp_tree.selection()
-        if not sel:
+        row_id = self._exp_tree.identify_row(event.y) if event else ""
+        if not row_id:
+            sel = self._exp_tree.selection()
+            row_id = sel[0] if sel else ""
+        if not row_id:
             return
-        expense = self._expenses_index.get(sel[0])
+        expense = self._expenses_index.get(row_id)
         if expense:
             self._show_edit_form(expense)
 
@@ -551,6 +558,8 @@ class EditDeleteExpensesView(tk.Frame):
         )
         
         if messagebox.askyesno("Eliminar gasto", confirm_msg):
+            if not self.winfo_exists():
+                return
             success = self.expense_service.delete_expense(expense.get('id'))
             
             if success:
@@ -561,9 +570,11 @@ class EditDeleteExpensesView(tk.Frame):
                     pass
                 # Si estaba editando este gasto, cancelar la edición
                 if self.editing_expense and self.editing_expense.get('id') == expense.get('id'):
-                    self._cancel_edit()
+                    if self.winfo_exists():
+                        self._cancel_edit()
                 else:
-                    self._create_expenses_list()
+                    if self.winfo_exists():
+                        self._create_expenses_list()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el gasto.")
     
@@ -583,7 +594,7 @@ class EditDeleteExpensesView(tk.Frame):
                     self.on_navigate_to_dashboard()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.warning("Error en callback de navegación: %s", e)
             
             # Prioridad 2: Buscar MainWindow en la jerarquía
             widget = self.master
@@ -597,7 +608,7 @@ class EditDeleteExpensesView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1

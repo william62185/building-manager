@@ -520,55 +520,9 @@ class OccupancyVacancyReportView(tk.Frame):
         text_preview.bind("<MouseWheel>", on_mousewheel)
 
     def _show_export_success_dialog(self, filepath: Path):
-        """Ventana de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
         mod_colors = get_module_colors(self._module_context)
-        win = tk.Toplevel(self.winfo_toplevel())
-        win.title("Exportación exitosa")
-        win.geometry("520x220")
-        win.transient(self.winfo_toplevel())
-        win.resizable(True, False)
-        win.grab_set()
-        content = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
-        content.pack(fill="both", expand=True)
-        top = tk.Frame(content)
-        top.pack(fill="x")
-        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=mod_colors.get("primary", "#2563eb")).pack(side="left", padx=(0, Spacing.MD))
-        msg = tk.Frame(top)
-        msg.pack(side="left", fill="x", expand=True)
-        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
-        path_var = tk.StringVar(value=str(filepath))
-        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
-        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
-        path_entry.bind("<Key>", lambda e: "break")
-        btns = tk.Frame(content)
-        btns.pack(fill="x", pady=(Spacing.LG, 0))
-
-        def copy_path():
-            win.clipboard_clear()
-            win.clipboard_append(str(filepath))
-
-        def open_folder():
-            import os
-            import subprocess
-            folder = str(filepath.resolve().parent)
-            if os.name == "nt":
-                os.startfile(folder)
-            else:
-                subprocess.run(["xdg-open", folder], check=False)
-
-        def open_file():
-            import os
-            import subprocess
-            path = str(filepath.resolve())
-            if os.name == "nt":
-                os.startfile(path)
-            else:
-                subprocess.run(["xdg-open", path], check=False)
-
-        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+        show_export_success_dialog(self, filepath, module_color=mod_colors.get("primary", "#2563eb"))
 
     def _get_export_data(self):
         """Devuelve (total, occupied, available, maintenance) y lista de filas para detalle."""

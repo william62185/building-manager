@@ -30,24 +30,16 @@ class EditDeletePaymentsView(tk.Frame):
         self.on_show_reports = on_show_reports  # Callback para abrir reportes de pagos
         self.selected_tenant = None
         self.editing_payment = None
-        self.after(0, self._create_layout)
+        self._create_layout()
 
     def _create_layout(self):
         for widget in self.winfo_children():
             widget.destroy()
         theme = theme_manager.themes[theme_manager.current_theme]
         cb = self._content_bg
-        # Header solo con botones de navegación (sin título "Editar/Eliminar Pagos")
-        header = tk.Frame(self, bg=cb)
-        header.pack(fill="x", pady=(0, Spacing.SM))
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right")
-        self._create_navigation_buttons(buttons_frame, self._on_back)
-        # Cards: Registrar nuevo pago y Reportes (encima del cuadro de búsqueda)
-        self._create_action_cards(self)
         # Contenedor: búsqueda y formulario de edición
         fixed_container = tk.Frame(self, bg=cb)
-        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(6, 4))
+        fixed_container.pack(fill="x", padx=Spacing.LG, pady=(Spacing.MD, 4))
         search_frame = tk.Frame(fixed_container, bg=cb)
         search_frame.pack(fill="x", pady=(0, 2))
         tk.Label(search_frame, text="Búsqueda:", font=("Segoe UI", 11), bg=cb, fg=theme["text_primary"]).pack(side="left", padx=(0, Spacing.SM))
@@ -239,6 +231,9 @@ class EditDeletePaymentsView(tk.Frame):
         self._tree.bind("<Double-1>", self._on_tree_double_click)
         self._tree.bind("<Delete>",   self._on_tree_delete_key)
 
+        # Dar foco al Treeview para que el primer clic seleccione la fila directamente
+        self.after(150, lambda: self._tree.focus_set() if self._tree.winfo_exists() else None)
+
     def _on_tree_double_click(self, event=None):
         sel = self._tree.selection()
         if not sel:
@@ -371,6 +366,8 @@ class EditDeletePaymentsView(tk.Frame):
 
     def _delete_payment(self, payment):
         if messagebox.askyesno("Eliminar pago", "¿Seguro que deseas eliminar este pago?"):
+            if not self.winfo_exists():
+                return
             success = self.payment_service.delete_payment(payment['id'])
             if success:
                 try:
@@ -380,7 +377,8 @@ class EditDeletePaymentsView(tk.Frame):
                     pass
                 if self.on_payment_saved:
                     self.on_payment_saved()
-                self._create_payments_list()
+                if self.winfo_exists():
+                    self._create_payments_list()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el pago.")
 

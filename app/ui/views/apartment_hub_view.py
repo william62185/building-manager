@@ -1,46 +1,54 @@
 """
-Vista hub principal del módulo de Gastos.
-Layout: barra de tabs anclada (fondo diferenciado + borde inferior) + panel de contenido.
-Lazy load: cada sub-vista se instancia la primera vez que se selecciona su tab.
+Hub principal del módulo de Gestión de Apartamentos.
+Layout: barra de tabs anclada + panel de contenido (lazy load).
 
 Tabs:
-  - Registrar   → RegisterExpenseView
-  - Editar       → EditDeleteExpensesView
-  - Reportes     → ExpenseReportsView
+  - ocupacion  → OccupationStatusView
+  - lista      → ApartmentsListView
+  - registrar  → ApartmentFormView
+  - reportes   → OccupancyVacancyReportView
 """
 import tkinter as tk
+from typing import Callable, Optional
 
 from manager.app.ui.components.theme_manager import theme_manager, Spacing
 from manager.app.ui.components.modern_widgets import create_rounded_button, get_module_colors
 from manager.app.logger import logger
 
 _TABS = [
-    ("editar",    "✏️",  "Editar / Eliminar"),
-    ("registrar", "➕", "Registrar gasto"),
-    ("reportes",  "📊", "Reportes"),
+    ("ocupacion", "🏠", "Estado de Ocupación"),
 ]
 
-_MODULE         = "gastos"
+_MODULE         = "administración"
 _TAB_BAR_BG     = "#e8ecf0"
 _TAB_BAR_BORDER = "#c5cdd6"
 
 
-class ExpensesView(tk.Frame):
-    """Hub principal del módulo de Gastos con tabs de navegación."""
+class ApartmentHubView(tk.Frame):
+    """Hub principal del módulo de Gestión de Apartamentos con tabs de navegación."""
 
-    def __init__(self, parent, on_back=None):
+    def __init__(
+        self,
+        parent,
+        on_back: Callable = None,
+        on_data_change: Callable = None,
+        initial_tab: str = "ocupacion",
+    ):
         super().__init__(parent)
         theme = theme_manager.themes[theme_manager.current_theme]
         self._bg = theme.get("content_bg", theme["bg_primary"])
         self.configure(bg=self._bg)
-        self.on_back = on_back
 
-        self._active_tab = None
-        self._tab_buttons = {}
-        self._loaded_views = {}
+        self.on_back = on_back
+        self.on_data_change = on_data_change
+        self._initial_tab = initial_tab
+
+        self._active_tab: Optional[str] = None
+        self._tab_buttons: dict = {}
+        self._loaded_views: dict = {}
 
         self._build_layout()
-        self.after(0, lambda: self._select_tab("editar"))
+        self.after(0, lambda: self._select_tab(self._initial_tab))
 
     # ------------------------------------------------------------------
     # Layout
@@ -186,49 +194,82 @@ class ExpensesView(tk.Frame):
     def _build_tab_view(self, key):
         parent = self._content_panel
 
-        if key == "registrar":
-            from manager.app.ui.views.register_expense_view import RegisterExpenseView
-            return RegisterExpenseView(
+        if key == "ocupacion":
+            from manager.app.ui.views.occupation_status_view import OccupationStatusView
+            return OccupationStatusView(
                 parent,
-                on_back=None,
-                on_navigate_to_dashboard=self._go_to_dashboard,
-                on_cancel=self._on_cancel_registrar,
+                on_back=self._go_to_dashboard,
+                on_navigate=self._go_to_dashboard,
             )
 
-        if key == "editar":
-            from manager.app.ui.views.edit_delete_expenses_view import EditDeleteExpensesView
-            return EditDeleteExpensesView(
+        if key == "lista":
+            from manager.app.ui.views.apartments_list_view import ApartmentsListView
+            return ApartmentsListView(
                 parent,
-                on_back=None,
-                on_navigate_to_dashboard=self._go_to_dashboard,
+                on_back=self._go_to_dashboard,
+                on_edit=self._on_edit_apartment,
+                on_navigate=self._go_to_dashboard,
+                on_new=lambda: self._select_tab("registrar"),
+            )
+
+        if key == "registrar":
+            from manager.app.ui.views.apartment_form_view import ApartmentFormView
+            return ApartmentFormView(
+                parent,
+                on_back=lambda: self._select_tab("lista"),
+                on_save_success=self._on_data_changed,
+                apartment_data=None,
+                on_navigate=self._go_to_dashboard,
             )
 
         if key == "reportes":
-            from manager.app.ui.views.expense_reports_view import ExpenseReportsView
-            return ExpenseReportsView(
+            from manager.app.ui.views.reports.occupancy_vacancy_report_view import OccupancyVacancyReportView
+            return OccupancyVacancyReportView(
                 parent,
-                on_back=None,
-                on_navigate_to_dashboard=self._go_to_dashboard,
+                on_back=self._go_to_dashboard,
+                on_navigate=self._go_to_dashboard,
             )
 
         return None
 
     # ------------------------------------------------------------------
-    # Navegación
+    # Callbacks internos
     # ------------------------------------------------------------------
 
-    def _on_volver(self):
-        """Recarga el tab activo descartando la vista cacheada."""
-        if self._active_tab:
-            self._loaded_views.pop(self._active_tab, None)
-            self._select_tab(self._active_tab)
-
-    def _on_cancel_registrar(self):
-        """Tras guardar o cancelar en Registrar: descarta ambas vistas cacheadas y vuelve al tab editar."""
+    def _on_edit_apartment(self, apartment_data: dict, filter_state: dict):
+        """Abre el formulario de edición invalidando la caché del tab registrar."""
         self._loaded_views.pop("registrar", None)
-        self._loaded_views.pop("editar", None)
-        self._select_tab("editar")
+        from manager.app.ui.views.apartment_form_view import ApartmentFormView
+        parent = self._content_panel
+        view = ApartmentFormView(
+            parent,
+            on_back=lambda: self._select_tab("lista"),
+            on_save_success=self._on_data_changed,
+            apartment_data=apartment_data,
+            on_navigate=self._go_to_dashboard,
+        )
+        self._loaded_views["registrar"] = view
+        self._select_tab("registrar")
+
+    def _on_data_changed(self):
+        """Invalida lista y ocupación para que recarguen al volver."""
+        self._loaded_views.pop("lista", None)
+        self._loaded_views.pop("ocupacion", None)
+        self._loaded_views.pop("registrar", None)
+        if self.on_data_change:
+            self.on_data_change()
+        self._select_tab("lista")
+
+    def _on_volver(self):
+        self._go_to_dashboard()
 
     def _go_to_dashboard(self):
         if self.on_back:
             self.on_back()
+
+    # ------------------------------------------------------------------
+    # API pública
+    # ------------------------------------------------------------------
+
+    def select_tab(self, key: str):
+        self._select_tab(key)

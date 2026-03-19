@@ -132,9 +132,9 @@ class IncomeStatementView(tk.Frame):
         self._date_to = DatePickerWidget(row3, on_change=lambda: self._period_type.set("custom"))
         self._date_to.pack(side="left")
 
-        # ── Botones de acción (derecha del período) ─────────────────────
+        # ── Botones de acción (columna vertical, centrada con el período) ──
         btn_col = tk.Frame(top, bg=bg)
-        btn_col.pack(side="left", padx=(8, 0), anchor="n")
+        btn_col.pack(side="left", padx=(12, 0), anchor="center")
 
         btn_gen = tk.Button(
             btn_col, text="⟳ Generar",
@@ -328,10 +328,8 @@ class IncomeStatementView(tk.Frame):
             path = self.presenter.export_income_statement(
                 self._last_data, fmt, self._last_period_label
             )
-            messagebox.showinfo(
-                "Exportación exitosa",
-                f"Archivo generado correctamente:\n{path}",
-            )
+            from manager.app.ui.components.export_success_dialog import show_export_success_dialog
+            show_export_success_dialog(self, path, module_color="#0d9488")
         except Exception as exc:
             logger.exception("Error al exportar estado de resultados: %s", exc)
             messagebox.showerror("Error al exportar", f"No se pudo exportar el archivo:\n{exc}")

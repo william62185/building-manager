@@ -95,3 +95,79 @@ class DashboardPresenter:
         except Exception as e:
             logger.warning("Error al calcular gastos del mes: %s", e)
             return 0.0
+
+    # ── Métricas anuales ──────────────────────────────────────────────────────
+
+    def get_payments_of_current_year(self) -> float:
+        """Total de ingresos del año actual."""
+        try:
+            payment_service._load_data()
+            now = datetime.datetime.now()
+            pagos = payment_service.get_all_payments()
+            return sum(
+                float(p.get("monto", 0))
+                for p in pagos
+                if self._is_payment_in_year(p, now.year)
+            )
+        except Exception as e:
+            logger.warning("Error al calcular ingresos del año: %s", e)
+            return 0.0
+
+    def get_expenses_of_current_year(self) -> float:
+        """Total de gastos del año actual."""
+        try:
+            expense_service._load_data()
+            now = datetime.datetime.now()
+            expenses = expense_service.filter_expenses(year=now.year)
+            return sum(float(e.get("monto", 0)) for e in expenses)
+        except Exception as e:
+            logger.warning("Error al calcular gastos del año: %s", e)
+            return 0.0
+
+    def get_monthly_income_average(self) -> float:
+        """Promedio mensual de ingresos = ingresos del año / meses transcurridos (mín. 1)."""
+        try:
+            ingresos_anio = self.get_payments_of_current_year()
+            meses = max(1, datetime.datetime.now().month)
+            return round(ingresos_anio / meses, 2)
+        except Exception as e:
+            logger.warning("Error al calcular promedio mensual: %s", e)
+            return 0.0
+
+    def get_occupation_rate(self) -> Dict[str, Any]:
+        """Tasa de ocupación: ocupados / total apartamentos."""
+        try:
+            from manager.app.services.apartment_service import apartment_service
+            apartment_service.reload_data()
+            tenant_service._load_data()
+            apartments = apartment_service.get_all_apartments()
+            total = len(apartments)
+            if total == 0:
+                return {"total": 0, "occupied": 0, "rate": 0.0}
+            tenants = tenant_service.get_all_tenants()
+            occupied_apt_ids = {
+                t.get("apartamento")
+                for t in tenants
+                if t.get("estado_pago") != "inactivo" and t.get("apartamento") is not None
+            }
+            occupied = len(occupied_apt_ids)
+            return {"total": total, "occupied": occupied, "rate": round(occupied / total * 100, 1)}
+        except Exception as e:
+            logger.warning("Error al calcular tasa de ocupación: %s", e)
+            return {"total": 0, "occupied": 0, "rate": 0.0}
+
+    def _is_payment_in_year(self, pago: Dict[str, Any], year: int) -> bool:
+        """True si el pago pertenece al año indicado."""
+        try:
+            fecha = pago.get("fecha_pago", "") or pago.get("fecha", "")
+            if not fecha:
+                return False
+            if "/" in str(fecha):
+                parts = str(fecha).strip().split("/")
+                if len(parts) == 3:
+                    return int(parts[2]) == year
+            else:
+                return datetime.datetime.strptime(str(fecha)[:10], "%Y-%m-%d").year == year
+        except Exception:
+            return False
+        return False

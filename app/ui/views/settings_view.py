@@ -701,7 +701,7 @@ Enlace oficial: https://support.microsoft.com/es-es/account-billing/crear-contra
 
         btn_dashboard = create_rounded_button(
             parent,
-            text=f"{Icons.APARTMENTS} Dashboard",
+            text=f"{Icons.APARTMENTS} Inicio",
             bg_color=purple_primary,
             fg_color="white",
             hover_bg=purple_hover,

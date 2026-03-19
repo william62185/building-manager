@@ -174,12 +174,14 @@ class TenantService:
         al_dia = len([t for t in self.tenants if t.get("estado_pago") == "al_dia"])
         moroso = len([t for t in self.tenants if t.get("estado_pago") == "moroso"])
         inactivo = len([t for t in self.tenants if t.get("estado_pago") == "inactivo"])
-        
+        pendiente_pago = len([t for t in self.tenants if t.get("estado_pago") in ("pendiente_pago", "pendiente_registro")])
+
         return {
             "total": total,
             "al_dia": al_dia,
             "moroso": moroso,
-            "inactivo": inactivo
+            "inactivo": inactivo,
+            "pendiente_pago": pendiente_pago,
         }
 
     @staticmethod

@@ -977,53 +977,9 @@ class ExpenseReportsView(tk.Frame):
     # ==================== VENTANA DE REPORTE ====================
     
     def _show_export_success_dialog(self, filepath: Path):
-        """Ventana de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
         colors = get_module_colors("gastos")
-        win = tk.Toplevel(self.winfo_toplevel())
-        win.title("Exportación exitosa")
-        win.geometry("520x220")
-        win.transient(self.winfo_toplevel())
-        win.resizable(True, False)
-        win.grab_set()
-        content_f = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
-        content_f.pack(fill="both", expand=True)
-        top = tk.Frame(content_f)
-        top.pack(fill="x")
-        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=colors.get("primary", "#dc2626")).pack(side="left", padx=(0, Spacing.MD))
-        msg = tk.Frame(top)
-        msg.pack(side="left", fill="x", expand=True)
-        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
-        path_var = tk.StringVar(value=str(filepath))
-        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
-        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
-        path_entry.bind("<Key>", lambda e: "break")
-        btns = tk.Frame(content_f)
-        btns.pack(fill="x", pady=(Spacing.LG, 0))
-
-        def copy_path():
-            win.clipboard_clear()
-            win.clipboard_append(str(filepath))
-
-        def open_folder():
-            folder = str(filepath.resolve().parent)
-            if os.name == "nt":
-                os.startfile(folder)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", folder], check=False)
-
-        def open_file():
-            path = str(filepath.resolve())
-            if os.name == "nt":
-                os.startfile(path)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", path], check=False)
-
-        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+        show_export_success_dialog(self, filepath, module_color=colors.get("primary", "#dc2626"))
 
     def _show_report_window(self, title, content, report_type):
         """Muestra una ventana con el reporte generado (reglas: Exportar CSV, Exportar TXT, Cerrar; colores módulo gastos; utf-8-sig)."""

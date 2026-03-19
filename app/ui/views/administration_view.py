@@ -44,7 +44,7 @@ class AdministrationView(tk.Frame):
         self._loaded_views = {}
 
         self._build_layout()
-        self._select_tab("usuarios")
+        self.after(0, lambda: self._select_tab("usuarios"))
 
     # ------------------------------------------------------------------
     # Layout

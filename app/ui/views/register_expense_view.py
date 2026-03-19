@@ -17,6 +17,7 @@ from manager.app.ui.components.icons import Icons
 from manager.app.ui.components.modern_widgets import ModernButton, create_rounded_button, get_module_colors
 from manager.app.services.expense_service import ExpenseService
 from manager.app.services.apartment_service import apartment_service
+from manager.app.logger import logger
 
 
 class DatePickerWidget(tk.Frame):
@@ -424,7 +425,7 @@ class RegisterExpenseView(tk.Frame):
         ]
     }
     
-    def __init__(self, parent, on_back: Optional[Callable] = None, expense: Optional[Dict[str, Any]] = None, compact: bool = False, on_navigate_to_dashboard: Optional[Callable] = None):
+    def __init__(self, parent, on_back: Optional[Callable] = None, expense: Optional[Dict[str, Any]] = None, compact: bool = False, on_navigate_to_dashboard: Optional[Callable] = None, on_cancel: Optional[Callable] = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
@@ -432,6 +433,7 @@ class RegisterExpenseView(tk.Frame):
         self.expense_service = ExpenseService()
         self.on_back = on_back
         self.on_navigate_to_dashboard = on_navigate_to_dashboard  # Callback para navegar al dashboard
+        self.on_cancel = on_cancel  # Callback para cancelar (volver al tab editar en el hub)
         self.expense = expense  # Si se proporciona, es modo edición
         self.selected_document_path = None
         self.compact_mode = compact  # Modo compacto para edición
@@ -450,27 +452,22 @@ class RegisterExpenseView(tk.Frame):
         for widget in self.winfo_children():
             widget.destroy()
         
-        # Header (solo en modo no compacto, o más pequeño en compacto)
-        if not self.compact_mode:
+        # Header solo cuando se usa fuera del hub (on_back definido)
+        if not self.compact_mode and self.on_back:
             header = tk.Frame(self, bg=cb)
             header.pack(fill="x", pady=(0, Spacing.MD))
             
-            # Título a la izquierda
             title_text = "Editar Gasto" if self.expense else "Registrar Nuevo Gasto"
-            title = tk.Label(
+            tk.Label(
                 header,
                 text=title_text,
                 font=("Segoe UI", 16, "bold"),
                 bg=cb,
                 fg=theme["text_primary"]
-            )
-            title.pack(side="left", padx=(0, Spacing.LG))
+            ).pack(side="left", padx=(0, Spacing.LG))
             
-            # Frame para botones de navegación (alineados a la derecha)
             buttons_frame = tk.Frame(header, bg=cb)
             buttons_frame.pack(side="right")
-            
-            # Agregar botones Volver y Dashboard
             self._create_navigation_buttons(buttons_frame, self._on_back)
         
         # Contenedor principal (sin scroll) - sin fondo blanco
@@ -710,16 +707,39 @@ class RegisterExpenseView(tk.Frame):
         )
         btn_save.pack(side="left", padx=(0, Spacing.SM))
 
-        btn_clear = ModernButton(
-            buttons_frame,
-            text="Cancelar" if self.expense else "Limpiar",
-            icon=Icons.CANCEL,
-            style="secondary",
-            command=self._clear_form if not self.expense else self._on_back,
-            fg="#000000",
-            small=self.compact_mode
-        )
-        btn_clear.pack(side="left")
+        if not self.expense:
+            btn_clear = ModernButton(
+                buttons_frame,
+                text="Limpiar",
+                icon=Icons.CANCEL,
+                style="secondary",
+                command=self._clear_form,
+                fg="#000000",
+                small=self.compact_mode
+            )
+            btn_clear.pack(side="left", padx=(0, Spacing.SM))
+
+            btn_cancel = ModernButton(
+                buttons_frame,
+                text="Cancelar",
+                icon=Icons.CANCEL,
+                style="secondary",
+                command=self._on_cancel,
+                fg="#000000",
+                small=self.compact_mode
+            )
+            btn_cancel.pack(side="left")
+        else:
+            btn_clear = ModernButton(
+                buttons_frame,
+                text="Cancelar",
+                icon=Icons.CANCEL,
+                style="secondary",
+                command=self._on_back,
+                fg="#000000",
+                small=self.compact_mode
+            )
+            btn_clear.pack(side="left")
     
     def _create_form_row(self, parent, label_text, variable, width=20):
         """Crea una fila del formulario con label y entry"""
@@ -899,7 +919,9 @@ class RegisterExpenseView(tk.Frame):
                 except Exception:
                     pass
                 self._clear_form()
-                if self.on_back:
+                if self.on_cancel:
+                    self.after(100, self.on_cancel)
+                elif self.on_back:
                     self.after(100, self.on_back)
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar el gasto: {str(e)}")
@@ -965,7 +987,7 @@ class RegisterExpenseView(tk.Frame):
                     self.on_navigate_to_dashboard()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.warning("Error en callback de navegación: %s", e)
             
             # Prioridad 2: Buscar MainWindow en la jerarquía
             widget = self.master
@@ -979,7 +1001,7 @@ class RegisterExpenseView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1
@@ -1024,3 +1046,10 @@ class RegisterExpenseView(tk.Frame):
         """Maneja el botón de volver"""
         if self.on_back:
             self.on_back()
+
+    def _on_cancel(self):
+        """Maneja el botón Cancelar: usa on_cancel si está disponible, si no limpia el formulario."""
+        if self.on_cancel:
+            self.on_cancel()
+        else:
+            self._clear_form()

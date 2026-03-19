@@ -27,11 +27,12 @@ from manager.app.paths_config import (
     get_tenant_document_folder_name,
 )
 from datetime import datetime, timedelta
+from manager.app.logger import logger
 
 class TenantDetailsView(tk.Frame):
     """Vista de detalles de inquilino"""
     
-    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None, on_navigate_to_dashboard: Callable = None, read_only: bool = False):
+    def __init__(self, parent, tenant_data: Dict[str, Any], on_back: Callable = None, on_edit: Callable = None, on_register_payment: Callable = None, on_navigate_to_dashboard: Callable = None, read_only: bool = False, on_reactivate: Callable = None):
         super().__init__(parent, **theme_manager.get_style("frame"))
         
         # Recargar datos del inquilino desde el servicio para asegurar datos actualizados
@@ -54,7 +55,8 @@ class TenantDetailsView(tk.Frame):
         self.on_edit = on_edit
         self.on_register_payment = on_register_payment
         self.on_navigate_to_dashboard = on_navigate_to_dashboard
-        self.read_only = read_only  # Modo solo lectura (sin opción de editar)
+        self.read_only = read_only
+        self.on_reactivate = on_reactivate
         
         # Crear layout
         self._create_layout()
@@ -64,37 +66,30 @@ class TenantDetailsView(tk.Frame):
         theme = theme_manager.themes[theme_manager.current_theme]
         self._content_bg = theme.get("content_bg", theme["bg_primary"])
         self.configure(bg=self._content_bg)
+        # Botones de acción (abajo, fijos)
+        self._create_action_buttons()
         # Header con navegación
         self._create_header()
-        # Contenedor principal con scroll
+        # Contenedor principal sin scroll
         self._create_scroll_container()
         # Contenido principal
         self._create_content()
-        # Botones de acción
-        self._create_action_buttons()
     
     def _create_header(self):
         """Crea el header con título y navegación"""
         header_frame = tk.Frame(self, bg=self._content_bg)
-        header_frame.pack(fill="x", pady=(0, Spacing.LG))
+        header_frame.pack(fill="x", pady=(0, Spacing.SM))
 
         # Título con nombre del inquilino (a la izquierda)
         title_frame = tk.Frame(header_frame, bg=self._content_bg)
         title_frame.pack(side="left", fill="x", expand=True)
-        
-        # Frame para botones de navegación (a la derecha)
-        nav_frame = tk.Frame(header_frame, bg=self._content_bg)
-        nav_frame.pack(side="right")
-        
-        # Crear botones con el mismo estilo que otras vistas
-        self._create_navigation_buttons(nav_frame, self._on_back_clicked)
         
         # Nombre del inquilino
         theme = theme_manager.themes[theme_manager.current_theme]
         name_label = tk.Label(
             title_frame,
             text=self.tenant_data.get("nombre", "Inquilino"),
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 17, "bold"),
             bg=self._content_bg,
             fg=theme["text_primary"]
         )
@@ -102,7 +97,7 @@ class TenantDetailsView(tk.Frame):
         
         # Información básica con badge de estado
         info_frame = tk.Frame(title_frame, bg=self._content_bg)
-        info_frame.pack(anchor="w", pady=(Spacing.XS, 0))
+        info_frame.pack(anchor="w", pady=(0, 0))
         
         # --- Display amigable del apartamento ---
         apt_id = self.tenant_data.get('apartamento', None)
@@ -179,17 +174,9 @@ class TenantDetailsView(tk.Frame):
             btn_edit.pack(side="right")
     
     def _create_scroll_container(self):
-        """Crea el container con scroll vertical funcional y compacto"""
-        self.canvas = tk.Canvas(self, bg=self._content_bg, highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, pady=(0, 0), padx=(0, 0))
-        scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-        self.scrollable_frame = tk.Frame(self.canvas, bg=self._content_bg)
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
-        self.canvas.bind_all("<MouseWheel>", lambda event: self.canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+        """Crea el container de contenido sin scroll"""
+        self.scrollable_frame = tk.Frame(self, bg=self._content_bg)
+        self.scrollable_frame.pack(fill="both", expand=True, pady=(0, 0))
     
     def _create_content(self):
         """Crea el contenido principal (aún más compacto, sin espacios extra)"""
@@ -205,14 +192,21 @@ class TenantDetailsView(tk.Frame):
         self._create_housing_info_section(right_column)
         self._create_payment_info_section(right_column)
     
+    def _compact_card(self, section):
+        """Reduce el espaciado interno de un ModernCard para vista compacta"""
+        section.content_frame.pack_configure(padx=Spacing.SM, pady=(Spacing.XS, Spacing.SM))
+        # Reducir el pady del título (primer hijo del content_frame)
+        children = section.content_frame.winfo_children()
+        if children:
+            title_lbl = children[0]
+            title_lbl.pack_configure(pady=(0, Spacing.XS))
+
     def _create_personal_info_section(self, parent):
         """Crea la sección de información personal"""
         section = ModernCard(parent, title="Información Personal", bg=self._content_bg)
-        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.pack(fill="x", pady=(0, 1))
         section.content_frame.configure(bg=self._content_bg)
-        for w in section.content_frame.winfo_children():
-            w.configure(bg=self._content_bg)
-        section.content_frame.pack_configure(pady=(0, 0))
+        self._compact_card(section)
         info_data = [
             ("Nombre completo", self.tenant_data.get("nombre", "N/A")),
             ("Documento", self.tenant_data.get("numero_documento", "N/A")),
@@ -225,11 +219,9 @@ class TenantDetailsView(tk.Frame):
     def _create_emergency_contact_section(self, parent):
         """Crea la sección de contacto de emergencia"""
         section = ModernCard(parent, title="Contacto de Emergencia", bg=self._content_bg)
-        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.pack(fill="x", pady=(0, 1))
         section.content_frame.configure(bg=self._content_bg)
-        for w in section.content_frame.winfo_children():
-            w.configure(bg=self._content_bg)
-        section.content_frame.pack_configure(pady=(0, 0))
+        self._compact_card(section)
         emergency_data = [
             ("Nombre", self.tenant_data.get("contacto_emergencia_nombre", "No registrado")),
             ("Teléfono", self.tenant_data.get("contacto_emergencia_telefono", "No registrado"))
@@ -240,11 +232,9 @@ class TenantDetailsView(tk.Frame):
     def _create_housing_info_section(self, parent):
         """Crea la sección de información de vivienda"""
         section = ModernCard(parent, title="Información de Vivienda", bg=self._content_bg)
-        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.pack(fill="x", pady=(0, 1))
         section.content_frame.configure(bg=self._content_bg)
-        for w in section.content_frame.winfo_children():
-            w.configure(bg=self._content_bg)
-        section.content_frame.pack_configure(pady=(0, 0))
+        self._compact_card(section)
         valor_arriendo = self.tenant_data.get("valor_arriendo")
         # --- Display amigable del apartamento ---
         apt_id = self.tenant_data.get('apartamento', None)
@@ -303,11 +293,9 @@ class TenantDetailsView(tk.Frame):
     def _create_payment_info_section(self, parent):
         """Crea la sección de información de pagos (días de mora con lógica integral del servicio)."""
         section = ModernCard(parent, title="Información de Pagos", bg=self._content_bg)
-        section.pack(fill="x", pady=(0, 2), ipady=0, ipadx=0)
+        section.pack(fill="x", pady=(0, 1))
         section.content_frame.configure(bg=self._content_bg)
-        for w in section.content_frame.winfo_children():
-            w.configure(bg=self._content_bg)
-        section.content_frame.pack_configure(pady=(0, 0))
+        self._compact_card(section)
 
         tenant_id = self.tenant_data.get("id")
         ultimo_pago_display = "No registrado"
@@ -363,10 +351,9 @@ class TenantDetailsView(tk.Frame):
     
     def _create_documents_section_simple(self, parent):
         section = ModernCard(parent, title="Documentos Adjuntos", bg=self._content_bg)
-        section.pack(fill="x")
+        section.pack(fill="x", pady=(0, 1))
         section.content_frame.configure(bg=self._content_bg)
-        for w in section.content_frame.winfo_children():
-            w.configure(bg=self._content_bg)
+        self._compact_card(section)
         archivos = self.tenant_data.get("archivos", {})
         if isinstance(archivos, str):
             try:
@@ -408,7 +395,7 @@ class TenantDetailsView(tk.Frame):
             command=self._manage_documents,
             small=True
         )
-        btn_docs.pack(anchor="w", pady=(2, 0), padx=(0, 0))
+        btn_docs.pack(anchor="w", pady=(2, 8), padx=(0, 0))
     
     def _create_info_row(self, parent, label: str, value: str):
         """Crea una fila de información ultra compacta"""
@@ -438,11 +425,11 @@ class TenantDetailsView(tk.Frame):
         value_widget.pack(side="right", padx=(0, 2))
     
     def _create_action_buttons(self):
-        """Crea los botones de acción (sin espacio extra arriba)"""
+        """Crea los botones de acción"""
         actions_frame = tk.Frame(self, bg=self._content_bg)
-        actions_frame.pack(fill="x", pady=(0, 0))
+        actions_frame.pack(fill="x", side="bottom", pady=(4, 8))
         buttons_frame = tk.Frame(actions_frame, bg=self._content_bg)
-        buttons_frame.pack(pady=(0, 0))
+        buttons_frame.pack(anchor="center")
         btn_payment = ModernButton(
             buttons_frame,
             text="Registrar Pago",
@@ -450,7 +437,7 @@ class TenantDetailsView(tk.Frame):
             style="primary",
             command=self._register_payment
         )
-        btn_payment.pack(side="left")
+        btn_payment.pack(side="left", padx=(0, Spacing.SM))
         btn_receipt = ModernButton(
             buttons_frame,
             text="Generar Recibo",
@@ -458,7 +445,7 @@ class TenantDetailsView(tk.Frame):
             style="secondary",
             command=self._generate_receipt
         )
-        btn_receipt.pack(side="left", padx=(Spacing.SM, 0))
+        btn_receipt.pack(side="left", padx=(0, Spacing.SM))
         btn_notify = ModernButton(
             buttons_frame,
             text="Enviar Notificación",
@@ -466,7 +453,25 @@ class TenantDetailsView(tk.Frame):
             style="secondary",
             command=self._send_notification
         )
-        btn_notify.pack(side="left", padx=(Spacing.SM, 0))
+        btn_notify.pack(side="left", padx=(0, Spacing.SM))
+        if not self.read_only:
+            btn_deactivate = ModernButton(
+                buttons_frame,
+                text="Desactivar Inquilino",
+                icon="🚫",
+                style="danger",
+                command=self._deactivate_tenant
+            )
+            btn_deactivate.pack(side="left")
+        if self.read_only and self.on_reactivate:
+            btn_reactivate = ModernButton(
+                buttons_frame,
+                text="Reactivar Inquilino",
+                icon="🔄",
+                style="success",
+                command=self.on_reactivate
+            )
+            btn_reactivate.pack(side="left")
     
     # Event handlers
     def _on_back_clicked(self):
@@ -492,7 +497,7 @@ class TenantDetailsView(tk.Frame):
                         self.on_navigate_to_dashboard("dashboard")
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.error(f"Error en callback de navegación: {e}")
             
             # Prioridad 2: Buscar MainWindow a través de la jerarquía
             widget = self.master
@@ -506,7 +511,7 @@ class TenantDetailsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.error(f"Error al navegar: {e}")
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1
@@ -1080,12 +1085,103 @@ class TenantDetailsView(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir la carpeta: {e}")
     
+    def _deactivate_tenant(self):
+        """Desactiva el inquilino actual tras confirmar motivo"""
+        from tkinter import ttk
+        from manager.app.ui.components.modern_widgets import bind_combobox_dropdown_on_click
+
+        tenant_name = self.tenant_data.get("nombre", "Inquilino")
+
+        # Diálogo modal para seleccionar motivo
+        dialog = tk.Toplevel(self)
+        dialog.title("Desactivar Inquilino")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        dialog.update_idletasks()
+        w, h = 420, 220
+        sw = dialog.winfo_screenwidth()
+        sh = dialog.winfo_screenheight()
+        x = (sw // 2) - (w // 2)
+        y = ((sh - 50) // 2) - (h // 2)
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+        dialog.configure(bg="white")
+
+        frame = tk.Frame(dialog, bg="white", padx=20, pady=16)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(
+            frame,
+            text=f"¿Desactivar a {tenant_name}?",
+            font=("Segoe UI", 12, "bold"),
+            bg="white",
+            fg="#1f2937"
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            frame,
+            text="Selecciona el motivo de desactivación:",
+            font=("Segoe UI", 10),
+            bg="white",
+            fg="#374151"
+        ).pack(anchor="w", pady=(0, 6))
+
+        motivo_var = tk.StringVar(value="Finalización de contrato")
+        motivo_combo = ttk.Combobox(
+            frame,
+            textvariable=motivo_var,
+            values=["Finalización de contrato", "Mutuo acuerdo", "Incumplimiento de pago", "Otro"],
+            state="readonly",
+            width=38,
+            font=("Segoe UI", 10)
+        )
+        motivo_combo.pack(anchor="w", pady=(0, 16))
+        bind_combobox_dropdown_on_click(motivo_combo)
+
+        btn_frame = tk.Frame(frame, bg="white")
+        btn_frame.pack(fill="x")
+
+        def confirm():
+            motivo = motivo_var.get().strip()
+            if not motivo:
+                messagebox.showwarning("Motivo requerido", "Por favor selecciona un motivo.", parent=dialog)
+                return
+            dialog.destroy()
+            if not messagebox.askyesno(
+                "Confirmar desactivación",
+                f"¿Estás seguro de desactivar a {tenant_name}?\n\n"
+                f"Motivo: {motivo}\n\n"
+                "El apartamento quedará marcado como Disponible."
+            ):
+                return
+            try:
+                tenant_id = self.tenant_data.get("id")
+                tenant_service.update_tenant(tenant_id, {
+                    "estado_pago": "inactivo",
+                    "motivo_desactivacion": motivo,
+                    "fecha_desactivacion": datetime.now().isoformat()
+                })
+                apt_id = self.tenant_data.get("apartamento")
+                if apt_id is not None:
+                    apartment_service.update_apartment(apt_id, {"status": "Disponible"})
+                if hasattr(self, 'on_data_change') and self.on_data_change:
+                    self.on_data_change()
+                if self.on_back:
+                    self.on_back()
+            except Exception as e:
+                logger.error(f"Error al desactivar inquilino: {e}")
+                messagebox.showerror("Error", f"No se pudo desactivar el inquilino: {e}")
+
+        ModernButton(btn_frame, text="Confirmar", icon="🚫", style="danger", command=confirm).pack(side="right", padx=(8, 0))
+        ModernButton(btn_frame, text="Cancelar", icon="❌", style="secondary", command=dialog.destroy).pack(side="right")
+
     def _register_payment(self):
         if hasattr(self, 'on_register_payment') and self.on_register_payment:
             self.on_register_payment(self.tenant_data)
         else:
             messagebox.showinfo("Navegación", "No se pudo navegar al módulo de pagos.")
-    
+
     def _generate_receipt(self):
         """Muestra un selector de pagos para generar recibos"""
         tenant_id = self.tenant_data.get("id")

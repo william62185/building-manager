@@ -19,7 +19,7 @@ from manager.app.services.payment_service import payment_service
 from manager.app.services.expense_service import ExpenseService
 from manager.app.logger import logger
 from .payments_view import PaymentsView
-from .tenants_view import TenantsView
+from .tenants_hub_view import TenantsHubView
 from .expenses_view import ExpensesView
 from .accounting.accounting_view import AccountingView
 from .apartment_management_view import ApartmentManagementView
@@ -195,17 +195,55 @@ class MainWindow:
         # Logo/Icono de la aplicación
         logo_frame = tk.Frame(header_frame, bg=header_frame.cget("bg"))
         logo_frame.pack(side="left")
-        
+
         theme = theme_manager.themes[theme_manager.current_theme]
         sidebar_fg = theme.get("sidebar_fg", theme["text_primary"])
         sidebar_fg_sec = theme.get("sidebar_fg_secondary", theme["text_secondary"])
-        logo_label = tk.Label(
-            logo_frame,
-            text="🏢",
-            font=("Segoe UI Symbol", 28),
-            bg=header_frame.cget("bg"),
-            fg=sidebar_fg
-        )
+
+        # Intentar cargar logo.png; si no existe, usar emoji de fallback
+        from manager.app.paths_config import get_logo_path
+        _logo_path = get_logo_path()
+        if _logo_path:
+            try:
+                from PIL import Image, ImageTk
+                _img = Image.open(str(_logo_path)).convert("RGBA")
+                _img = _img.resize((48, 48), Image.LANCZOS)
+                self._sidebar_logo_photo = ImageTk.PhotoImage(_img)
+                logo_label = tk.Label(
+                    logo_frame,
+                    image=self._sidebar_logo_photo,
+                    bg=header_frame.cget("bg"),
+                )
+            except Exception:
+                # Pillow no disponible o error al cargar — usar PhotoImage nativo
+                try:
+                    self._sidebar_logo_photo = tk.PhotoImage(file=str(_logo_path))
+                    # Escalar si es muy grande (PhotoImage solo soporta subsample)
+                    w = self._sidebar_logo_photo.width()
+                    factor = max(1, w // 48)
+                    if factor > 1:
+                        self._sidebar_logo_photo = self._sidebar_logo_photo.subsample(factor, factor)
+                    logo_label = tk.Label(
+                        logo_frame,
+                        image=self._sidebar_logo_photo,
+                        bg=header_frame.cget("bg"),
+                    )
+                except Exception:
+                    logo_label = tk.Label(
+                        logo_frame,
+                        text="🏢",
+                        font=("Segoe UI Symbol", 28),
+                        bg=header_frame.cget("bg"),
+                        fg=sidebar_fg,
+                    )
+        else:
+            logo_label = tk.Label(
+                logo_frame,
+                text="🏢",
+                font=("Segoe UI Symbol", 28),
+                bg=header_frame.cget("bg"),
+                fg=sidebar_fg,
+            )
         logo_label.pack()
         
         # Texto del título
@@ -256,7 +294,7 @@ class MainWindow:
                 "active": False
             },
             {
-                "text": "Pagos",
+                "text": "Ingresos",
                 "icon": Icons.PAYMENTS,
                 "command": lambda: self._navigate_to("payments"),
                 "active": False
@@ -360,8 +398,8 @@ class MainWindow:
                 else:
                     hover_bg = "#dbeafe"  # blue-100 - azul claro para fondo
                     hover_fg = "#1e40af"  # blue-800 - azul oscuro para texto
-            elif btn_frame.button_name == "pagos":
-                # Verde para módulo de pagos en hover
+            elif btn_frame.button_name == "ingresos":
+                # Verde para módulo de ingresos en hover
                 if theme_manager.current_theme == "dark":
                     hover_bg = "#1e3a1e"  # verde oscuro para modo oscuro
                     hover_fg = "#4ade80"  # verde claro para modo oscuro
@@ -434,7 +472,7 @@ class MainWindow:
             view_to_button = {
                 "dashboard": "dashboard",
                 "tenants": "inquilinos",
-                "payments": "pagos",
+                "payments": "ingresos",
                 "expenses": "gastos",
                 "accounting": "contabilidad",
                 "administration": "administración",
@@ -454,8 +492,8 @@ class MainWindow:
                     else:
                         active_bg = "#dbeafe"  # blue-100 - azul claro para fondo
                         active_fg = "#1e40af"  # blue-800 - azul oscuro para texto
-                elif btn_frame.button_name == "pagos":
-                    # Verde para módulo de pagos
+                elif btn_frame.button_name == "ingresos":
+                    # Verde para módulo de ingresos
                     if theme_manager.current_theme == "dark":
                         active_bg = "#1e3a1e"  # verde oscuro para modo oscuro
                         active_fg = "#4ade80"  # verde claro para modo oscuro
@@ -626,7 +664,7 @@ class MainWindow:
             view_to_button = {
                 "dashboard": "dashboard",
                 "tenants": "inquilinos",
-                "payments": "pagos",
+                "payments": "ingresos",
                 "expenses": "gastos",
                 "accounting": "contabilidad",
                 "administration": "administración",
@@ -646,8 +684,8 @@ class MainWindow:
                     else:
                         active_bg = "#dbeafe"  # blue-100 - azul claro para fondo
                         active_fg = "#1e40af"  # blue-800 - azul oscuro para texto
-                elif button_name == "pagos":
-                    # Verde para módulo de pagos
+                elif button_name == "ingresos":
+                    # Verde para módulo de ingresos
                     if theme_manager.current_theme == "dark":
                         active_bg = "#1e3a1e"  # verde oscuro para modo oscuro
                         active_fg = "#4ade80"  # verde claro para modo oscuro
@@ -998,7 +1036,7 @@ class MainWindow:
         view_to_button = {
             "dashboard": "dashboard",
             "tenants": "inquilinos",
-            "payments": "pagos",
+            "payments": "ingresos",
             "expenses": "gastos",
             "accounting": "contabilidad",
             "administration": "administración",
@@ -1083,21 +1121,12 @@ class MainWindow:
             )
             dashboard.pack(fill="both", expand=True)
         elif view_name == "tenants":
-            # Recargar datos de inquilinos antes de crear la vista para asegurar datos actualizados
             try:
-                # Recargar datos desde archivo
                 tenant_service._load_data()
-                # Recalcular estados basándose en pagos recientes
                 tenant_service.recalculate_all_payment_statuses()
-                # Recargar datos después del recálculo
-                tenant_service._load_data()
             except Exception as e:
                 logger.warning("Error al recargar datos de inquilinos: %s", e)
-            
             self._create_tenants_view()
-            # Forzar actualización después de cargar la vista de inquilinos
-            self.root.after(100, self.root.update_idletasks)
-            self.root.after(200, self.root.update)
         elif view_name == "payments":
             payments_view = PaymentsView(
                 self.views_container, 
@@ -1126,59 +1155,43 @@ class MainWindow:
             settings_view.pack(fill="both", expand=True)
     
     def _create_tenants_view(self):
-        """Crea la vista de inquilinos y abre directamente la vista de lista/detalles (sin menú de 3 cards)."""
-        tenants_view = TenantsView(
+        """Crea el hub de inquilinos con tabs de navegación."""
+        hub = TenantsHubView(
             self.views_container,
-            on_navigate=self._navigate_to,
-            on_data_change=self.refresh_dashboard,  # Callback para actualizar dashboard
+            on_back=lambda: self._navigate_to("dashboard"),
+            on_data_change=self.refresh_dashboard,
             on_register_payment=self.navigate_to_payments,
-            on_new_tenant=self._show_new_tenant_form,
         )
-        tenants_view.pack(fill="both", expand=True)
+        hub.pack(fill="both", expand=True)
         # Forzar actualización después de crear la vista
         self.root.update_idletasks()
         self.root.update()
     
     def _show_new_tenant_form(self):
-        """Muestra directamente el formulario de nuevo inquilino"""
-        # Actualizar estado de botones de navegación para inquilinos
+        """Navega al módulo de Inquilinos y abre el tab de nuevo inquilino."""
         self._update_nav_buttons("tenants")
-        
-        # Actualizar título
-        self._page_title_text = "Nuevo Inquilino"
+        self._page_title_text = "Inquilinos"
         self._draw_page_title()
-        
-        # Limpiar contenido actual
+        # Si ya hay un hub activo, seleccionar el tab directamente
+        for widget in self.views_container.winfo_children():
+            if isinstance(widget, TenantsHubView):
+                widget.select_tab("nuevo")
+                return
+        # Si no hay hub, crearlo y seleccionar el tab
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        
-        # Crear el formulario de nuevo inquilino directamente
-        from .tenant_form_view import TenantFormView
-        
-        form_view = TenantFormView(
+        hub = TenantsHubView(
             self.views_container,
-            on_back=lambda: self._navigate_to("tenants"),
-            on_save_success=self.refresh_dashboard,  # Callback para actualizar dashboard
-            on_navigate_to_dashboard=lambda: self._navigate_to("dashboard")  # Callback directo para navegar al dashboard
-        )
-        form_view.pack(fill="both", expand=True)
-    
-    def _show_search_dialog(self):
-        """Muestra la vista de solo consulta de inquilinos (Ver detalles inquilinos)"""
-        from .tenants_view import TenantsView
-        # Limpiar contenido actual
-        for widget in self.views_container.winfo_children():
-            widget.destroy()
-        # Crear la vista de solo consulta, pasando el callback correcto
-        tenants_view = TenantsView(
-            self.views_container,
-            on_navigate=self._navigate_to,
+            on_back=lambda: self._navigate_to("dashboard"),
             on_data_change=self.refresh_dashboard,
             on_register_payment=self.navigate_to_payments,
-            on_new_tenant=self._show_new_tenant_form,
         )
-        tenants_view._show_tenants_list()  # Ir directo a la vista de detalles
-        tenants_view.pack(fill="both", expand=True)
+        hub.pack(fill="both", expand=True)
+        hub.select_tab("nuevo")
+    
+    def _show_search_dialog(self):
+        """Muestra la vista de inquilinos (tab lista)."""
+        self._navigate_to("tenants")
     
     def _show_pending_payments(self):
         """Muestra el reporte de pagos pendientes (contenido generado por ReportPresenter)."""
@@ -1198,81 +1211,46 @@ class MainWindow:
             )
 
     def _show_export_success_dialog(self, filepath: Path):
-        """Diálogo de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
         colors = get_module_colors("reportes")
-        win = tk.Toplevel(self.root)
-        win.title("Exportación exitosa")
-        win.geometry("520x220")
-        win.transient(self.root)
-        win.resizable(True, False)
-        win.grab_set()
-        content_f = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
-        content_f.pack(fill="both", expand=True)
-        top = tk.Frame(content_f)
-        top.pack(fill="x")
-        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=colors.get("primary", "#ea580c")).pack(side="left", padx=(0, Spacing.MD))
-        msg = tk.Frame(top)
-        msg.pack(side="left", fill="x", expand=True)
-        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
-        path_var = tk.StringVar(value=str(filepath))
-        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
-        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
-        path_entry.bind("<Key>", lambda e: "break")
-        btns = tk.Frame(content_f)
-        btns.pack(fill="x", pady=(Spacing.LG, 0))
-        def copy_path():
-            win.clipboard_clear()
-            win.clipboard_append(str(filepath))
-        def open_folder():
-            folder = str(filepath.resolve().parent)
-            if os.name == "nt":
-                os.startfile(folder)
-            else:
-                subprocess.run(["xdg-open", folder], check=False)
-        def open_file():
-            path = str(filepath.resolve())
-            if os.name == "nt":
-                os.startfile(path)
-            else:
-                subprocess.run(["xdg-open", path], check=False)
-        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+        show_export_success_dialog(self, filepath, module_color=colors.get("primary", "#ea580c"))
     
     def _show_occupation_status_direct(self):
-        """Navega al módulo de administración de apartamentos y muestra la vista de estado de ocupación"""
-        # Actualizar título y botones de navegación
+        """Navega al módulo de administración y abre el tab de estado de ocupación."""
+        from manager.app.ui.views.apartment_hub_view import ApartmentHubView
         self._update_nav_buttons("administration")
         self._page_title_text = "Gestión de Apartamentos"
         self._draw_page_title()
-        
-        # Limpiar contenido actual
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        
-        # Crear la vista de administración de apartamentos
-        apartment_view = ApartmentManagementView(self.views_container, on_navigate=self._navigate_to)
-        apartment_view.pack(fill="both", expand=True)
-        
-        # Mostrar directamente la vista de estado de ocupación dentro del módulo
-        apartment_view._show_occupation_status()
+        hub = ApartmentHubView(
+            self.views_container,
+            on_back=lambda: self._navigate_to("dashboard"),
+            initial_tab="ocupacion",
+        )
+        hub.pack(fill="both", expand=True)
 
     def _show_new_tenant_form(self):
-        """Muestra directamente el formulario de nuevo inquilino"""
+        """Navega al módulo de Inquilinos y abre el tab de nuevo inquilino."""
         self._update_nav_buttons("tenants")
-        self._page_title_text = "Nuevo Inquilino"
+        self._page_title_text = "Inquilinos"
         self._draw_page_title()
+        # Si ya hay un hub activo, seleccionar el tab directamente
+        for widget in self.views_container.winfo_children():
+            if isinstance(widget, TenantsHubView):
+                widget.select_tab("nuevo")
+                return
+        # Si no hay hub, crearlo y seleccionar el tab
         for widget in self.views_container.winfo_children():
             widget.destroy()
-        from .tenant_form_view import TenantFormView
-        form_view = TenantFormView(
+        hub = TenantsHubView(
             self.views_container,
-            on_back=lambda: self._navigate_to("tenants"),
-            on_save_success=self.refresh_dashboard,
-            on_navigate_to_dashboard=lambda: self._navigate_to("dashboard")
+            on_back=lambda: self._navigate_to("dashboard"),
+            on_data_change=self.refresh_dashboard,
+            on_register_payment=self.navigate_to_payments,
         )
-        form_view.pack(fill="both", expand=True)
+        hub.pack(fill="both", expand=True)
+        hub.select_tab("nuevo")
 
     def _create_navigation_buttons(self, parent, on_back_command, show_back_button=True, module_name="administración"):
         """Crea los botones Volver y Dashboard con estilo moderno y colores del módulo"""
@@ -1343,26 +1321,15 @@ class MainWindow:
         """Refresca la vista de inquilinos para mostrar estados actualizados en tiempo real"""
         current_view = getattr(self, '_current_view', None)
         logger.debug("Refrescando vista de inquilinos desde vista: %s", current_view)
-        
         try:
-            # Primero intentar refrescar si la vista de inquilinos ya está activa
-            if current_view == "tenants":
-                # Buscar la instancia de TenantsView en los widgets hijos
-                for widget in self.views_container.winfo_children():
-                    if isinstance(widget, TenantsView):
-                        # Si está en la lista, refrescar solo la lista sin destruir la vista
-                        if widget.current_view == "list":
-                            widget.refresh_list()
-                            logger.debug("Lista de inquilinos refrescada en tiempo real (sin recrear vista)")
-                            # Forzar actualización de la UI
-                            self.root.update_idletasks()
-                            self.root.update()
-                            return
-                        # Si está en otra subvista (dashboard, details), refrescar cuando vuelva a lista
-            
-            # Si no estamos en la vista de inquilinos o no está en lista,
-            # los datos se recargarán al navegar a inquilinos vía _create_tenants_view()
-            logger.debug("Callback de refresh ejecutado - Los datos se actualizarán al navegar a inquilinos")
+            for widget in self.views_container.winfo_children():
+                if isinstance(widget, TenantsHubView):
+                    widget.refresh_list()
+                    logger.debug("Lista de inquilinos refrescada en tiempo real")
+                    self.root.update_idletasks()
+                    self.root.update()
+                    return
+            logger.debug("Hub de inquilinos no activo — datos se actualizarán al navegar")
         except Exception as e:
             logger.warning("Error al refrescar vista de inquilinos: %s", e)
     
@@ -1370,52 +1337,44 @@ class MainWindow:
         """Fuerza un refresh completo de la vista de inquilinos"""
         logger.debug("Forzando refresh completo de vista de inquilinos")
         try:
-            # Limpiar contenido actual
             for widget in self.views_container.winfo_children():
                 widget.destroy()
-            
-            # Recrear la vista de inquilinos
             self._create_tenants_view()
-            
-            # Forzar actualización múltiple
             self.root.update_idletasks()
             self.root.update()
-            self.root.after(100, self.root.update_idletasks)
-            self.root.after(200, self.root.update)
         except Exception as e:
             logger.warning("Error al forzar refresh: %s", e)
     
     def _show_register_payment_direct(self):
-        """Navega a la vista de pagos y abre directamente el registro de pago"""
-        # Limpiar contenido actual
+        """Navega al módulo de Ingresos y abre el tab de registro."""
         self._update_nav_buttons("payments")
-        self._page_title_text = "Registrar pagos"
+        self._page_title_text = "Ingresos"
         self._draw_page_title()
         for widget in self.views_container.winfo_children():
             widget.destroy()
         payments_view = PaymentsView(
-            self.views_container, 
+            self.views_container,
             on_back=lambda: self._navigate_to("dashboard"),
-            on_payment_saved=self._on_payment_saved_go_to_tenants
+            on_payment_saved=self._on_payment_saved_go_to_tenants,
         )
         payments_view.pack(fill="both", expand=True)
-        payments_view._show_register_payment()
-    
+        payments_view._select_tab("registrar")
+
     def navigate_to_payments(self, tenant=None):
-        """Navega a la vista de pagos y abre el formulario con el inquilino preseleccionado si se proporciona."""
+        """Navega al módulo de Ingresos, opcionalmente con un inquilino preseleccionado."""
         self._update_nav_buttons("payments")
-        self._page_title_text = "Registrar pagos"
+        self._page_title_text = "Ingresos"
         self._draw_page_title()
         for widget in self.views_container.winfo_children():
             widget.destroy()
         payments_view = PaymentsView(
-            self.views_container, 
-            on_back=lambda: self._navigate_to("dashboard"), 
+            self.views_container,
+            on_back=lambda: self._navigate_to("dashboard"),
             preselected_tenant=tenant,
-            on_payment_saved=self._on_payment_saved_go_to_tenants
+            on_payment_saved=self._on_payment_saved_go_to_tenants,
         )
         payments_view.pack(fill="both", expand=True)
-        payments_view._show_register_payment(preselected_tenant=tenant)
+        payments_view._select_tab("registrar")
     
     def _show_register_expense_direct(self):
         """Navega a la vista de gastos y abre directamente el registro de gasto"""
@@ -1423,13 +1382,17 @@ class MainWindow:
         self._page_title_text = "Gestión de Gastos"
         self._draw_page_title()
         for widget in self.views_container.winfo_children():
+            if isinstance(widget, ExpensesView):
+                widget._select_tab("registrar")
+                return
+        for widget in self.views_container.winfo_children():
             widget.destroy()
         expenses_view = ExpensesView(
-            self.views_container, 
+            self.views_container,
             on_back=lambda: self._navigate_to("dashboard")
         )
         expenses_view.pack(fill="both", expand=True)
-        expenses_view._show_register_expense()
+        expenses_view._select_tab("registrar")
     
     def _hide_license_warning_tooltip(self):
         """Oculta el tooltip de aviso de licencia por vencer (si existe)."""
@@ -2530,7 +2493,7 @@ class MainWindow:
         tk.Label(content, text="Módulos principales:", font=("Segoe UI", 11, "bold"), bg=bg, fg=fg).pack(anchor="w", pady=(Spacing.MD, Spacing.XS))
         mods = [
             "• Inquilinos: registro y estado de arrendatarios.",
-            "• Pagos: cobros y estado de cuentas.",
+            "• Ingresos: cobros y estado de cuentas.",
             "• Gastos: registro de gastos del edificio.",
             "• Administración: edificio, unidades, usuarios y reportes.",
             "• Reportes: informes y exportaciones.",
@@ -2569,3 +2532,4 @@ class MainWindow:
         ).pack()
 
         win.protocol("WM_DELETE_WINDOW", finish)
+

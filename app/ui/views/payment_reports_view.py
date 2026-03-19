@@ -19,6 +19,7 @@ from manager.app.ui.views.register_expense_view import DatePickerWidget
 from manager.app.services.payment_service import payment_service
 from manager.app.services.tenant_service import tenant_service
 from manager.app.services.apartment_service import apartment_service
+from manager.app.logger import logger
 
 
 # Verde más oscuro del módulo para iconos, títulos y botones (contraste)
@@ -50,39 +51,17 @@ class PaymentReportsView(tk.Frame):
             tenant_service._load_data()
             apartment_service._load_data()
         except Exception as e:
-            print(f"Error al recargar datos: {e}")
+            logger.warning("Error al recargar datos: %s", e)
     
     def _create_layout(self):
         """Crea el layout principal de la vista de reportes"""
         cb = self._content_bg
         theme = theme_manager.themes[theme_manager.current_theme]
-        # Header
-        header = tk.Frame(self, bg=cb, height=60)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        
-        title_frame = tk.Frame(header, bg=cb)
-        title_frame.pack(side="left", padx=15, fill="y", expand=True)
-        
-        tk.Label(
-            title_frame,
-            text="📊 Reportes de Pagos",
-            font=("Segoe UI", 18, "bold"),
-            bg=cb,
-            fg=theme["text_primary"]
-        ).pack(side="left", pady=15)
-        
-        # Frame para botones de navegación (alineados a la derecha)
-        buttons_frame = tk.Frame(header, bg=cb)
-        buttons_frame.pack(side="right", padx=15, pady=15)
-        
-        if self.on_back:
-            self._create_navigation_buttons(buttons_frame, self.on_back)
-        
+
         # Contenedor principal sin scroll (sin fondo blanco)
         main_container = tk.Frame(self, bg=cb)
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
-        
+
         # Contenido de reportes directamente en el contenedor principal
         self._create_reports_content(main_container)
     
@@ -1550,50 +1529,9 @@ class PaymentReportsView(tk.Frame):
         text_widget.config(state="disabled")
     
     def _show_export_success_dialog(self, filepath):
-        """Ventana de confirmación tras exportar: Copiar, Abrir carpeta, Abrir archivo, Aceptar (reglas establecidas)."""
-        path = Path(filepath) if not isinstance(filepath, Path) else filepath
+        from manager.app.ui.components.export_success_dialog import show_export_success_dialog
         colors = get_module_colors("pagos")
-        win = tk.Toplevel(self.winfo_toplevel())
-        win.title("Exportación exitosa")
-        win.geometry("520x220")
-        win.transient(self.winfo_toplevel())
-        win.resizable(True, False)
-        win.grab_set()
-        content = tk.Frame(win, padx=Spacing.LG, pady=Spacing.LG)
-        content.pack(fill="both", expand=True)
-        top = tk.Frame(content)
-        top.pack(fill="x")
-        tk.Label(top, text="ℹ", font=("Segoe UI", 28), fg=colors.get("primary", "#2563eb")).pack(side="left", padx=(0, Spacing.MD))
-        msg = tk.Frame(top)
-        msg.pack(side="left", fill="x", expand=True)
-        tk.Label(msg, text="Exportación exitosa. Archivo guardado en:", font=("Segoe UI", 11)).pack(anchor="w")
-        path_var = tk.StringVar(value=str(path))
-        path_entry = tk.Entry(msg, textvariable=path_var, font=("Segoe UI", 10))
-        path_entry.pack(fill="x", pady=(Spacing.SM, 0))
-        path_entry.bind("<Key>", lambda e: "break")
-        btns = tk.Frame(content)
-        btns.pack(fill="x", pady=(Spacing.LG, 0))
-        def copy_path():
-            win.clipboard_clear()
-            win.clipboard_append(str(path))
-        def open_folder():
-            folder = str(path.resolve().parent)
-            if os.name == "nt":
-                os.startfile(folder)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", folder], check=False)
-        def open_file():
-            p = str(path.resolve())
-            if os.name == "nt":
-                os.startfile(p)
-            else:
-                import subprocess
-                subprocess.run(["xdg-open", p], check=False)
-        tk.Button(btns, text="📋 Copiar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=copy_path).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📁 Abrir carpeta", font=("Segoe UI", 10), bg="#6b7280", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_folder).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="📄 Abrir archivo", font=("Segoe UI", 10), bg="#059669", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=open_file).pack(side="left", padx=(0, Spacing.SM))
-        tk.Button(btns, text="Aceptar", font=("Segoe UI", 10), bg="#2563eb", fg="white", relief="flat", padx=14, pady=6, cursor="hand2", command=win.destroy).pack(side="right")
+        show_export_success_dialog(self, filepath, module_color=colors.get("primary", "#166534"))
     
     def _export_to_csv(self, content, title, report_type):
         """Exporta el reporte a CSV"""
@@ -1732,7 +1670,7 @@ class PaymentReportsView(tk.Frame):
                     self.on_navigate_to_dashboard()
                     return
                 except Exception as e:
-                    print(f"Error en callback de navegación: {e}")
+                    logger.warning("Error en callback de navegación: %s", e)
             
             # Prioridad 2: Buscar MainWindow en la jerarquía
             widget = self.master
@@ -1746,7 +1684,7 @@ class PaymentReportsView(tk.Frame):
                         widget._navigate_to("dashboard")
                         return
                     except Exception as e:
-                        print(f"Error al navegar: {e}")
+                        logger.warning("Error al navegar: %s", e)
                         break
                 widget = getattr(widget, 'master', None)
                 depth += 1

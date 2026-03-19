@@ -351,36 +351,45 @@ class ModernMetricCard(tk.Frame):
     """Tarjeta de métrica moderna"""
     
     def __init__(self, parent, title: str, value: str, icon: str = "", 
-                 color_theme: str = "primary"):
+                 color_theme: str = "primary", value_color: str = None,
+                 warning_highlight: bool = False):
         theme = theme_manager.themes[theme_manager.current_theme]
-        # Usar bg_secondary para modo oscuro, blanco para modo claro
         card_bg = theme["bg_secondary"] if theme_manager.current_theme == "dark" else "white"
-        # Card con borde más visible y fondo adaptado al tema
-        super().__init__(parent, bg=card_bg, relief="flat", bd=1,
-                        highlightbackground=theme["border_light"],
-                        highlightthickness=1)
+
+        border_color = "#f59e0b" if warning_highlight else theme["border_light"]
+        border_thickness = 2 if warning_highlight else 1
+        actual_bg = "#fffbeb" if warning_highlight else card_bg  # amber-50 cuando hay advertencia
+
+        super().__init__(parent, bg=actual_bg, relief="flat", bd=1,
+                        highlightbackground=border_color,
+                        highlightthickness=border_thickness)
         
-        # Contenedor interno con padding reducido (1/3 menos)
-        inner = tk.Frame(self, bg=card_bg)
+        inner = tk.Frame(self, bg=actual_bg)
         inner.pack(fill="both", expand=True, padx=Spacing.SM, pady=Spacing.SM)
         
-        # Header con icono y título en la misma línea
-        header = tk.Frame(inner, bg=card_bg)
+        header = tk.Frame(inner, bg=actual_bg)
         header.pack(fill="x", pady=(0, Spacing.XS))
         
         if icon:
-            icon_label = tk.Label(header, text=icon, bg=card_bg,
+            icon_label = tk.Label(header, text=icon, bg=actual_bg,
                                  fg="#000000",
                                  font=("Segoe UI Symbol", 12))
             icon_label.pack(side="left", padx=(0, Spacing.XS))
         
-        title_label = tk.Label(header, text=title, bg=card_bg,
+        title_label = tk.Label(header, text=title, bg=actual_bg,
                               fg="#000000", font=("Segoe UI", 10))
         title_label.pack(side="left", fill="x", expand=True)
         
-        # Valor destacado (reducido 1/3)
-        value_label = tk.Label(inner, text=value, bg=card_bg,
-                             fg=theme["text_primary"], font=("Segoe UI", 14, "bold"))
+        # Color del valor: explícito > advertencia > tema
+        if value_color:
+            fg_value = value_color
+        elif warning_highlight:
+            fg_value = "#d97706"  # amber-600
+        else:
+            fg_value = theme["text_primary"]
+
+        value_label = tk.Label(inner, text=value, bg=actual_bg,
+                             fg=fg_value, font=("Segoe UI", 14, "bold"))
         value_label.pack(anchor="w")
 
 
