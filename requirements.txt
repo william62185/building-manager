@@ -22,4 +22,7 @@ openpyxl
 python-dateutil
 
 # Seleccionador de fechas
-tkcalendar 
+tkcalendar
+
+# Backup cifrado (ZIP con AES)
+pyzipper
