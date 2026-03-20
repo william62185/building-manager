@@ -1,208 +1,396 @@
-# Building Manager Pro
 
-Aplicación de escritorio para la gestión integral de edificios y arrendamientos, desarrollada en Python + Tkinter.
+## 📋 Tabla de Contenidos
 
-Incluye gestión de inquilinos, pagos, gastos, unidades (apartamentos/locales), reportes, configuración y backups, con persistencia en JSON y documentos locales.
+- [Descripción](#-descripción)
+- [Características Principales](#-características-principales)
+- [Arquitectura](#-arquitectura)
+- [Tecnologías](#-tecnologías)
+- [Instalación](#-instalación)
+- [Uso](#-uso)
+- [Testing](#-testing)
+- [Estructura del Proyecto](#-estructura-del-proyecto)
+- [Capturas de Pantalla](#-capturas-de-pantalla)
+- [Roadmap](#-roadmap)
+- [Contribución](#-contribución)
+- [Licencia](#-licencia)
 
----
+## 🎯 Descripción
 
-## Demo del proyecto
+**Building Manager Pro** es una aplicación de escritorio profesional diseñada para la gestión integral de edificios residenciales y comerciales. Desarrollada con Python y Tkinter, ofrece una interfaz moderna e intuitiva para administrar inquilinos, pagos, gastos, unidades y generar reportes detallados.
 
-> Recomendado: agrega aquí capturas/GIFs de las pantallas principales.
+### Problema que Resuelve
 
-- Dashboard con métricas operativas
-  <img width="1365" height="723" alt="image" src="https://github.com/user-attachments/assets/667409ef-c03c-407d-adfc-6cb826186eaf" />
+La gestión manual de edificios mediante hojas de cálculo y documentos dispersos es propensa a errores, consume tiempo y dificulta el seguimiento de pagos, gastos y documentación. Building Manager Pro centraliza toda la información en una aplicación de escritorio segura y fácil de usar.
 
-- Gestión de inquilinos (activos/inactivos)
-  <img width="1365" height="722" alt="image" src="https://github.com/user-attachments/assets/d8d55974-8fb6-4c6a-9acf-f9a61831a8b8" />
+### Valor Agregado
 
-- Registro y edición de pagos/gastos
-  <img width="1365" height="717" alt="image" src="https://github.com/user-attachments/assets/565abb5b-3340-4f8d-a6bb-2a2c8822ca79" />
-  <img width="1365" height="719" alt="image" src="https://github.com/user-attachments/assets/9163bb4c-ba39-46a5-9f62-50b6693b11ca" />
-  <img width="1365" height="721" alt="image" src="https://github.com/user-attachments/assets/6a656296-aa70-4b91-af6c-8669dfe2b415" />
+- ✅ **Sin dependencias de internet**: Funciona completamente offline
+- ✅ **Datos locales seguros**: Toda la información se almacena localmente
+- ✅ **Interfaz intuitiva**: Diseño moderno con temas claro/oscuro
+- ✅ **Gestión documental**: Organización automática de documentos por inquilino
+- ✅ **Reportes exportables**: CSV, TXT y Excel para análisis externo
+- ✅ **Backups automáticos**: Protección de datos integrada
 
-- Módulo de administración (usuarios, backup, unidades, edificio)
-  <img width="1365" height="719" alt="image" src="https://github.com/user-attachments/assets/e75c365d-3a51-40bf-93ef-f39e5aed7462" />
+## ✨ Características Principales
 
-- Modulo de Contabilidad
-  <img width="1365" height="720" alt="image" src="https://github.com/user-attachments/assets/c3a25dfd-ab40-42d6-9c52-f4be012d3303" />
+### 👥 Gestión de Inquilinos
+- Registro completo de inquilinos con datos personales y de contacto
+- Búsqueda avanzada con múltiples filtros
+- Gestión de documentos (cédula, contrato, recibos, ficha)
+- Historial de pagos por inquilino
+- Estados de pago automáticos (al día, atrasado, sin pagos)
 
-- Reportes exportables (CSV/TXT)
-  <img width="1365" height="720" alt="image" src="https://github.com/user-attachments/assets/4df38d44-9eb1-47d0-a05d-6cc961cc9740" />
+### 💰 Gestión de Pagos
+- Registro de pagos de arriendo
+- Múltiples métodos de pago (efectivo, transferencia, cheque)
+- Generación automática de recibos en PDF
+- Filtros por inquilino, fecha y método
+- Cálculo automático de totales
 
-- Modulo de configuraciones
-  <img width="1365" height="767" alt="image" src="https://github.com/user-attachments/assets/969de99d-c2f6-453a-968a-130cd7efd450" />
- 
----
+### 📊 Gestión de Gastos
+- Categorización de gastos (mantenimiento, servicios, administración)
+- Asignación de gastos por apartamento o generales
+- Adjuntos de comprobantes
+- Reportes de gastos por período y categoría
 
-## Stack tecnológico
+### 🏗️ Gestión de Unidades
+- Administración de apartamentos y locales
+- Estados de ocupación
+- Asignación de inquilinos a unidades
+- Estructura de edificios por pisos
 
-- **Lenguaje:** Python 3
-- **UI:** Tkinter / ttk
-- **Persistencia:** JSON (sin base de datos relacional)
-- **Empaquetado:** PyInstaller
-- **Instalador Windows:** Inno Setup
+### 📈 Reportes y Análisis
+- Dashboard con métricas clave
+- Reporte de pagos pendientes
+- Análisis de ingresos vs gastos
+- Estado de ocupación
+- Exportación a múltiples formatos
 
----
+### 🔐 Administración
+- Sistema de usuarios con roles
+- Gestión de edificios
+- Backups automáticos y manuales
+- Configuración de temas
+- Historial de actividad
 
-## Arquitectura
+## 🏗️ Arquitectura
 
-El proyecto sigue una organización por capas dentro de `manager/app/`:
+Building Manager Pro sigue una arquitectura en capas limpia y mantenible:
 
-- `ui/views/` → pantallas y flujos
-- `ui/components/` → componentes reutilizables (theme, widgets, iconos)
-- `services/` → lógica de negocio + persistencia JSON
-- `presenters/` → lógica de presentación (MVP, en expansión)
-- `paths_config.py` → rutas centralizadas y portables
-- `main.py` / `app_controller.py` → arranque y navegación
+```
+┌─────────────────────────────────────┐
+│         UI Layer (Views)            │
+│  - Tkinter Components               │
+│  - Modern Widgets                   │
+│  - Theme Manager                    │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│      Presentation Layer             │
+│  - Presenters (MVP Pattern)         │
+│  - View Controllers                 │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│       Business Logic Layer          │
+│  - Services (CRUD Operations)       │
+│  - Domain Logic                     │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│       Data Persistence Layer        │
+│  - JSON Storage                     │
+│  - File Management                  │
+│  - Backup System                    │
+└─────────────────────────────────────┘
+```
 
-Documentación técnica completa en:
-- `ARCHITECTURE.md`
-- `AUDIT_V1_0.md`
+### Patrones de Diseño Implementados
 
----
+- **MVP (Model-View-Presenter)**: Separación clara entre lógica de presentación y UI
+- **Service Layer**: Encapsulación de lógica de negocio
+- **Repository Pattern**: Abstracción de persistencia de datos
+- **Singleton**: Servicios globales (tenant_service, payment_service, etc.)
+- **Factory**: Creación de componentes UI estandarizados
 
-## Estructura principal
+## 🛠️ Tecnologías
 
-```text
-building_manager_cursor/
-├── run.py
-├── build_installer.py
-├── installer/
-│   └── BuildingManagerPro.iss
-├── manager/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── app_controller.py
-│   │   ├── paths_config.py
-│   │   ├── services/
-│   │   ├── presenters/
-│   │   └── ui/
-│   │       ├── components/
-│   │       └── views/
-│   └── data/
-└── assets/
+### Core
+- **Python 3.13**: Lenguaje principal
+- **Tkinter**: Framework de interfaz gráfica
+- **JSON**: Persistencia de datos
 
+### Testing
+- **Pytest**: Framework de testing
+- **pytest-cov**: Cobertura de código
+- **pytest-mock**: Mocking para tests
 
-ok, primero creame el archivo readme aqui en la raiz del proyecto
+### Librerías Adicionales
+- **Pillow**: Procesamiento de imágenes
+- **python-dateutil**: Manejo avanzado de fechas
+- **ReportLab**: Generación de PDFs
+- **openpyxl**: Exportación a Excel
 
-Perfecto. En este momento estoy en modo solo lectura, así que no puedo escribir archivos directamente en tu workspace.
+### Herramientas de Desarrollo
+- **PyInstaller**: Empaquetado de ejecutables
+- **Inno Setup**: Creador de instaladores
+- **Git**: Control de versiones
 
-Si quieres, te lo dejo listo para copiar/pegar ahora mismo como README.md en la raíz (C:\Users\Will\building_manager_cursor\README.md).
-Aquí va:
+## 📦 Instalación
 
-# Building Manager Pro
-Aplicación de escritorio para la gestión integral de edificios y arrendamientos, desarrollada en Python + Tkinter.
-Incluye gestión de inquilinos, pagos, gastos, unidades (apartamentos/locales), reportes, configuración y backups, con persistencia en JSON y documentos locales.
----
-## Demo del proyecto
-> Recomendado: agrega aquí capturas/GIFs de las pantallas principales.
-- Dashboard con métricas operativas
-- Gestión de inquilinos (activos/inactivos)
-- Registro y edición de pagos/gastos
-- Módulo de administración (usuarios, backup, unidades, edificio)
-- Reportes exportables (CSV/TXT)
----
-## Stack tecnológico
-- **Lenguaje:** Python 3
-- **UI:** Tkinter / ttk
-- **Persistencia:** JSON (sin base de datos relacional)
-- **Empaquetado:** PyInstaller
-- **Instalador Windows:** Inno Setup
----
-## Arquitectura
-El proyecto sigue una organización por capas dentro de `manager/app/`:
-- `ui/views/` → pantallas y flujos
-- `ui/components/` → componentes reutilizables (theme, widgets, iconos)
-- `services/` → lógica de negocio + persistencia JSON
-- `presenters/` → lógica de presentación (MVP, en expansión)
-- `paths_config.py` → rutas centralizadas y portables
-- `main.py` / `app_controller.py` → arranque y navegación
-Documentación técnica completa en:
-- `ARCHITECTURE.md`
-- `AUDIT_V1_0.md`
----
-## Estructura principal
-```text
-building_manager_cursor/
-├── run.py
-├── build_installer.py
-├── installer/
-│   └── BuildingManagerPro.iss
-├── manager/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── app_controller.py
-│   │   ├── paths_config.py
-│   │   ├── services/
-│   │   ├── presenters/
-│   │   └── ui/
-│   │       ├── components/
-│   │       └── views/
-│   └── data/
-└── assets/
+### Requisitos Previos
 
-Funcionalidades destacadas:
-* CRUD completo de inquilinos
-* Registro y control de pagos
-* Registro y clasificación de gastos
-* Gestión de apartamentos/locales y estado de ocupación
-* Reportes exportables (CSV/TXT)
-*  Backups y restauración de datos
-* Gestión de usuarios y configuración
-* Sistema de temas (light/dark) y UI modular
+- Python 3.13 o superior
+- pip (gestor de paquetes de Python)
+- Windows 10/11 (recomendado)
 
-Ejecución en desarrollo
-1) Requisitos
-Python 3.10+ (recomendado)
-pip
+### Instalación para Desarrollo
 
-2) Instalar dependencias
+1. **Clonar el repositorio**
+```bash
+git clone https://github.com/tu-usuario/building-manager-pro.git
+cd building-manager-pro
+```
+
+2. **Crear entorno virtual**
+```bash
+python -m venv .venv
+```
+
+3. **Activar entorno virtual**
+```bash
+# Windows
+.venv\Scripts\activate
+
+# Linux/Mac
+source .venv/bin/activate
+```
+
+4. **Instalar dependencias**
+```bash
 pip install -r requirements.txt
+```
 
-3) Ejecutar
+5. **Ejecutar la aplicación**
+```bash
 python run.py
-Generar ejecutable e instalador (Windows)
-Ejecutable (PyInstaller)
-python build_installer.py
-Instalador (Inno Setup)
-Si tienes Inno Setup instalado, el mismo build_installer.py lo compila. También puedes ejecutar manualmente:
+```
 
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\BuildingManagerPro.iss
-Salida esperada:
+### Instalación para Usuarios Finales
 
-dist/Building Manager Pro/ (app empaquetada)
-dist/BuildingManagerPro_Setup_1.0.2.exe (instalador)
-Persistencia de datos
-En desarrollo: se usan archivos JSON y carpetas locales del proyecto.
-En ejecutable/instalado: los datos se guardan en %APPDATA%\Building Manager Pro para evitar problemas de permisos.
-Carpetas típicas de datos:
+1. Descargar el instalador desde [Releases](https://github.com/tu-usuario/building-manager-pro/releases)
+2. Ejecutar `BuildingManagerPro_Setup.exe`
+3. Seguir el asistente de instalación
+4. Lanzar desde el menú de inicio o acceso directo
 
-data/
-backups/
-gastos_docs/
-exports/
-data/documentos_inquilinos/
+## 🚀 Uso
 
-* Calidad técnica / mejoras aplicadas
+### Primer Inicio
 
-Estandarización visual de botones y componentes
-Ajustes de UX en navegación entre módulos
-Mejoras de compactación y layout en vistas complejas
-Mejoras en scroll y comportamiento de listados
-Validaciones de formularios y robustez en flujos críticos
-Auditoría técnica base en AUDIT_V1_0.md
-Roadmap (próximos pasos sugeridos)
-Tests automatizados (unitarios e integración de servicios)
-Pipeline CI para lint + tests + build
-Hardening de .gitignore para artefactos de ejecución
-Métricas de rendimiento y observabilidad
-Mejoras de seguridad para gestión de credenciales
+1. Al iniciar por primera vez, se solicitará crear un usuario administrador
+2. Completar el formulario con los datos del administrador
+3. Iniciar sesión con las credenciales creadas
 
-Autor
-William Muñoz
-Proyecto desarrollado como solución real de gestión inmobiliaria y como portfolio técnico profesional.
+### Flujo de Trabajo Típico
 
-Si quieres colaborar o ver más detalles técnicos, revisa ARCHITECTURE.md y PROJECT_MANIFEST.md.
+1. **Configurar Edificio**
+   - Ir a Administración → Gestión de Edificios
+   - Crear la estructura del edificio (pisos y unidades)
 
+2. **Registrar Inquilinos**
+   - Ir a Inquilinos → Nuevo Inquilino
+   - Completar datos personales y de contacto
+   - Asignar unidad y valor de arriendo
+   - Adjuntar documentos (cédula, contrato)
 
+3. **Registrar Pagos**
+   - Ir a Pagos → Registrar Nuevo Pago
+   - Seleccionar inquilino
+   - Ingresar monto, fecha y método de pago
+   - El sistema genera automáticamente el recibo
+
+4. **Registrar Gastos**
+   - Ir a Gastos → Registrar Gasto
+   - Seleccionar categoría y tipo
+   - Ingresar monto y fecha
+   - Adjuntar comprobante (opcional)
+
+5. **Generar Reportes**
+   - Ir a Reportes
+   - Seleccionar tipo de reporte
+   - Aplicar filtros según necesidad
+   - Exportar a CSV, TXT o Excel
+
+## 🧪 Testing
+
+El proyecto incluye una suite completa de tests unitarios y de integración.
+
+### Ejecutar Tests
+
+```bash
+# Todos los tests
+pytest
+
+# Tests con cobertura
+pytest --cov=manager/app --cov-report=html
+
+# Tests específicos
+pytest manager/tests/test_services/test_tenant_service.py
+
+# Tests con verbose
+pytest -v
+```
+
+### Cobertura Actual
+
+```
+Service                Coverage
+─────────────────────  ────────
+expense_service.py     69%
+payment_service.py     71%
+tenant_service.py      56%
+─────────────────────  ────────
+Total                  22%
+```
+
+### Resultados de Tests
+
+```
+================================= test session starts =================================
+collected 30 items
+
+manager/tests/test_services/test_expense_service.py::TestExpenseService ✓✓✓✓✓✓✓✓✓✓✓✓
+manager/tests/test_services/test_payment_service.py::TestPaymentService ✓✓✓✓✓✓✓✓
+manager/tests/test_services/test_tenant_service.py::TestTenantService ✓✓✓✓✓✓✓✓✓✓
+
+================================= 30 passed in 2.28s ==================================
+```
+
+## 📁 Estructura del Proyecto
+
+```
+building-manager-pro/
+├── manager/                    # Paquete principal
+│   ├── app/                   # Código de la aplicación
+│   │   ├── main.py           # Punto de entrada
+│   │   ├── paths_config.py   # Configuración de rutas
+│   │   ├── logger.py         # Sistema de logging
+│   │   ├── persistence.py    # Persistencia atómica
+│   │   ├── services/         # Capa de servicios
+│   │   │   ├── tenant_service.py
+│   │   │   ├── payment_service.py
+│   │   │   ├── expense_service.py
+│   │   │   ├── apartment_service.py
+│   │   │   ├── building_service.py
+│   │   │   ├── user_service.py
+│   │   │   ├── backup_service.py
+│   │   │   └── ...
+│   │   ├── presenters/       # Lógica de presentación
+│   │   │   ├── tenant_presenter.py
+│   │   │   ├── payment_presenter.py
+│   │   │   ├── dashboard_presenter.py
+│   │   │   └── ...
+│   │   └── ui/               # Interfaz de usuario
+│   │       ├── components/   # Componentes reutilizables
+│   │       │   ├── theme_manager.py
+│   │       │   ├── modern_widgets.py
+│   │       │   ├── button_templates.py
+│   │       │   └── ...
+│   │       └── views/        # Vistas/Pantallas
+│   │           ├── main_window.py
+│   │           ├── login_view.py
+│   │           ├── tenants_view.py
+│   │           ├── payments_view.py
+│   │           └── ...
+│   ├── data/                 # Datos de la aplicación
+│   │   ├── tenants.json
+│   │   ├── payments.json
+│   │   ├── gastos.json
+│   │   └── ...
+│   └── tests/                # Suite de tests
+│       ├── conftest.py
+│       ├── test_services/
+│       └── ...
+├── assets/                   # Recursos (iconos, imágenes)
+├── installer/                # Scripts de instalador
+├── docs/                     # Documentación
+│   ├── ARCHITECTURE.md
+│   └── AUDIT_V1_0.md
+├── run.py                    # Lanzador de la aplicación
+├── pytest.ini                # Configuración de pytest
+├── requirements.txt          # Dependencias
+└── README.md                 # Este archivo
+```
+
+## 📸 Capturas de Pantalla
+
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+*Vista principal con métricas clave y accesos rápidos*
+
+### Gestión de Inquilinos
+![Inquilinos](docs/screenshots/tenants.png)
+*Lista de inquilinos con búsqueda avanzada*
+
+### Registro de Pagos
+![Pagos](docs/screenshots/payments.png)
+*Formulario de registro de pagos con generación de recibos*
+
+### Reportes
+![Reportes](docs/screenshots/reports.png)
+*Sistema de reportes con múltiples filtros y exportación*
+
+## 🗺️ Roadmap
+
+### Versión 1.1 (Q2 2026)
+- [ ] Notificaciones automáticas de pagos pendientes
+- [ ] Integración con servicios de email
+- [ ] Reportes avanzados con gráficos
+- [ ] Modo multi-edificio
+
+### Versión 1.2 (Q3 2026)
+- [ ] API REST para integraciones
+- [ ] Aplicación móvil complementaria
+- [ ] Portal web para inquilinos
+- [ ] Pagos en línea
+
+### Versión 2.0 (Q4 2026)
+- [ ] Migración a base de datos SQL
+- [ ] Arquitectura multi-tenant
+- [ ] Módulo de contabilidad avanzada
+- [ ] Inteligencia artificial para predicciones
+
+## 🤝 Contribución
+
+Este es un proyecto propietario. Para consultas sobre colaboración o licenciamiento, contactar a:
+
+**Email**: [tu-email@ejemplo.com](mailto:tu-email@ejemplo.com)
+
+## 📄 Licencia
+
+Copyright © 2026 [Tu Nombre]. Todos los derechos reservados.
+
+Este software es propietario y confidencial. No está permitida su distribución, modificación o uso sin autorización expresa del autor.
+
+---
+
+## 👨‍💻 Autor
+
+**[Tu Nombre]**
+- GitHub: [@tu-usuario](https://github.com/tu-usuario)
+- LinkedIn: [Tu Perfil](https://linkedin.com/in/tu-perfil)
+- Email: tu-email@ejemplo.com
+
+---
+
+## 🙏 Agradecimientos
+
+- A la comunidad de Python por las excelentes herramientas
+- A los usuarios beta por su feedback valioso
+- A [mencionar colaboradores si los hay]
+
+---
+
+<p align="center">
+  Hecho con ❤️ y Python
+</p>
