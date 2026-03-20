@@ -25,7 +25,7 @@ La gestión manual de edificios mediante hojas de cálculo y documentos disperso
 ### Valor Agregado
 
 - ✅ **Sin dependencias de internet**: Funciona completamente offline
-- ✅ **Datos locales seguros**: Toda la información se almacena localmente
+- ✅ **Datos locales seguros**: Toda la información se almacena localmente con backup encriptado en la nube.
 - ✅ **Interfaz intuitiva**: Diseño moderno con temas claro/oscuro
 - ✅ **Gestión documental**: Organización automática de documentos por inquilino
 - ✅ **Reportes exportables**: CSV, TXT y Excel para análisis externo
