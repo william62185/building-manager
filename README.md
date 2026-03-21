@@ -196,6 +196,7 @@ python run.py
 1. **Configurar Edificio**
    - Ir a Administración → Gestión de Edificios
    - Crear la estructura del edificio (pisos y unidades)
+   - Actualizar los detalles de cada apartamento creado (# de habitaciones, # de baños, canon de renta base, area, etc)
 
 2. **Registrar Inquilinos**
    - Ir a Inquilinos → Nuevo Inquilino
@@ -364,11 +365,11 @@ building-manager-pro/
 
 Este es un proyecto propietario. Para consultas sobre colaboración o licenciamiento, contactar a:
 
-**Email**: [tu-email@ejemplo.com](mailto:tu-email@ejemplo.com)
+**Email**: [william62185@gmail.com](mailto:william62185@gmail.com)
 
 ## 📄 Licencia
 
-Copyright © 2026 [Tu Nombre]. Todos los derechos reservados.
+Copyright © 2026 [William Muñoz]. Todos los derechos reservados.
 
 Este software es propietario y confidencial. No está permitida su distribución, modificación o uso sin autorización expresa del autor.
 
@@ -376,10 +377,10 @@ Este software es propietario y confidencial. No está permitida su distribución
 
 ## 👨‍💻 Autor
 
-**[Tu Nombre]**
-- GitHub: [@tu-usuario](https://github.com/tu-usuario)
-- LinkedIn: [Tu Perfil](https://linkedin.com/in/tu-perfil)
-- Email: tu-email@ejemplo.com
+**[William Muñoz]**
+- GitHub: [@william62185](https://github.com/william62185)
+- LinkedIn: [William Muñoz](https://linkedin.com/in/william62185)
+- Email: william62185@gmail.com
 
 ---
 
@@ -387,7 +388,6 @@ Este software es propietario y confidencial. No está permitida su distribución
 
 - A la comunidad de Python por las excelentes herramientas
 - A los usuarios beta por su feedback valioso
-- A [mencionar colaboradores si los hay]
 
 ---
 
