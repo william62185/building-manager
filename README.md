@@ -378,7 +378,7 @@ Este software es propietario y confidencial. No está permitida su distribución
 ## 👨‍💻 Autor
 
 **[William Muñoz]**
-- GitHub: [@william62185](https://github.com/william62185)
+- GitHub: [@william62185](https://github.com/william62185/building-manager)
 - LinkedIn: [William Muñoz](https://linkedin.com/in/william62185)
 - Email: william62185@gmail.com
 
